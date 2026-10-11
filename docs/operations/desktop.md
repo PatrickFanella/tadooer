@@ -328,9 +328,28 @@ Settings → Privacy & Security → Local Network.
 
 ## macOS smoke run
 
-Nothing below has been run yet. Do it on a Mac with the zip for its chip,
-against a disposable Suite instance that the Mac and a second device can both
-reach, not against production. A server on a plain `http://` private address
+Run so far, 2026-10-11, on Soyuz (macOS 26.6.2, Apple M3), with
+`tadooer-desktop-0.1.0-darwin-universal.dmg`, SHA-256
+`555c55be482e7e2dc7bef1b8a66b1fd7dab258f8297f920a43421c69456d2fe0`, built on
+that Mac from `feat/desktop-mac-dmg`, so the copy carried no quarantine mark:
+
+- Step 1 passed: checksum `OK`, the image mounts with `Tadooer.app` and the
+  `Applications` link, the executable is `x86_64 arm64`, and the copy in
+  `/Applications` passes `codesign --verify --deep --strict`.
+- Step 2 is open. `spctl --assess --type execute` answers `rejected`, as it
+  must for an app without a Developer ID. No Gatekeeper dialog was seen,
+  because the copy was never quarantined; a copy that arrives through a
+  browser will show one.
+- Step 3 passed: one JSON line with `"preloads":true`, exit status 0, from
+  the mounted image and from `/Applications`.
+- Step 12 passed: `smoke:mac:shell` printed `"selfcheck":"passed"` with the
+  twenty `ok` lines, against the universal bundle.
+- Steps 4 to 11 have not been run. They need a signed-in session against a
+  disposable instance and a second device.
+
+Do the rest on a Mac with the image or the zip for its chip, against a
+disposable Suite instance that the Mac and a second device can both reach,
+not against production. A server on a plain `http://` private address
 also needs `SUITE_SECURE_COOKIES` off on that instance, or sign-in fails.
 
 Record at the top: the macOS version, the chip, the zip's name and SHA-256,
@@ -353,7 +372,7 @@ form (HTTPS or private HTTP).
 | 12  | Optional, from a checkout on the Mac after `pnpm package:desktop:mac`: `pnpm --filter @suite/desktop smoke:mac:shell`.                                                      | `"selfcheck":"passed"` with twenty `ok` lines. The Dock shows the app briefly; no window appears.                                                                                       | The output line.                                                             |
 
 Step 12 uses a temporary profile and removes it. It is the same window check
-as on Linux and has not been run on macOS either.
+as on Linux; it passed on macOS on 2026-10-11 (above).
 
 When the run is done, quit the app, remove the login item if it is still
 listed, and note any step whose result differed, with the dialog text. A step
@@ -431,8 +450,9 @@ let the app replace itself.
 
 ## Not done yet
 
-- **A run on a Mac.** The macOS package is built and inspected on Linux. No
-  part of it has been launched; the smoke run above is open.
+- **The rest of the run on a Mac.** The universal image was built, installed
+  and self-checked on a Mac on 2026-10-11 (steps 1, 3 and 12). The steps that
+  need a signed-in session and a second device, 4 to 11, are open.
 - **Signing and notarisation.** Owner decision, for macOS and Windows.
 - **A universal macOS build and a `.dmg` from Linux.** Both exist, but only
   `package:desktop:mac:universal` on a Mac makes them; the Linux host still
