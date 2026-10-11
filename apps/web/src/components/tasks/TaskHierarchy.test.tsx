@@ -185,13 +185,13 @@ it("nests children under their parent and keeps filtered-out parents' children v
     onCreateChildTask: noop,
     onMoveTask: noop,
   } satisfies TasksPageProps;
-  const nested = renderToStaticMarkup(<TasksPage {...props} />);
+  const nested = renderToStaticMarkup(<TasksPage {...props} editorsOpen />);
   const list = nested.slice(nested.indexOf("Plan trip"));
   expect(list.indexOf("Book train")).toBeLessThan(list.indexOf("Book hotel"));
   expect(nested).toContain('class="task--child"');
   // Filtering out the parent leaves its matching child at top level.
   const filtered = renderToStaticMarkup(
-    <TasksPage {...props} visibleTasks={[second]} />,
+    <TasksPage {...props} visibleTasks={[second]} editorsOpen />,
   );
   expect(filtered).toContain("Book hotel");
   expect(filtered).toContain("Child of &quot;Plan trip&quot;");

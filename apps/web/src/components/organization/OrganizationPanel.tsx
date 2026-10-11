@@ -63,6 +63,8 @@ export interface OrganizationPanelProps {
   readonly tasks: readonly Task[];
   readonly csrfToken: string;
   readonly online: boolean;
+  /** Render every record's controls open; the page opens them per record. */
+  readonly defaultOpen?: boolean;
   readonly onProjectsChange: (projects: readonly Project[]) => void;
   readonly onTagsChange: (tags: readonly Tag[]) => void;
   /** When present, lifecycle and appearance changes queue offline. */
@@ -111,7 +113,9 @@ const Swatch = ({
       className="organization-swatch__color"
       style={color === null ? undefined : { backgroundColor: color }}
     />
-    {icon !== null && <span className="organization-swatch__icon">{icon}</span>}
+    {icon !== null && !/^[a-z0-9_]+$/.test(icon) && (
+      <span className="organization-swatch__icon">{icon}</span>
+    )}
   </span>
 );
 
@@ -132,8 +136,34 @@ export const OrganizationPanel = ({
   queue,
   notes = noNotes,
   noteQueue,
+  defaultOpen = false,
 }: OrganizationPanelProps) => {
   const [noteFilter, setNoteFilter] = useState("all");
+  // A project with its backlog list and appearance form is a few hundred
+  // nodes; with dozens of projects the page only renders the ones opened.
+  const [openRecords, setOpenRecords] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const isOpen = (id: string) => defaultOpen || openRecords.has(id);
+  const toggleOpen = (id: string) =>
+    setOpenRecords((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const ManageToggle = ({ id, label }: { id: string; label: string }) => (
+    <Button
+      type="button"
+      size="xs"
+      variant="ghost"
+      aria-expanded={isOpen(id)}
+      aria-label={`${isOpen(id) ? "Hide" : "Manage"} ${label}`}
+      onClick={() => toggleOpen(id)}
+    >
+      {isOpen(id) ? "Hide" : "Manage"}
+    </Button>
+  );
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -269,202 +299,207 @@ export const OrganizationPanel = ({
                     {project.hiddenFromMenu && (
                       <Badge variant="outline">Hidden from menus</Badge>
                     )}
+                    <ManageToggle id={project.id} label={project.title} />
                   </div>
-                  <div className="task-actions">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={disabled || index === 0}
-                      onClick={() =>
-                        void run(async () => {
-                          onProjectsChange(
-                            await reorderProjects(
-                              move(projects, index, -1).map(
-                                ({ id, revision }) => ({
-                                  id,
-                                  revision,
-                                }),
-                              ),
-                              csrfToken,
-                            ),
-                          );
-                        })
-                      }
-                    >
-                      Move {project.title} up
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={disabled || index === projects.length - 1}
-                      onClick={() =>
-                        void run(async () => {
-                          onProjectsChange(
-                            await reorderProjects(
-                              move(projects, index, 1).map(
-                                ({ id, revision }) => ({
-                                  id,
-                                  revision,
-                                }),
-                              ),
-                              csrfToken,
-                            ),
-                          );
-                        })
-                      }
-                    >
-                      Move {project.title} down
-                    </Button>
-                    {project.completedAt === null ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={lifecycleDisabled}
-                        onClick={() =>
-                          void updateProject(project, { completed: true })
+                  {isOpen(project.id) && (
+                    <>
+                      <div className="task-actions">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={disabled || index === 0}
+                          onClick={() =>
+                            void run(async () => {
+                              onProjectsChange(
+                                await reorderProjects(
+                                  move(projects, index, -1).map(
+                                    ({ id, revision }) => ({
+                                      id,
+                                      revision,
+                                    }),
+                                  ),
+                                  csrfToken,
+                                ),
+                              );
+                            })
+                          }
+                        >
+                          Move {project.title} up
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={disabled || index === projects.length - 1}
+                          onClick={() =>
+                            void run(async () => {
+                              onProjectsChange(
+                                await reorderProjects(
+                                  move(projects, index, 1).map(
+                                    ({ id, revision }) => ({
+                                      id,
+                                      revision,
+                                    }),
+                                  ),
+                                  csrfToken,
+                                ),
+                              );
+                            })
+                          }
+                        >
+                          Move {project.title} down
+                        </Button>
+                        {project.completedAt === null ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={lifecycleDisabled}
+                            onClick={() =>
+                              void updateProject(project, { completed: true })
+                            }
+                          >
+                            Complete {project.title}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={lifecycleDisabled}
+                            onClick={() =>
+                              void updateProject(project, { completed: false })
+                            }
+                          >
+                            Reopen {project.title}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={lifecycleDisabled}
+                          onClick={() =>
+                            void updateProject(project, {
+                              archived: project.archivedAt === null,
+                            })
+                          }
+                        >
+                          {project.archivedAt === null ? "Archive" : "Restore"}{" "}
+                          {project.title}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={disabled}
+                          onClick={() =>
+                            void updateProject(project, {
+                              hiddenFromMenu: !project.hiddenFromMenu,
+                            })
+                          }
+                        >
+                          {project.hiddenFromMenu ? "Show" : "Hide"}{" "}
+                          {project.title} in menus
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={disabled}
+                          onClick={() =>
+                            void updateProject(project, {
+                              backlogEnabled: !project.backlogEnabled,
+                            })
+                          }
+                        >
+                          {project.backlogEnabled ? "Disable" : "Enable"}{" "}
+                          backlog for {project.title}
+                        </Button>
+                      </div>
+                      <form
+                        className="task-actions"
+                        aria-label={`Appearance of ${project.title}`}
+                        onSubmit={(event) =>
+                          void updateProject(project, appearance(event))
                         }
                       >
-                        Complete {project.title}
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={lifecycleDisabled}
-                        onClick={() =>
-                          void updateProject(project, { completed: false })
-                        }
-                      >
-                        Reopen {project.title}
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={lifecycleDisabled}
-                      onClick={() =>
-                        void updateProject(project, {
-                          archived: project.archivedAt === null,
-                        })
-                      }
-                    >
-                      {project.archivedAt === null ? "Archive" : "Restore"}{" "}
-                      {project.title}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={disabled}
-                      onClick={() =>
-                        void updateProject(project, {
-                          hiddenFromMenu: !project.hiddenFromMenu,
-                        })
-                      }
-                    >
-                      {project.hiddenFromMenu ? "Show" : "Hide"} {project.title}{" "}
-                      in menus
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={disabled}
-                      onClick={() =>
-                        void updateProject(project, {
-                          backlogEnabled: !project.backlogEnabled,
-                        })
-                      }
-                    >
-                      {project.backlogEnabled ? "Disable" : "Enable"} backlog
-                      for {project.title}
-                    </Button>
-                  </div>
-                  <form
-                    className="task-actions"
-                    aria-label={`Appearance of ${project.title}`}
-                    onSubmit={(event) =>
-                      void updateProject(project, appearance(event))
-                    }
-                  >
-                    <label className="field">
-                      <span>Colour</span>
-                      <Input
-                        type="color"
-                        name="color"
-                        defaultValue={project.color ?? "#8888cc"}
-                      />
-                    </label>
-                    <label>
-                      <input type="checkbox" name="clearColor" /> No colour
-                    </label>
-                    <label className="field">
-                      <span>Icon name or emoji</span>
-                      <Input
-                        name="icon"
-                        autoComplete="off"
-                        defaultValue={project.icon ?? ""}
-                      />
-                    </label>
-                    <Button size="sm" disabled={lifecycleDisabled}>
-                      Save appearance
-                    </Button>
-                  </form>
-                  {project.backlogEnabled && (
-                    <div className="organization-backlog">
-                      <h4>Backlog</h4>
-                      {projectTasks.length === 0 && (
-                        <p>No tasks in this project.</p>
+                        <label className="field">
+                          <span>Colour</span>
+                          <Input
+                            type="color"
+                            name="color"
+                            defaultValue={project.color ?? "#8888cc"}
+                          />
+                        </label>
+                        <label>
+                          <input type="checkbox" name="clearColor" /> No colour
+                        </label>
+                        <label className="field">
+                          <span>Icon name or emoji</span>
+                          <Input
+                            name="icon"
+                            autoComplete="off"
+                            defaultValue={project.icon ?? ""}
+                          />
+                        </label>
+                        <Button size="sm" disabled={lifecycleDisabled}>
+                          Save appearance
+                        </Button>
+                      </form>
+                      {project.backlogEnabled && (
+                        <div className="organization-backlog">
+                          <h4>Backlog</h4>
+                          {projectTasks.length === 0 && (
+                            <p>No tasks in this project.</p>
+                          )}
+                          <ul>
+                            {projectTasks.map((task) => {
+                              const inBacklog = project.backlogTaskIds.includes(
+                                task.id,
+                              );
+                              return (
+                                <li key={task.id}>
+                                  {task.title}{" "}
+                                  {inBacklog && (
+                                    <Badge variant="secondary">Backlog</Badge>
+                                  )}{" "}
+                                  <Button
+                                    type="button"
+                                    size="xs"
+                                    variant="outline"
+                                    disabled={
+                                      disabled || project.archivedAt !== null
+                                    }
+                                    onClick={() =>
+                                      void run(async () => {
+                                        onProjectsChange(
+                                          replace(
+                                            projects,
+                                            await setProjectBacklog(
+                                              project.id,
+                                              project.revision,
+                                              task.id,
+                                              !inBacklog,
+                                              csrfToken,
+                                            ),
+                                          ),
+                                        );
+                                      })
+                                    }
+                                  >
+                                    {inBacklog
+                                      ? "Move to active"
+                                      : "Move to backlog"}
+                                  </Button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
                       )}
-                      <ul>
-                        {projectTasks.map((task) => {
-                          const inBacklog = project.backlogTaskIds.includes(
-                            task.id,
-                          );
-                          return (
-                            <li key={task.id}>
-                              {task.title}{" "}
-                              {inBacklog && (
-                                <Badge variant="secondary">Backlog</Badge>
-                              )}{" "}
-                              <Button
-                                type="button"
-                                size="xs"
-                                variant="outline"
-                                disabled={
-                                  disabled || project.archivedAt !== null
-                                }
-                                onClick={() =>
-                                  void run(async () => {
-                                    onProjectsChange(
-                                      replace(
-                                        projects,
-                                        await setProjectBacklog(
-                                          project.id,
-                                          project.revision,
-                                          task.id,
-                                          !inBacklog,
-                                          csrfToken,
-                                        ),
-                                      ),
-                                    );
-                                  })
-                                }
-                              >
-                                {inBacklog
-                                  ? "Move to active"
-                                  : "Move to backlog"}
-                              </Button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
+                    </>
                   )}
                 </li>
               );
@@ -483,91 +518,104 @@ export const OrganizationPanel = ({
                   {tag.archivedAt !== null && (
                     <Badge variant="secondary">Archived</Badge>
                   )}
+                  <ManageToggle id={tag.id} label={tag.displayName} />
                 </div>
-                <div className="task-actions">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={disabled || index === 0}
-                    onClick={() =>
-                      void run(async () => {
-                        onTagsChange(
-                          await reorderTags(
-                            move(tags, index, -1).map(({ id, revision }) => ({
-                              id,
-                              revision,
-                            })),
-                            csrfToken,
-                          ),
-                        );
-                      })
-                    }
-                  >
-                    Move {tag.displayName} up
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={disabled || index === tags.length - 1}
-                    onClick={() =>
-                      void run(async () => {
-                        onTagsChange(
-                          await reorderTags(
-                            move(tags, index, 1).map(({ id, revision }) => ({
-                              id,
-                              revision,
-                            })),
-                            csrfToken,
-                          ),
-                        );
-                      })
-                    }
-                  >
-                    Move {tag.displayName} down
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={lifecycleDisabled}
-                    onClick={() =>
-                      void updateTag(tag, { archived: tag.archivedAt === null })
-                    }
-                  >
-                    {tag.archivedAt === null ? "Archive" : "Restore"}{" "}
-                    {tag.displayName}
-                  </Button>
-                </div>
-                <form
-                  className="task-actions"
-                  aria-label={`Appearance of ${tag.displayName}`}
-                  onSubmit={(event) => void updateTag(tag, appearance(event))}
-                >
-                  <label className="field">
-                    <span>Colour</span>
-                    <Input
-                      type="color"
-                      name="color"
-                      defaultValue={tag.color ?? "#8888cc"}
-                    />
-                  </label>
-                  <label>
-                    <input type="checkbox" name="clearColor" /> No colour
-                  </label>
-                  <label className="field">
-                    <span>Icon name or emoji</span>
-                    <Input
-                      name="icon"
-                      autoComplete="off"
-                      defaultValue={tag.icon ?? ""}
-                    />
-                  </label>
-                  <Button size="sm" disabled={lifecycleDisabled}>
-                    Save appearance
-                  </Button>
-                </form>
+                {isOpen(tag.id) && (
+                  <>
+                    <div className="task-actions">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={disabled || index === 0}
+                        onClick={() =>
+                          void run(async () => {
+                            onTagsChange(
+                              await reorderTags(
+                                move(tags, index, -1).map(
+                                  ({ id, revision }) => ({
+                                    id,
+                                    revision,
+                                  }),
+                                ),
+                                csrfToken,
+                              ),
+                            );
+                          })
+                        }
+                      >
+                        Move {tag.displayName} up
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={disabled || index === tags.length - 1}
+                        onClick={() =>
+                          void run(async () => {
+                            onTagsChange(
+                              await reorderTags(
+                                move(tags, index, 1).map(
+                                  ({ id, revision }) => ({
+                                    id,
+                                    revision,
+                                  }),
+                                ),
+                                csrfToken,
+                              ),
+                            );
+                          })
+                        }
+                      >
+                        Move {tag.displayName} down
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={lifecycleDisabled}
+                        onClick={() =>
+                          void updateTag(tag, {
+                            archived: tag.archivedAt === null,
+                          })
+                        }
+                      >
+                        {tag.archivedAt === null ? "Archive" : "Restore"}{" "}
+                        {tag.displayName}
+                      </Button>
+                    </div>
+                    <form
+                      className="task-actions"
+                      aria-label={`Appearance of ${tag.displayName}`}
+                      onSubmit={(event) =>
+                        void updateTag(tag, appearance(event))
+                      }
+                    >
+                      <label className="field">
+                        <span>Colour</span>
+                        <Input
+                          type="color"
+                          name="color"
+                          defaultValue={tag.color ?? "#8888cc"}
+                        />
+                      </label>
+                      <label>
+                        <input type="checkbox" name="clearColor" /> No colour
+                      </label>
+                      <label className="field">
+                        <span>Icon name or emoji</span>
+                        <Input
+                          name="icon"
+                          autoComplete="off"
+                          defaultValue={tag.icon ?? ""}
+                        />
+                      </label>
+                      <Button size="sm" disabled={lifecycleDisabled}>
+                        Save appearance
+                      </Button>
+                    </form>
+                  </>
+                )}
               </li>
             ))}
           </ul>

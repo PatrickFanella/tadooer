@@ -149,7 +149,9 @@ export const TaskListItem = ({
         ) : null}
         {state === "completed" ? null : (
           <details>
-            <summary>{scheduleLabel}</summary>
+            <summary aria-label={scheduleLabel}>
+              {task.plannedStart === null ? "Schedule" : "Change schedule"}
+            </summary>
             <TimeBlockForm
               task={task}
               calendars={calendars}

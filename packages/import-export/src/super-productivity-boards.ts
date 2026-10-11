@@ -153,6 +153,21 @@ const emptyFilter: BoardPanelFilter = {
   sortDir: "asc",
 };
 
+/** The source's default board and panel titles, stored as translation keys. */
+export const superProductivityDefaultBoardTitles: Readonly<
+  Record<string, string>
+> = {
+  "F.BOARDS.DEFAULT.EISENHAUER_MATRIX": "Eisenhower matrix",
+  "F.BOARDS.DEFAULT.KANBAN": "Kanban",
+  "F.BOARDS.DEFAULT.URGENT_IMPORTANT": "Urgent and important",
+  "F.BOARDS.DEFAULT.NOT_URGENT_IMPORTANT": "Not urgent, important",
+  "F.BOARDS.DEFAULT.URGENT_NOT_IMPORTANT": "Urgent, not important",
+  "F.BOARDS.DEFAULT.NOT_URGENT_NOT_IMPORTANT": "Not urgent, not important",
+  "F.BOARDS.DEFAULT.TO_DO": "To do",
+  "F.BOARDS.DEFAULT.IN_PROGRESS": "In progress",
+  "F.BOARDS.DEFAULT.DONE": "Done",
+};
+
 export const mapSuperProductivityBoards = (input: {
   readonly boards: unknown;
   readonly section: unknown;
@@ -185,7 +200,11 @@ export const mapSuperProductivityBoards = (input: {
     max: number,
     kind: string,
   ): string => {
-    const trimmed = typeof value === "string" ? value.trim() : "";
+    const raw = typeof value === "string" ? value.trim() : "";
+    // The source stores its two default boards and their panels as
+    // translation keys and renders them through its locale files; the owner
+    // never typed these, so they import as the English text.
+    const trimmed = superProductivityDefaultBoardTitles[raw] ?? raw;
     if (trimmed === "" || trimmed.length > max) {
       input.problem(
         sourceId,

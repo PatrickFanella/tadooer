@@ -91,7 +91,17 @@ const ArchivedTaskSummary = ({
         {formatDate(task.archivedAt, timeZone)}
         {projectTitle === undefined ? "" : ` · ${projectTitle}`}
       </p>
-      {task.notes !== "" && <p className="history-task-notes">{task.notes}</p>}
+      {task.notes !== "" &&
+        (task.notes.length > 280 ? (
+          <details className="history-task-notes">
+            <summary>
+              {task.notes.slice(0, 280).trimEnd()}… <span>Show all notes</span>
+            </summary>
+            <p>{task.notes}</p>
+          </details>
+        ) : (
+          <p className="history-task-notes">{task.notes}</p>
+        ))}
       {provenance !== null && (
         <div className="history-provenance">
           <p className="hint">

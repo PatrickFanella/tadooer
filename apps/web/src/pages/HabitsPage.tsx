@@ -119,7 +119,6 @@ export const HabitsPage = ({
         <CardContent>
           <form onSubmit={(event) => void create(event)}>
             <fieldset disabled={disabled} className="habit-create">
-              <legend>Create a habit</legend>
               <label className="field">
                 Habit name
                 <Input

@@ -13,7 +13,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8080",
+      // The server checks that Origin matches Host, so the dev proxy must
+      // pass the browser's Host header through unchanged.
+      "/api": { target: "http://127.0.0.1:8080", changeOrigin: false },
     },
   },
 });

@@ -274,7 +274,7 @@ export const TemplateLibrary = ({
           </NativeSelect>
         </label>
         {tags.length > 0 && (
-          <fieldset>
+          <fieldset className="tag-options span-all">
             <legend>Tags</legend>
             {tags.map((tag) => (
               <label key={tag.id}>
@@ -283,7 +283,7 @@ export const TemplateLibrary = ({
             ))}
           </fieldset>
         )}
-        <label className="field">
+        <label className="field span-all">
           <span>Checklist blueprints (one per line)</span>
           <Textarea name="subtasks" rows={3} />
         </label>

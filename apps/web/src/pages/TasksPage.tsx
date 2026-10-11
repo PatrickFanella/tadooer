@@ -1,6 +1,6 @@
 import { PageHeader } from "../components/ui/page-header.tsx";
 import { DeadlineFields } from "../components/tasks/DeadlineFields.tsx";
-import type { ReactElement, SyntheticEvent } from "react";
+import { useState, type ReactElement, type SyntheticEvent } from "react";
 import { groupTaskHierarchy, zonedCalendarDate } from "@suite/domain";
 import {
   TaskChildrenSection,
@@ -102,6 +102,8 @@ export interface TasksPageProps extends TaskHierarchyActions {
   readonly onRecoverTask: (task: Task) => Promise<void>;
   /** Moves a top-level task and its children to History (ADR 0022); online only. */
   readonly onArchiveTask?: (task: Task) => Promise<void>;
+  /** Render every task's editor open; the page opens them per task. */
+  readonly editorsOpen?: boolean;
   /** Enables project/tag/note management when a session is available. */
   readonly organization?: {
     readonly csrfToken: string;
@@ -154,6 +156,7 @@ export const TasksPage = ({
   onRemoveTask,
   onRecoverTask,
   onArchiveTask,
+  editorsOpen = false,
   timeZone = "UTC",
   onSubmitTaskPlanning,
   onCreateChildTask,
@@ -198,6 +201,18 @@ export const TasksPage = ({
   const parentCandidates = tasks.filter(
     (task) => task.parentId == null && task.deletedAt == null,
   );
+  // Every task's editor is several hundred nodes with the tag list, the
+  // planning and schedule forms and the link and recurrence panels; a long
+  // list renders them only for the tasks the owner opened.
+  const [editing, setEditing] = useState<ReadonlySet<string>>(() => new Set());
+  const isEditing = (id: string) => editorsOpen || editing.has(id);
+  const toggleEditing = (id: string) =>
+    setEditing((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const renderTask = (task: Task, siblings: readonly Task[]): ReactElement => (
     <li
       key={task.id}
@@ -235,146 +250,159 @@ export const TasksPage = ({
           Planned for {task.plannedDay} · no time set
         </p>
       )}
-      <form
-        className="task-edit"
-        onSubmit={(event) => void onSubmitTaskEdit(event, task)}
-      >
-        <Field
-          label="Title"
-          name="title"
-          autoComplete="off"
-          defaultValue={task.title}
-        />
-        <Field
-          label="Notes"
-          name="notes"
-          autoComplete="off"
-          defaultValue={task.notes}
-          required={false}
-        />
-        <label className="field">
-          <span>Estimate minutes</span>
-          <Input
-            name="estimateMinutes"
-            type="number"
-            min="1"
-            max="720"
-            defaultValue={task.estimateMinutes ?? ""}
+      {isEditing(task.id) && (
+        <>
+          <form
+            className="task-edit"
+            onSubmit={(event) => void onSubmitTaskEdit(event, task)}
+          >
+            <Field
+              label="Title"
+              name="title"
+              autoComplete="off"
+              defaultValue={task.title}
+            />
+            <Field
+              label="Notes"
+              name="notes"
+              autoComplete="off"
+              defaultValue={task.notes}
+              required={false}
+            />
+            <label className="field">
+              <span>Estimate minutes</span>
+              <Input
+                name="estimateMinutes"
+                type="number"
+                min="1"
+                max="720"
+                defaultValue={task.estimateMinutes ?? ""}
+              />
+            </label>
+            <DeadlineFields
+              key={JSON.stringify(task.deadline)}
+              deadline={task.deadline}
+            />
+            <Button disabled={busy}>Save task</Button>
+          </form>
+          <TaskPlacementControls
+            task={task}
+            siblings={siblings}
+            parents={parentCandidates}
+            parentTitle={
+              task.parentId == null
+                ? null
+                : (titleById.get(task.parentId) ?? null)
+            }
+            hasChildren={(allChildren.get(task.id)?.length ?? 0) > 0}
+            busy={busy}
+            onMoveTask={onMoveTask}
           />
-        </label>
-        <DeadlineFields
-          key={JSON.stringify(task.deadline)}
-          deadline={task.deadline}
-        />
-        <Button disabled={busy}>Save task</Button>
-      </form>
-      <TaskPlacementControls
-        task={task}
-        siblings={siblings}
-        parents={parentCandidates}
-        parentTitle={
-          task.parentId == null ? null : (titleById.get(task.parentId) ?? null)
-        }
-        hasChildren={(allChildren.get(task.id)?.length ?? 0) > 0}
-        busy={busy}
-        onMoveTask={onMoveTask}
-      />
-      <TimeBlockForm
-        task={task}
-        calendars={baikalCalendars}
-        busy={busy}
-        available={calendarActionsAvailable}
-        onSubmit={onSubmitTimeBlock}
-        onRemove={onRemoveTimeBlock}
-      />
-      {onSubmitTaskPlanning !== undefined && (
-        <TaskPlanningForm
-          key={`${task.id}:${String(task.revision)}`}
-          task={task}
-          timeZone={timeZone}
-          busy={busy}
-          available={true}
-          remindersAvailable={calendarActionsAvailable}
-          onSubmit={onSubmitTaskPlanning}
-        />
-      )}
-      <form
-        className="task-edit"
-        onSubmit={(event) => void onSubmitTaskOrganization(event, task)}
-      >
-        <label className="field">
-          <span>Project</span>
-          <NativeSelect name="projectId" defaultValue={task.projectId ?? ""}>
-            <option value="">No project</option>
-            {projects
-              .filter((project) => project.archivedAt === null)
-              .map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
+          <TimeBlockForm
+            task={task}
+            calendars={baikalCalendars}
+            busy={busy}
+            available={calendarActionsAvailable}
+            onSubmit={onSubmitTimeBlock}
+            onRemove={onRemoveTimeBlock}
+          />
+          {onSubmitTaskPlanning !== undefined && (
+            <TaskPlanningForm
+              key={`${task.id}:${String(task.revision)}`}
+              task={task}
+              timeZone={timeZone}
+              busy={busy}
+              available={true}
+              remindersAvailable={calendarActionsAvailable}
+              onSubmit={onSubmitTaskPlanning}
+            />
+          )}
+          <form
+            className="task-edit"
+            onSubmit={(event) => void onSubmitTaskOrganization(event, task)}
+          >
+            <label className="field">
+              <span>Project</span>
+              <NativeSelect
+                name="projectId"
+                defaultValue={task.projectId ?? ""}
+              >
+                <option value="">No project</option>
+                {projects
+                  .filter((project) => project.archivedAt === null)
+                  .map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+              </NativeSelect>
+            </label>
+            <fieldset>
+              <legend>Tags</legend>
+              {tags
+                .filter((tag) => tag.archivedAt === null)
+                .map((tag) => (
+                  <label key={tag.id}>
+                    <Checkbox
+                      name="tagIds"
+                      value={tag.id}
+                      defaultChecked={task.tagIds?.includes(tag.id) === true}
+                    />
+                    {tag.displayName}
+                  </label>
+                ))}
+            </fieldset>
+            <Button disabled={busy}>Save organization</Button>
+          </form>
+          <div>
+            <strong>Checklist</strong>
+            <ul>
+              {(subtasks[task.id] ?? []).map((subtask, index, items) => (
+                <li key={subtask.id}>
+                  {subtask.completed ? "✓" : "○"} {subtask.title}
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onChangeSubtask(subtask, "toggle")}
+                  >
+                    {subtask.completed ? "Reopen" : "Complete"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || index === 0}
+                    onClick={() => void onChangeSubtask(subtask, "up")}
+                  >
+                    Move up
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || index === items.length - 1}
+                    onClick={() => void onChangeSubtask(subtask, "down")}
+                  >
+                    Move down
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void onChangeSubtask(subtask, "delete")}
+                  >
+                    Delete item
+                  </Button>
+                </li>
               ))}
-          </NativeSelect>
-        </label>
-        <fieldset>
-          <legend>Tags</legend>
-          {tags
-            .filter((tag) => tag.archivedAt === null)
-            .map((tag) => (
-              <label key={tag.id}>
-                <Checkbox
-                  name="tagIds"
-                  value={tag.id}
-                  defaultChecked={task.tagIds?.includes(tag.id) === true}
-                />
-                {tag.displayName}
-              </label>
-            ))}
-        </fieldset>
-        <Button disabled={busy}>Save organization</Button>
-      </form>
-      <div>
-        <strong>Checklist</strong>
-        <ul>
-          {(subtasks[task.id] ?? []).map((subtask, index, items) => (
-            <li key={subtask.id}>
-              {subtask.completed ? "✓" : "○"} {subtask.title}
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={() => void onChangeSubtask(subtask, "toggle")}
-              >
-                {subtask.completed ? "Reopen" : "Complete"}
-              </Button>
-              <Button
-                type="button"
-                disabled={busy || index === 0}
-                onClick={() => void onChangeSubtask(subtask, "up")}
-              >
-                Move up
-              </Button>
-              <Button
-                type="button"
-                disabled={busy || index === items.length - 1}
-                onClick={() => void onChangeSubtask(subtask, "down")}
-              >
-                Move down
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={busy}
-                onClick={() => void onChangeSubtask(subtask, "delete")}
-              >
-                Delete item
-              </Button>
-            </li>
-          ))}
-        </ul>
-        <form onSubmit={(event) => void onSubmitSubtask(event, task)}>
-          <Field label="New checklist item" name="title" autoComplete="off" />
-          <Button disabled={busy}>Add item</Button>
-        </form>
-      </div>
+            </ul>
+            <form onSubmit={(event) => void onSubmitSubtask(event, task)}>
+              <Field
+                label="New checklist item"
+                name="title"
+                autoComplete="off"
+              />
+              <Button disabled={busy}>Add item</Button>
+            </form>
+          </div>
+        </>
+      )}
       {task.parentId == null && (
         <TaskChildrenSection
           parent={task}
@@ -387,14 +415,14 @@ export const TasksPage = ({
           onCreateChildTask={onCreateChildTask}
         />
       )}
-      {organization !== undefined && (
+      {isEditing(task.id) && organization !== undefined && (
         <TaskLinksPanel
           taskId={task.id}
           csrfToken={organization.csrfToken}
           online={organization.online}
         />
       )}
-      {organization !== undefined && (
+      {isEditing(task.id) && organization !== undefined && (
         <TaskRecurrencePanel
           task={task}
           csrfToken={organization.csrfToken}
@@ -404,6 +432,15 @@ export const TasksPage = ({
         />
       )}
       <div className="task-actions">
+        <Button
+          type="button"
+          variant={isEditing(task.id) ? "default" : "outline"}
+          aria-expanded={isEditing(task.id)}
+          aria-label={`${isEditing(task.id) ? "Close editor for" : "Edit"} “${task.title}”`}
+          onClick={() => toggleEditing(task.id)}
+        >
+          {isEditing(task.id) ? "Close editor" : "Edit"}
+        </Button>
         <Button
           type="button"
           disabled={busy}
