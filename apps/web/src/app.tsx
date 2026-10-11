@@ -2812,7 +2812,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 calendar server, then stores the password encrypted.
               </p>
               <p className="hint mono">
-                {endpointHost(state.baikal.endpoint)} \u00b7 server-managed
+                {endpointHost(state.baikal.endpoint)} {"\u00b7"} server-managed
                 CalDAV
               </p>
               <Field

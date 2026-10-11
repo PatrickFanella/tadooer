@@ -221,6 +221,10 @@ export const FocusPanel = ({
               online={online}
               onCommand={onCommand}
             />
+          ) : recoveryMessage === null && online ? (
+            <p className="hint">
+              No session running. Start focus from a task below.
+            </p>
           ) : null}
         </CardContent>
       </Card>

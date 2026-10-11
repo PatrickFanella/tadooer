@@ -167,10 +167,7 @@ export const CounterToday = ({
             <Card>
               <CardContent className="counter-row">
                 <div>
-                  <h3>
-                    {counter.icon === null ? "" : `${counter.icon} `}
-                    {counter.title}
-                  </h3>
+                  <h3>{counter.title}</h3>
                   <p aria-live="polite">
                     Today:{" "}
                     <strong>{formatCounterValue(counter.kind, value)}</strong>
@@ -280,76 +277,80 @@ export const CounterWeek = ({
     ]),
   );
   return (
-    <table className="counter-week">
-      <caption className="sr-only">
-        Counter values from {days[0]} to {days[6]}
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Counter</th>
-          {days.map((day) => (
-            <th scope="col" key={day}>
-              {dayLabel(day)}
-            </th>
+    <div className="counter-week-scroll">
+      <table className="counter-week">
+        <caption className="sr-only">
+          Counter values from {days[0]} to {days[6]}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Counter</th>
+            {days.map((day) => (
+              <th scope="col" key={day}>
+                {dayLabel(day)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {counters.map((counter) => (
+            <tr key={counter.id}>
+              <th scope="row">
+                {counter.title}
+                {!counter.enabled && (
+                  <>
+                    {" "}
+                    <Badge variant="secondary">Disabled</Badge>
+                  </>
+                )}
+              </th>
+              {days.map((day) => {
+                const { value } = dayValue(history, counter.id, day);
+                const share = value / (maxima.get(counter.id) ?? 1);
+                return (
+                  <td key={day}>
+                    <span
+                      className="counter-bar"
+                      aria-hidden="true"
+                      style={{
+                        inlineSize: `${String(Math.round(share * 100))}%`,
+                      }}
+                    />
+                    {value === 0
+                      ? "–"
+                      : formatCounterValue(counter.kind, value)}
+                  </td>
+                );
+              })}
+            </tr>
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {counters.map((counter) => (
-          <tr key={counter.id}>
-            <th scope="row">
-              {counter.title}
-              {!counter.enabled && (
-                <>
-                  {" "}
-                  <Badge variant="secondary">Disabled</Badge>
-                </>
-              )}
-            </th>
+          <tr>
+            <th scope="row">Impact / energy</th>
             {days.map((day) => {
-              const { value } = dayValue(history, counter.id, day);
-              const share = value / (maxima.get(counter.id) ?? 1);
+              const evaluation = evaluationFor(evaluations, day);
               return (
                 <td key={day}>
-                  <span
-                    className="counter-bar"
-                    aria-hidden="true"
-                    style={{
-                      inlineSize: `${String(Math.round(share * 100))}%`,
-                    }}
-                  />
-                  {value === 0 ? "–" : formatCounterValue(counter.kind, value)}
+                  {evaluation === undefined
+                    ? "–"
+                    : `${evaluation.impact === null ? "–" : `${String(evaluation.impact)}/4`} · ${evaluation.energy === null ? "–" : `${String(evaluation.energy)}/3`}`}
                 </td>
               );
             })}
           </tr>
-        ))}
-        <tr>
-          <th scope="row">Impact / energy</th>
-          {days.map((day) => {
-            const evaluation = evaluationFor(evaluations, day);
-            return (
-              <td key={day}>
-                {evaluation === undefined
-                  ? "–"
-                  : `${evaluation.impact === null ? "–" : `${String(evaluation.impact)}/4`} · ${evaluation.energy === null ? "–" : `${String(evaluation.energy)}/3`}`}
-              </td>
-            );
-          })}
-        </tr>
-        <tr>
-          <th scope="row">Focus in Tadooer</th>
-          {days.map((day) => {
-            const focus = evaluations?.focus.find((item) => item.day === day);
-            return (
-              <td key={day}>
-                {focus === undefined ? "–" : formatClockDuration(focus.ms)}
-              </td>
-            );
-          })}
-        </tr>
-      </tbody>
-    </table>
+          <tr>
+            <th scope="row">Focus in Tadooer</th>
+            {days.map((day) => {
+              const focus = evaluations?.focus.find((item) => item.day === day);
+              return (
+                <td key={day}>
+                  {focus === undefined ? "–" : formatClockDuration(focus.ms)}
+                </td>
+              );
+            })}
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 };
 

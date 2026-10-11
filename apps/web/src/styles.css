@@ -432,6 +432,14 @@
     letter-spacing: normal;
     font-weight: 400;
   }
+  /* A hint under a field is sentence text, not a field caption. */
+  .field > p {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+    font-size: var(--text-sm);
+    color: var(--subtext);
+  }
   .field.compact-field {
     max-width: 10rem;
   }
@@ -1043,6 +1051,65 @@
   .task-capture h2 {
     font-size: var(--text-base);
   }
+  .task-capture [data-slot="card-content"] {
+    display: grid;
+    gap: 0.875rem;
+  }
+  .capture-paste {
+    display: grid;
+    gap: 0.5rem;
+    padding-top: 0.875rem;
+    border-top: 1px solid var(--line);
+  }
+  .capture-paste .capture-actions {
+    margin: 0;
+  }
+  /* Archived notes: a few lines by default; the full text opens in place. */
+  .history-task-notes {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    color: var(--subtext);
+    font-size: var(--text-sm);
+  }
+  details.history-task-notes > summary {
+    display: block;
+    cursor: pointer;
+    list-style: none;
+  }
+  details.history-task-notes > summary::-webkit-details-marker {
+    display: none;
+  }
+  details.history-task-notes > summary > span {
+    color: var(--purple);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+  }
+  details.history-task-notes[open] > summary {
+    display: none;
+  }
+  details.history-task-notes > p {
+    margin: 0;
+  }
+  /* The boards card stacks its list, template buttons and form. */
+  [aria-labelledby="board-list-title"] [data-slot="card-content"] {
+    display: grid;
+    gap: 0.875rem;
+  }
+  /* Template tags: a wrapping row of checkbox options. */
+  .tag-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+  }
+  .tag-options > label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: var(--text-sm);
+  }
+  .field.span-all {
+    grid-column: 1 / -1;
+  }
   .capture-option {
     display: inline-flex;
     align-items: center;
@@ -1150,21 +1217,27 @@
     padding: 0 0.25rem;
   }
   .today-task-actions > details {
-    flex-basis: 100%;
     text-align: left;
+    min-width: 0;
+  }
+  .today-task-actions > details[open] {
+    flex-basis: 100%;
   }
   .today-task-actions > details > summary {
     font-size: var(--text-xs);
+    color: var(--subtext);
     justify-content: flex-end;
+  }
+  .today-task-actions > details[open] > summary {
     width: 100%;
   }
-  .today-task-actions button,
+  .today-task-actions button:not([role="checkbox"]),
   .today-task-actions summary,
-  .today-page button,
+  .today-page button:not([role="checkbox"], [role="switch"]),
   .today-page summary {
     min-height: 2rem;
   }
-  .today-task-actions button {
+  .today-task-actions button:not([role="checkbox"]) {
     font-size: var(--text-xs);
     padding: 0.25rem 0.6rem;
   }
@@ -1951,6 +2024,22 @@
     .sidebar-nav {
       flex-direction: row;
       flex: unset;
+      overflow-x: auto;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+      padding-right: 1.5rem;
+      mask-image: linear-gradient(
+        to right,
+        #000 calc(100% - 1.5rem),
+        transparent
+      );
+    }
+    .sidebar-nav::-webkit-scrollbar {
+      display: none;
+    }
+    .sidebar-nav a {
+      scroll-snap-align: start;
+      white-space: nowrap;
     }
     .sidebar-nav a[aria-current="page"]::before {
       display: none;
@@ -2201,11 +2290,17 @@
     width: 100%;
     border-collapse: collapse;
   }
+  /* Seven day columns do not fit a phone; the table scrolls sideways. */
+  .counter-week-scroll {
+    overflow-x: auto;
+    margin-bottom: 0.5rem;
+  }
   .counter-week th,
   .counter-week td {
     padding: 0.25rem 0.5rem;
     text-align: left;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .counter-week td {
     position: relative;
@@ -2361,5 +2456,18 @@ html[data-theme="light"] {
       top: 0.25rem;
       right: 0.25rem;
     }
+  }
+}
+
+/* A checkbox row's label is the option text, not a field caption. The label
+   component sets the caption look with utilities, so this lives in the same
+   layer and comes later. */
+@layer utilities {
+  .group\/field.flex-row > [data-slot="field-label"] {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+    font-size: var(--text-sm);
+    color: var(--text);
   }
 }

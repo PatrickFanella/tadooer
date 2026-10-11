@@ -351,7 +351,7 @@ export const GooglePlanning = ({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <form className="planning-preferences" onSubmit={submitPreferences}>
-              <fieldset>
+              <fieldset className="tag-options">
                 <legend>Working days</legend>
                 {dayNames.map((name, day) => (
                   <Field key={name} className="flex-row items-center gap-2">

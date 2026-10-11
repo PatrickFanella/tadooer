@@ -48,6 +48,7 @@ it("shows lifecycle, appearance, backlog and offline state for organization reco
       tasks={[task]}
       csrfToken="csrf"
       online={false}
+      defaultOpen
       onProjectsChange={() => undefined}
       onTagsChange={() => undefined}
     />,
@@ -98,6 +99,7 @@ it("renders cached notes offline with enabled write controls (ADR 0046)", () => 
       tasks={[task]}
       csrfToken="csrf"
       online={false}
+      defaultOpen
       onProjectsChange={() => undefined}
       onTagsChange={() => undefined}
       notes={[

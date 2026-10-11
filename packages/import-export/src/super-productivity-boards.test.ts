@@ -200,6 +200,33 @@ describe("Super Productivity boards, sections and menu folders (ADR 0028)", () =
     ]);
   });
 
+  it("renders the source's default board and panel title keys as English", () => {
+    const { boards } = prepareSuperProductivityImport(
+      exportWith({
+        boards: {
+          boardCfgs: [
+            {
+              id: "KANBAN_DEFAULT",
+              title: "F.BOARDS.DEFAULT.KANBAN",
+              cols: 3,
+              panels: [
+                panel("todo", { title: "F.BOARDS.DEFAULT.TO_DO" }),
+                panel("doing", { title: "F.BOARDS.DEFAULT.IN_PROGRESS" }),
+                panel("done", { title: "F.BOARDS.DEFAULT.DONE" }),
+              ],
+            },
+          ],
+        },
+      }),
+    );
+    expect(boards.boards.map(({ title }) => title)).toEqual(["Kanban"]);
+    expect(boards.boards[0]?.panels.map(({ title }) => title)).toEqual([
+      "To do",
+      "In progress",
+      "Done",
+    ]);
+  });
+
   it("blocks unreviewed board, panel and section fields", () => {
     for (const extra of [
       {
