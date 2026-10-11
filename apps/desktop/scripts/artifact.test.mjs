@@ -31,23 +31,35 @@ const macIntel = {
 };
 
 describe("desktop artifact names", () => {
-  it("packages Linux x64 and both macOS architectures", () => {
+  it("packages Linux x64, both macOS architectures and the universal image", () => {
     expect(desktopTargets).toEqual([
-      { platform: "linux", arch: "x64" },
-      { platform: "darwin", arch: "arm64" },
-      { platform: "darwin", arch: "x64" },
+      { platform: "linux", arch: "x64", format: "archive" },
+      { platform: "darwin", arch: "arm64", format: "archive" },
+      { platform: "darwin", arch: "x64", format: "archive" },
+      { platform: "darwin", arch: "universal", format: "archive" },
+      { platform: "darwin", arch: "universal", format: "dmg" },
     ]);
   });
 
   it("names a tar.gz for Linux and a zip for macOS", () => {
     expect(artifactExtension("linux")).toBe("tar.gz");
     expect(artifactExtension("darwin")).toBe("zip");
+    expect(artifactExtension("darwin", "archive")).toBe("zip");
     expect(artifactFileName("0.1.0", "linux", "x64")).toBe(linux.artifact);
     expect(artifactFileName("0.1.0", "darwin", "arm64")).toBe(macArm.artifact);
     expect(artifactFileName("0.1.0", "darwin", "x64")).toBe(macIntel.artifact);
     expect(artifactFileName("1.2.3-rc.1", "darwin", "arm64")).toBe(
       "tadooer-desktop-1.2.3-rc.1-darwin-arm64.zip",
     );
+  });
+
+  it("names the disk image for macOS only", () => {
+    expect(artifactExtension("darwin", "dmg")).toBe("dmg");
+    expect(artifactFileName("0.1.0", "darwin", "universal", "dmg")).toBe(
+      "tadooer-desktop-0.1.0-darwin-universal.dmg",
+    );
+    expect(() => artifactExtension("linux", "dmg")).toThrow("macOS");
+    expect(() => artifactExtension("darwin", "pkg")).toThrow("Unsupported");
   });
 
   it("refuses a version or a target that would change the name's shape", () => {

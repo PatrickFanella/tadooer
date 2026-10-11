@@ -23,9 +23,10 @@ import {
  * checksum is recomputed, and the script fails when one differs from the
  * recorded `.sha256` file.
  *
- * Usage: artifact-info.mjs [platform arch] [--manifest-value]
+ * Usage: artifact-info.mjs [platform arch] [--dmg] [--manifest-value]
  *
- * With a platform and an architecture it reports that one artifact. Without
+ * With a platform and an architecture it reports that one artifact, the
+ * archive unless `--dmg` asks for the disk image. Without
  * them it reports every packaged artifact of the current version. When there
  * are several it also writes the checksum index
  * (`tadooer-desktop-<version>.sha256sums`), and the release value
@@ -34,6 +35,7 @@ import {
  */
 
 const valueOnly = process.argv.includes("--manifest-value");
+const requestedFormat = process.argv.includes("--dmg") ? "dmg" : "archive";
 const positional = process.argv
   .slice(2)
   .filter((argument) => !argument.startsWith("--"));
@@ -41,8 +43,8 @@ if (positional.length !== 0 && positional.length !== 2)
   throw new Error("Give both a platform and an architecture, or neither");
 const manifest = await readPackage();
 
-const describe = async ({ platform, arch }) => {
-  const artifact = artifactFileName(manifest.version, platform, arch);
+const describe = async ({ platform, arch, format }) => {
+  const artifact = artifactFileName(manifest.version, platform, arch, format);
   const path = join(outputDirectory, artifact);
   const recorded = (await readFile(`${path}.sha256`, "utf8")).trim();
   const sha256 = await sha256File(path);
@@ -58,7 +60,7 @@ const describe = async ({ platform, arch }) => {
 
 if (positional.length === 2) {
   const [platform, arch] = positional;
-  const described = await describe({ platform, arch });
+  const described = await describe({ platform, arch, format: requestedFormat });
   console.log(
     valueOnly ? described.desktopArtifact : JSON.stringify(described, null, 2),
   );
@@ -69,7 +71,12 @@ if (positional.length === 2) {
       existsSync(
         join(
           outputDirectory,
-          artifactFileName(manifest.version, target.platform, target.arch),
+          artifactFileName(
+            manifest.version,
+            target.platform,
+            target.arch,
+            target.format,
+          ),
         ),
       )
     )

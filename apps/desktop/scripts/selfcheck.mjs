@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,7 +13,8 @@ import {
 
 /**
  * Runs a check of the packaged shell built for this machine: the Linux x64
- * directory on Linux, the bundle of this Mac's architecture on macOS.
+ * directory on Linux, the bundle of this Mac's architecture on macOS, or
+ * the universal bundle when that is the one that was built.
  *
  * By default it is the window self-check (`--suite-selfcheck`), in a
  * temporary profile that is removed afterwards, so the check never touches
@@ -29,14 +31,17 @@ const passed = process.argv
   .slice(2)
   .filter((argument) => argument !== "--smoke");
 const manifest = await readPackage();
-const executable = join(
-  outputDirectory,
-  ...packagedExecutableSegments(
-    manifest.productName,
-    process.platform,
-    process.platform === "darwin" ? process.arch : "x64",
-  ),
-);
+const executableFor = (arch) =>
+  join(
+    outputDirectory,
+    ...packagedExecutableSegments(manifest.productName, process.platform, arch),
+  );
+const executable =
+  process.platform === "darwin"
+    ? ([process.arch, "universal"]
+        .map(executableFor)
+        .find((path) => existsSync(path)) ?? executableFor(process.arch))
+    : executableFor("x64");
 const profile = await mkdtemp(join(tmpdir(), "tadooer-selfcheck-"));
 const environment = { ...process.env };
 // Set by some Electron-based terminals; it would start Node, not the app.

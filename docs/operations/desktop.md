@@ -5,9 +5,10 @@ The desktop app is an Electron window around one Tadooer server (ADR 0015). ADR
 instance, start at login, `tadooer://` links and native notifications. It keeps
 no tasks and no credentials of its own.
 
-It is packaged for Linux (x64) and macOS (Apple silicon and Intel). The macOS
-package is unsigned and has not been started on a Mac yet; see "macOS smoke
-run".
+It is packaged for Linux (x64) and macOS (Apple silicon and Intel from the
+Linux build host; a universal bundle, signed ad hoc, and a `.dmg` from a Mac).
+The macOS package carries no Developer ID signature; see "Build on a Mac" and
+"macOS smoke run" for what has been run.
 
 Renamed 2026-10-02: the product name is Tadooer. The packaged directory,
 executable and macOS bundle are `Tadooer`, the archives are
@@ -59,7 +60,39 @@ prints a warning that it found no `.icon` file; that is the newer Icon Composer
 format, and the `.icns` file is the one in use.
 
 Set `SOURCE_DATE_EPOCH` to fix the file times inside the archives. Nothing is
-signed.
+signed on Linux.
+
+### Build on a Mac
+
+```sh
+pnpm install --frozen-lockfile
+pnpm package:desktop:mac:universal              # universal bundle, ad hoc signature, zip, dmg
+pnpm --filter @suite/desktop package:dmg arm64  # a disk image of one thin bundle instead
+pnpm desktop:artifact
+```
+
+The Mac needs the Xcode command line tools (`codesign`, `lipo`, `ditto` and
+`hdiutil` come with them), Node 24 and pnpm. `package:mac:universal` runs the
+same packager for `universal`: it builds the arm64 and x64 bundles and joins
+them with `lipo` through `@electron/universal`, which refuses to run anywhere
+but macOS. The script then:
+
+- signs the bundle ad hoc, `codesign --force --deep --sign -`, and verifies it
+  with `codesign --verify --deep --strict`. Without this the linker's
+  per-binary signatures make `codesign` and `spctl` report "code has no
+  resources but signature indicates they must be present". An ad hoc
+  signature names no one; Gatekeeper still treats the app as from an
+  unidentified developer, so the install steps below do not change;
+- reads the bundle back as on Linux, plus one signature per slice of the fat
+  executable (`codeSignatures` in the report; the arm64 slice must have one);
+- zips it as `tadooer-desktop-<version>-darwin-universal.zip`;
+- writes `tadooer-desktop-<version>-darwin-universal.dmg`: a read-only
+  compressed (UDZO) HFS+ image whose volume holds `Tadooer.app` and a link to
+  `/Applications`, checked with `hdiutil verify`, with its `.sha256` file.
+
+`pnpm desktop:artifact` lists the universal zip and the image with the other
+artifacts and puts them in the checksum index. `artifact-info.mjs darwin
+universal --dmg` reports the image alone.
 
 `smoke:linux` checks that the executable starts, the application code loads and
 both preload bundles are inside the package. It opens no window.
@@ -212,12 +245,15 @@ xdg-mime default tadooer-desktop.desktop x-scheme-handler/tadooer
 
 ## Install on macOS
 
-The app needs macOS 12 or later. Use the `arm64` zip on Apple silicon and the
-`x64` zip on an Intel Mac (Apple menu → About This Mac shows the chip).
+The app needs macOS 12 or later. The universal `.dmg` runs on Apple silicon
+and Intel. The zips are the alternative: `arm64` on Apple silicon, `x64` on an
+Intel Mac (Apple menu → About This Mac shows the chip), or `universal`.
 
 1. Check the download:
-   `shasum -a 256 -c tadooer-desktop-<version>-darwin-<arch>.zip.sha256`.
-2. Double-click the zip and move `Tadooer.app` to `/Applications`.
+   `shasum -a 256 -c tadooer-desktop-<version>-darwin-universal.dmg.sha256`.
+2. Open the image and drag `Tadooer` onto the `Applications` link in the
+   window; then eject the image. For a zip, double-click it and move
+   `Tadooer.app` to `/Applications`.
 3. Open it. The first time, Gatekeeper stops it; see the next section.
 
 The server address rules are the same as on Linux. The settings file is
@@ -232,8 +268,10 @@ opens the window again. **Tadooer → Quit** or Cmd+Q ends it.
 
 ### What an unsigned app means
 
-The app carries no Apple Developer ID signature and is not notarised. That has
-five consequences.
+The app carries no Apple Developer ID signature and is not notarised. A bundle
+built on a Mac has an ad hoc signature, which keeps `codesign` consistent but
+identifies no one; a bundle built on Linux has only the linker's. Either way
+the five consequences below apply.
 
 **Gatekeeper blocks the first launch.** A copy that arrived through a browser,
 AirDrop or a chat program is marked as quarantined, and macOS refuses to open
@@ -290,9 +328,28 @@ Settings → Privacy & Security → Local Network.
 
 ## macOS smoke run
 
-Nothing below has been run yet. Do it on a Mac with the zip for its chip,
-against a disposable Suite instance that the Mac and a second device can both
-reach, not against production. A server on a plain `http://` private address
+Run so far, 2026-10-11, on Soyuz (macOS 26.6.2, Apple M3), with
+`tadooer-desktop-0.1.0-darwin-universal.dmg`, SHA-256
+`555c55be482e7e2dc7bef1b8a66b1fd7dab258f8297f920a43421c69456d2fe0`, built on
+that Mac from `feat/desktop-mac-dmg`, so the copy carried no quarantine mark:
+
+- Step 1 passed: checksum `OK`, the image mounts with `Tadooer.app` and the
+  `Applications` link, the executable is `x86_64 arm64`, and the copy in
+  `/Applications` passes `codesign --verify --deep --strict`.
+- Step 2 is open. `spctl --assess --type execute` answers `rejected`, as it
+  must for an app without a Developer ID. No Gatekeeper dialog was seen,
+  because the copy was never quarantined; a copy that arrives through a
+  browser will show one.
+- Step 3 passed: one JSON line with `"preloads":true`, exit status 0, from
+  the mounted image and from `/Applications`.
+- Step 12 passed: `smoke:mac:shell` printed `"selfcheck":"passed"` with the
+  twenty `ok` lines, against the universal bundle.
+- Steps 4 to 11 have not been run. They need a signed-in session against a
+  disposable instance and a second device.
+
+Do the rest on a Mac with the image or the zip for its chip, against a
+disposable Suite instance that the Mac and a second device can both reach,
+not against production. A server on a plain `http://` private address
 also needs `SUITE_SECURE_COOKIES` off on that instance, or sign-in fails.
 
 Record at the top: the macOS version, the chip, the zip's name and SHA-256,
@@ -315,7 +372,7 @@ form (HTTPS or private HTTP).
 | 12  | Optional, from a checkout on the Mac after `pnpm package:desktop:mac`: `pnpm --filter @suite/desktop smoke:mac:shell`.                                                      | `"selfcheck":"passed"` with twenty `ok` lines. The Dock shows the app briefly; no window appears.                                                                                       | The output line.                                                             |
 
 Step 12 uses a temporary profile and removes it. It is the same window check
-as on Linux and has not been run on macOS either.
+as on Linux; it passed on macOS on 2026-10-11 (above).
 
 When the run is done, quit the app, remove the login item if it is still
 listed, and note any step whose result differed, with the dialog text. A step
@@ -393,10 +450,13 @@ let the app replace itself.
 
 ## Not done yet
 
-- **A run on a Mac.** The macOS package is built and inspected on Linux. No
-  part of it has been launched; the smoke run above is open.
+- **The rest of the run on a Mac.** The universal image was built, installed
+  and self-checked on a Mac on 2026-10-11 (steps 1, 3 and 12). The steps that
+  need a signed-in session and a second device, 4 to 11, are open.
 - **Signing and notarisation.** Owner decision, for macOS and Windows.
-- **A universal macOS build and a `.dmg`.** Both need a Mac.
+- **A universal macOS build and a `.dmg` from Linux.** Both exist, but only
+  `package:desktop:mac:universal` on a Mac makes them; the Linux host still
+  produces the two thin zips.
 - **Windows.** No package, and none of the code has run there. Remaining work:
   a packager target and an `.ico` icon, checking the second-instance path for
   links and `setLoginItemSettings`, a tray icon in the platform's format and a
