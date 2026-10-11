@@ -6,6 +6,7 @@ import { deepLinkScheme } from "../src/policy.mjs";
 import { desktopDirectory } from "./artifact.mjs";
 import { icnsImageTypes, pngHeader, readIcns, writeIcns } from "./icns.mjs";
 import {
+  adHocSign,
   afterPackage,
   missingSigningVariables,
   signingRequested,
@@ -20,8 +21,10 @@ import {
   macEntitlementsFileName,
   macHelperEntitlements,
   macHelperEntitlementsFileName,
+  macArchitecturesFor,
   machOArchitecture,
   machOCodeSignature,
+  machOSlices,
   macInfoPlist,
   macInfoPlistProblems,
   macPackagerOptions,
@@ -241,6 +244,33 @@ describe("macOS package", () => {
     ).toThrow("Unsupported");
   });
 
+  it("adds the universal bundle on a Mac only", () => {
+    expect(macArchitecturesFor("linux")).toEqual(["arm64", "x64"]);
+    expect(macArchitecturesFor("darwin")).toEqual([
+      "arm64",
+      "x64",
+      "universal",
+    ]);
+    expect(
+      macPackagerOptions({
+        directory: "/work/desktop",
+        outputDirectory: "/out",
+        productName: "Tadooer",
+        arch: "universal",
+        hostPlatform: "darwin",
+      }),
+    ).toMatchObject({ platform: "darwin", arch: "universal" });
+    expect(() =>
+      macPackagerOptions({
+        directory: "/work/desktop",
+        outputDirectory: "/out",
+        productName: "Tadooer",
+        arch: "universal",
+        hostPlatform: "linux",
+      }),
+    ).toThrow("Unsupported");
+  });
+
   it("registers only the tadooer scheme and keeps the Dock icon", () => {
     expect(options.extendInfo.CFBundleURLTypes).toEqual([
       {
@@ -372,6 +402,28 @@ describe("Mach-O inspection", () => {
     expect(machOCodeSignature(machO(arm64, 0x20002))).toBe("linker-adhoc");
     expect(machOCodeSignature(machO(arm64, 0x2))).toBe("adhoc");
     expect(machOCodeSignature(machO(arm64, 0x10000))).toBe("identity");
+  });
+
+  it("splits a universal file into its slices", () => {
+    const first = machO(arm64, 0x20002);
+    const second = machO(x64);
+    const header = Buffer.alloc(8 + 2 * 20);
+    header.writeUInt32BE(0xcafebabe, 0);
+    header.writeUInt32BE(2, 4);
+    header.writeUInt32BE(arm64, 8);
+    header.writeUInt32BE(header.length, 16);
+    header.writeUInt32BE(first.length, 20);
+    header.writeUInt32BE(x64, 28);
+    header.writeUInt32BE(header.length + first.length, 36);
+    header.writeUInt32BE(second.length, 40);
+    const fat = Buffer.concat([header, first, second]);
+    expect(machOArchitecture(fat)).toBe("universal");
+    const slices = machOSlices(fat);
+    expect(slices.map(({ arch }) => arch)).toEqual(["arm64", "x64"]);
+    expect(machOCodeSignature(slices[0].data)).toBe("linker-adhoc");
+    expect(machOCodeSignature(slices[1].data)).toBe("none");
+    expect(machOSlices(first)).toEqual([]);
+    expect(machOSlices(fat.subarray(0, 30))).toEqual([]);
   });
 
   it("gives no answer for a truncated or foreign file", () => {
@@ -512,6 +564,37 @@ describe("signing hook", () => {
     APPLE_API_KEY_ID: "KEYID12345",
     APPLE_API_ISSUER: "00000000-0000-0000-0000-000000000000",
   };
+
+  it("signs ad hoc with codesign and verifies the result", () => {
+    const calls = [];
+    const run = (command, args) => {
+      calls.push([command, ...args]);
+      return { status: 0 };
+    };
+    expect(adHocSign("/out/Tadooer.app", run)).toEqual({
+      signed: true,
+      identity: "adhoc",
+    });
+    expect(calls).toEqual([
+      ["codesign", "--force", "--deep", "--sign", "-", "/out/Tadooer.app"],
+      [
+        "codesign",
+        "--verify",
+        "--deep",
+        "--strict",
+        "--verbose=2",
+        "/out/Tadooer.app",
+      ],
+    ]);
+    expect(() => adHocSign("/out/Tadooer.app", () => ({ status: 1 }))).toThrow(
+      "codesign failed",
+    );
+    expect(() =>
+      adHocSign("/out/Tadooer.app", (command, args) => ({
+        status: args[0] === "--verify" ? 1 : 0,
+      })),
+    ).toThrow("does not verify");
+  });
 
   it("does nothing for an unsigned build", () => {
     expect(afterPackage(bundle, {}, "linux")).toEqual({ signed: false });

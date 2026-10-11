@@ -35,14 +35,18 @@ export const packagedExecutableSegments = (productName, platform, arch) => {
 };
 
 /**
- * Every platform and architecture the desktop is packaged for, in the order
- * they are reported. Linux is a tar.gz of the packaged directory; macOS is a
- * zip of the application bundle, one per architecture.
+ * Every artifact the desktop is packaged as, in the order they are
+ * reported. Linux is a tar.gz of the packaged directory; macOS is a zip of
+ * the application bundle per architecture, and, from a Mac, the universal
+ * bundle as a zip and as a disk image.
  */
+export const artifactFormats = Object.freeze(["archive", "dmg"]);
 export const desktopTargets = Object.freeze([
-  Object.freeze({ platform: "linux", arch: "x64" }),
-  Object.freeze({ platform: "darwin", arch: "arm64" }),
-  Object.freeze({ platform: "darwin", arch: "x64" }),
+  Object.freeze({ platform: "linux", arch: "x64", format: "archive" }),
+  Object.freeze({ platform: "darwin", arch: "arm64", format: "archive" }),
+  Object.freeze({ platform: "darwin", arch: "x64", format: "archive" }),
+  Object.freeze({ platform: "darwin", arch: "universal", format: "archive" }),
+  Object.freeze({ platform: "darwin", arch: "universal", format: "dmg" }),
 ]);
 
 const requireVersion = (version) => {
@@ -62,12 +66,20 @@ export const artifactBaseName = (version, platform, arch) => {
   return `tadooer-desktop-${version}-${platform}-${arch}`;
 };
 
-export const artifactExtension = (platform) =>
-  platform === "darwin" ? "zip" : "tar.gz";
+export const artifactExtension = (platform, format = "archive") => {
+  if (!artifactFormats.includes(format))
+    throw new Error(`Unsupported artifact format: ${String(format)}`);
+  if (format === "dmg") {
+    if (platform !== "darwin")
+      throw new Error("A disk image is a macOS artifact");
+    return "dmg";
+  }
+  return platform === "darwin" ? "zip" : "tar.gz";
+};
 
-/** `tadooer-desktop-0.1.0-darwin-arm64.zip` */
-export const artifactFileName = (version, platform, arch) =>
-  `${artifactBaseName(version, platform, arch)}.${artifactExtension(platform)}`;
+/** `tadooer-desktop-0.1.0-darwin-arm64.zip`, `tadooer-desktop-0.1.0-darwin-universal.dmg` */
+export const artifactFileName = (version, platform, arch, format = "archive") =>
+  `${artifactBaseName(version, platform, arch)}.${artifactExtension(platform, format)}`;
 
 /** One line of a checksum file, in the format `sha256sum -c` reads. */
 export const checksumLine = (sha256, fileName) => {

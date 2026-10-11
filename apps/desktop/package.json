@@ -11,6 +11,8 @@
     "package:linux": "pnpm build:preload && electron-packager . 'Tadooer' --platform=linux --arch=x64 --out=dist-packages --overwrite --prune=false --ignore='(^|/)(dist-packages|node_modules|scripts|mac|src/.*test.*)$' && node scripts/package-artifact.mjs linux x64",
     "package:mac": "pnpm build:preload && node scripts/package-mac.mjs && node scripts/package-artifact.mjs darwin arm64 && node scripts/package-artifact.mjs darwin x64",
     "check:mac": "node scripts/package-mac.mjs --check-only",
+    "package:mac:universal": "pnpm build:preload && node scripts/package-mac.mjs universal && node scripts/package-artifact.mjs darwin universal && node scripts/package-dmg.mjs universal",
+    "package:dmg": "node scripts/package-dmg.mjs",
     "assets:mac": "node scripts/make-mac-assets.mjs",
     "artifact:info": "node scripts/artifact-info.mjs",
     "smoke:linux": "env -u ELECTRON_RUN_AS_NODE './dist-packages/Tadooer-linux-x64/Tadooer' --suite-smoke",

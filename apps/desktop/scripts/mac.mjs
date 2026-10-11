@@ -20,11 +20,18 @@ export const macBundleId = "tv.subcult.tadooer";
 export const macCategory = "public.app-category.productivity";
 
 /**
- * One build per architecture. A universal build needs `lipo`, and
- * `@electron/universal` refuses to run anywhere but macOS, so it cannot be
- * produced on the Linux build host.
+ * One build per architecture on the Linux build host. A universal build
+ * needs `lipo`, and `@electron/universal` refuses to run anywhere but macOS,
+ * so it is a third target that only a Mac can add (`macArchitecturesFor`).
  */
 export const macArchitectures = Object.freeze(["arm64", "x64"]);
+export const macUniversalArchitecture = "universal";
+
+/** The architectures a host can package: the two thin ones everywhere, and the universal one on macOS. */
+export const macArchitecturesFor = (hostPlatform) =>
+  hostPlatform === "darwin"
+    ? Object.freeze([...macArchitectures, macUniversalArchitecture])
+    : macArchitectures;
 
 /** Build inputs that stay outside the application bundle. */
 export const macDirectoryName = "mac";
@@ -67,14 +74,20 @@ export const packageIgnore = Object.freeze([
   /(^|\/)src\/.*test.*$/,
 ]);
 
-/** Options for one `@electron/packager` run. Nothing is signed. */
+/**
+ * Options for one `@electron/packager` run. Nothing is signed here; on a Mac
+ * the bundle gets an ad hoc signature afterwards (`mac-sign.mjs`). The
+ * universal architecture is accepted only when the host is macOS, because
+ * the packager joins the two thin builds with `lipo` there.
+ */
 export const macPackagerOptions = ({
   directory,
   outputDirectory,
   productName,
   arch,
+  hostPlatform = "linux",
 }) => {
-  if (!macArchitectures.includes(arch))
+  if (!macArchitecturesFor(hostPlatform).includes(arch))
     throw new Error(`Unsupported macOS architecture: ${String(arch)}`);
   return {
     dir: directory,
@@ -163,6 +176,28 @@ export const machOArchitecture = (data) => {
   if (cpu === 0x0100000c) return "arm64";
   if (cpu === 0x01000007) return "x64";
   return undefined;
+};
+
+/**
+ * The slices of a universal ("fat") Mach-O file: the architecture and the
+ * bytes of each. An empty list for a thin file or anything else.
+ */
+export const machOSlices = (data) => {
+  if (machOArchitecture(data) !== "universal") return [];
+  const count = data.readUInt32BE(4);
+  const slices = [];
+  for (let index = 0; index < count; index += 1) {
+    const entry = 8 + index * 20;
+    if (entry + 20 > data.length) return [];
+    const cpu = data.readUInt32BE(entry);
+    const offset = data.readUInt32BE(entry + 8);
+    const size = data.readUInt32BE(entry + 12);
+    if (offset + size > data.length) return [];
+    const arch =
+      cpu === 0x0100000c ? "arm64" : cpu === 0x01000007 ? "x64" : undefined;
+    slices.push({ arch, data: data.subarray(offset, offset + size) });
+  }
+  return slices;
 };
 
 /**

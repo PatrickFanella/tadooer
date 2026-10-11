@@ -13,6 +13,8 @@
  * `docs/operations/desktop.md` lists the Apple prerequisites and the steps.
  */
 
+import { spawnSync } from "node:child_process";
+
 export const signingVariables = Object.freeze({
   request: "SUITE_MAC_SIGN",
   /** `Developer ID Application: <name> (<team id>)`, as in the keychain. */
@@ -75,4 +77,32 @@ export const afterPackage = (bundle, environment, hostPlatform) => {
     `Signing ${bundle.appPath} is not implemented. Code signing and notarisation are an open owner decision (ADR 0047). ` +
       "The steps to add here are in docs/operations/desktop.md, “Signing and notarising later”.",
   );
+};
+
+/**
+ * The signature a Mac gives an unsigned bundle: `codesign --sign -`, an ad
+ * hoc signature that names no one. Gatekeeper still treats the app as from
+ * an unidentified developer, but the bundle is then consistent: the linker's
+ * per-binary signatures alone make `codesign --verify` and `spctl` report
+ * "code has no resources but signature indicates they must be present".
+ * Runs only on macOS, and never for a build that asked for a real
+ * signature; those two cases are decided by the caller.
+ *
+ * `run` exists for the tests; it defaults to `codesign` itself.
+ */
+export const adHocSign = (appPath, run = spawnSync) => {
+  const sign = run("codesign", ["--force", "--deep", "--sign", "-", appPath], {
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+  if (sign.error !== undefined) throw sign.error;
+  if (sign.status !== 0) throw new Error(`codesign failed for ${appPath}`);
+  const verify = run(
+    "codesign",
+    ["--verify", "--deep", "--strict", "--verbose=2", appPath],
+    { stdio: ["ignore", "inherit", "inherit"] },
+  );
+  if (verify.error !== undefined) throw verify.error;
+  if (verify.status !== 0)
+    throw new Error(`The ad hoc signature of ${appPath} does not verify`);
+  return { signed: true, identity: "adhoc" };
 };
