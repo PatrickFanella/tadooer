@@ -15,6 +15,8 @@ import { AuthService } from "./auth.ts";
 import { sendError } from "./http-utils.ts";
 import { BaikalConnectorService } from "./connector.ts";
 import { GoogleConnectorService } from "./google-connector.ts";
+import { IssueConnectorService } from "./issue-connector.ts";
+import { handleIssues } from "./routes/issues.ts";
 import { loadNtfyPublisherConfig, NtfyPublisher } from "./notifications.ts";
 import type { RouteContext } from "./routes/shared.ts";
 import { handleHealth } from "./routes/health.ts";
@@ -45,6 +47,7 @@ export interface RunningSuiteServer {
 export interface SuiteServerOptions {
   readonly connectorFetch?: typeof fetch;
   readonly googleFetch?: typeof fetch;
+  readonly issueFetch?: typeof fetch;
   readonly sessionClock?: SessionClock;
   readonly notificationFetch?: typeof fetch;
   readonly notificationIntervalMs?: number;
@@ -71,6 +74,12 @@ export const startSuiteServer = async (
     options.googleFetch,
   );
   const requestCounts = new Map<number, number>();
+  const issues = new IssueConnectorService(
+    database,
+    config.credentialKeyPath,
+    config.giteaIssueOrigins ?? ["https://git.subcult.tv"],
+    options.issueFetch,
+  );
   const notificationConfig = loadNtfyPublisherConfig(
     config.ntfyPublisherConfigPath,
   );
@@ -215,6 +224,7 @@ export const startSuiteServer = async (
     config,
     baikal: connector,
     google,
+    issues,
     ntfy: notificationPublisher,
     sessionClock,
     requestCounts,
@@ -225,6 +235,7 @@ export const startSuiteServer = async (
     handleHealth,
     handleAuthSetup,
     handleConnectors,
+    handleIssues,
     handleSync,
     handleActiveSession,
     handleCalendar,

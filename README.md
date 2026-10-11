@@ -114,6 +114,11 @@ encrypted connector material, Baïkal users, and calendar resources.
 
 ## Develop and verify
 
+GitHub and Gitea issue connections support selective task import, manual refresh,
+text conflict resolution, and optional close/reopen write-back. Setup, sync
+behavior, and current limits are documented in
+[`docs/operations/issue-sync.md`](docs/operations/issue-sync.md).
+
 ```bash
 pnpm install --frozen-lockfile
 pnpm dev
@@ -261,5 +266,3 @@ Implementation order is governed by the
 [Roadmap](docs/ROADMAP.md), not by feature parity with Super Productivity.
 
 https://www2.onnwee.me
-
-

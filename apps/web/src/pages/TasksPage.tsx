@@ -11,6 +11,8 @@ import { Field } from "../field.tsx";
 import { TimeBlockForm } from "../time-block-form.tsx";
 
 export interface TasksPageProps {
+  readonly taskIdFilter?: string;
+  readonly onClearTaskIdFilter?: () => void;
   readonly tasks: readonly Task[];
   readonly visibleTasks: readonly Task[];
   readonly recovery: readonly Task[];
@@ -64,6 +66,8 @@ export interface TasksPageProps {
 }
 
 export const TasksPage = ({
+  taskIdFilter,
+  onClearTaskIdFilter,
   visibleTasks,
   recovery,
   projects,
@@ -168,6 +172,14 @@ export const TasksPage = ({
         </label>
       </div>
       <h3>Captured tasks</h3>
+      {taskIdFilter && (
+        <p>
+          Showing the linked task.{" "}
+          <button type="button" onClick={onClearTaskIdFilter}>
+            Show all tasks
+          </button>
+        </p>
+      )}
       {visibleTasks.length === 0 ? (
         <p className="muted">No tasks match these filters.</p>
       ) : (

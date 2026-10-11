@@ -6,6 +6,8 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { SqliteCalendarProjectionStore } from "./calendar-projection-store.js";
 import { SqliteCredentialStore } from "./credential-store.js";
+import { SqliteIssueStore } from "./issue-store.js";
+export type { IssueConnectionRecord, IssueLinkRecord } from "./issue-store.js";
 import { SqlitePlanningPreferencesStore } from "./planning-preferences-store.js";
 
 interface Migration {
@@ -1218,6 +1220,28 @@ const migrations: readonly Migration[] = [
       PRIMARY KEY(owner_id,source_kind,entity_kind,source_id)
     ) STRICT;`,
   },
+  {
+    id: "0021_issue_connections",
+    sql: `CREATE TABLE issue_connections (
+      id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owner_accounts(id),
+      provider TEXT NOT NULL, origin TEXT NOT NULL, repository TEXT NOT NULL, record_json TEXT NOT NULL,
+      UNIQUE(owner_id,provider,origin,repository)
+    ) STRICT;
+    CREATE TABLE issue_links (
+      id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owner_accounts(id),
+      connection_id TEXT NOT NULL REFERENCES issue_connections(id), issue_number INTEGER NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id), record_json TEXT NOT NULL,
+      UNIQUE(connection_id,issue_number), UNIQUE(task_id)
+    ) STRICT;`,
+  },
+  {
+    id: "0022_issue_shared_tokens",
+    sql: `CREATE TABLE issue_shared_tokens (
+      owner_id TEXT NOT NULL REFERENCES owner_accounts(id), provider TEXT NOT NULL,
+      origin TEXT NOT NULL, credential TEXT NOT NULL,
+      PRIMARY KEY(owner_id,provider,origin)
+    ) STRICT;`,
+  },
 ];
 
 const checksum = (sql: string): string =>
@@ -1228,6 +1252,7 @@ const escapeSqliteString = (value: string): string =>
 
 export class SuiteDatabase {
   readonly #database: DatabaseSync;
+  readonly issues: SqliteIssueStore;
   readonly credentials: SqliteCredentialStore;
   readonly habits: SqliteHabitStore;
   readonly calendarProjections: SqliteCalendarProjectionStore;
@@ -1235,6 +1260,7 @@ export class SuiteDatabase {
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
+    this.issues = new SqliteIssueStore(database);
     this.habits = new SqliteHabitStore(
       database,
       (ownerId, kind, id, revision, now) => {

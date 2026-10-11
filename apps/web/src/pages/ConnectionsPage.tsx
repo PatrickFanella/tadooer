@@ -8,6 +8,7 @@ import { GooglePlanning } from "../google-planning.tsx";
 import { CalendarMigration } from "../calendar-migration.tsx";
 import { AssistantAccess } from "../components/AssistantAccess.tsx";
 import { SuperProductivityImport } from "../components/SuperProductivityImport.tsx";
+import { IssueConnections } from "../components/IssueConnections.tsx";
 
 export interface ConnectionsPageProps {
   readonly calendarMessage?: string | null;
@@ -42,6 +43,7 @@ export const ConnectionsPage = ({
   return (
     <>
       <AssistantAccess csrfToken={csrfToken} />
+      <IssueConnections csrfToken={csrfToken} onTaskChange={onTaskImport} />
       <SuperProductivityImport csrfToken={csrfToken} onApplied={onTaskImport} />
       {calendarMessage && (
         <p role="status" aria-live="polite">

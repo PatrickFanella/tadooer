@@ -267,6 +267,11 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   });
   const [habitPending, setHabitPending] = useState(false);
   const [taskQuery, setTaskQuery] = useState("");
+  const [taskIdFilter, setTaskIdFilter] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : (new URLSearchParams(window.location.search).get("task") ?? ""),
+  );
   const [taskStatusFilter, setTaskStatusFilter] = useState<
     "all" | Task["status"]
   >("all");
@@ -288,7 +293,10 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   }, []);
 
   useEffect(() => {
-    const onPopState = (): void => setRoute(routeFromPath(location.pathname));
+    const onPopState = (): void => {
+      setRoute(routeFromPath(location.pathname));
+      setTaskIdFilter(new URLSearchParams(location.search).get("task") ?? "");
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -296,6 +304,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   const navigate = (next: WorkspaceRoute): void => {
     if (typeof history !== "undefined") history.pushState({}, "", `/${next}`);
     setRoute(next);
+    setTaskIdFilter("");
   };
 
   const loadPlanner = useCallback(
@@ -324,6 +333,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     state.kind === "authenticated"
       ? state.tasks.filter(
           (task) =>
+            (taskIdFilter === "" || task.id === taskIdFilter) &&
             (taskQuery.trim() === "" ||
               `${task.title}\n${task.notes}`
                 .toLocaleLowerCase()
@@ -2355,6 +2365,11 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       )}
       {route === "tasks" && (
         <TasksPage
+          taskIdFilter={taskIdFilter}
+          onClearTaskIdFilter={() => {
+            setTaskIdFilter("");
+            history.replaceState({}, "", "/tasks");
+          }}
           tasks={state.tasks}
           visibleTasks={visibleTasks}
           recovery={state.recovery}

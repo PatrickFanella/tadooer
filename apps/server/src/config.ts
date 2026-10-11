@@ -9,6 +9,7 @@ export interface ServerConfig {
   readonly baikalEndpoint: string;
   readonly credentialKeyPath: string;
   readonly googleOAuthConfigPath?: string;
+  readonly giteaIssueOrigins?: readonly string[];
   readonly ntfyPublisherConfigPath?: string;
   readonly secureCookies: boolean;
   readonly publicOrigin?: string;
@@ -113,6 +114,26 @@ export const loadConfig = (
     credentialKeyPath: resolve(
       environment.SUITE_CREDENTIAL_KEY_PATH ?? "./data/credential.key",
     ),
+    giteaIssueOrigins: (
+      environment.SUITE_GITEA_ISSUE_ORIGINS ?? "https://git.subcult.tv"
+    )
+      .split(",")
+      .filter(Boolean)
+      .map((value) => {
+        const origin = new URL(value.trim());
+        if (
+          origin.protocol !== "https:" ||
+          origin.username ||
+          origin.password ||
+          origin.pathname !== "/" ||
+          origin.search ||
+          origin.hash
+        )
+          throw new Error(
+            "SUITE_GITEA_ISSUE_ORIGINS must contain HTTPS origins",
+          );
+        return origin.origin;
+      }),
     ...(environment.GOOGLE_OAUTH_CONFIG_PATH === undefined ||
     environment.GOOGLE_OAUTH_CONFIG_PATH === ""
       ? {}

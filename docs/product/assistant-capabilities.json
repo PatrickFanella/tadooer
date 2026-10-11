@@ -464,6 +464,24 @@
       "issue": 60,
       "authority": "The UI downloads through an authenticated link outside api.ts; delegated export needs an explicit read scope and bounded content delivery.",
       "source": "apps/web/src/calendar-migration.tsx"
+    },
+    {
+      "id": "issue-connections",
+      "action": "GitHub and Gitea repository grants, selective import, manual refresh, and close/reopen write-back",
+      "webApi": [
+        "listIssueConnections",
+        "saveIssueConnection",
+        "browseIssues",
+        "importIssues",
+        "syncIssues",
+        "disconnectIssues",
+        "removeSharedIssueToken"
+      ],
+      "catalog": [],
+      "status": "owner-only",
+      "issue": 30,
+      "authority": "Fresh provider token entry and enabling remote write-back require the interactive owner session. Issue import and sync currently have no delegated automation scope or confirmation contract.",
+      "source": "apps/server/src/routes/issues.ts"
     }
   ]
 }

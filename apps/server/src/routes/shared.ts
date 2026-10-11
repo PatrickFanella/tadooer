@@ -41,6 +41,7 @@ import type { AuthService } from "../auth.ts";
 import type { ServerConfig } from "../config.ts";
 import type { BaikalConnectorService, ConnectorFailure } from "../connector.ts";
 import type { GoogleConnectorService } from "../google-connector.ts";
+import type { IssueConnectorService } from "../issue-connector.ts";
 import type { NtfyPublisher } from "../notifications.ts";
 import { mimeTypes, securityHeaders } from "../http-utils.ts";
 
@@ -57,6 +58,7 @@ export interface RouteContext {
   readonly config: ServerConfig;
   readonly baikal: BaikalConnectorService;
   readonly google: GoogleConnectorService;
+  readonly issues: IssueConnectorService;
   readonly ntfy: NtfyPublisher | undefined;
   readonly sessionClock: SessionClock;
   readonly requestCounts: Map<number, number>;
