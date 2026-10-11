@@ -332,6 +332,98 @@ describe("data export inventory", () => {
 });
 
 describe("data export", () => {
+  it("excludes issue grants and runtime links and clears links before a replace restore", async () => {
+    await withTemporaryDirectory((directory) => {
+      const sourceDb = openWithOwner(directory, "source-owner", "source");
+      const target = openWithOwner(directory, "target-owner", "target");
+      try {
+        seed(target, "target-owner");
+        const task = target.getTask("target-owner", ids.parent);
+        if (task === undefined) throw new Error("Missing fixture task");
+        const connectionId = id(90);
+        target.issues.putConnection({
+          id: connectionId,
+          ownerId: "target-owner",
+          provider: "github",
+          origin: "https://github.com",
+          repository: "fixture/issues",
+          tokenScope: "repository",
+          writeBack: true,
+          credential: "synthetic-repository-ciphertext",
+          state: "connected",
+          lastSuccessfulSyncAt: null,
+        });
+        target.issues.putSharedToken(
+          "target-owner",
+          "github",
+          "https://github.com",
+          "synthetic-shared-ciphertext",
+        );
+        target.issues.putLink({
+          id: id(91),
+          ownerId: "target-owner",
+          connectionId,
+          taskId: task.id,
+          issue: {
+            number: 1,
+            title: task.title,
+            notes: task.notes,
+            state: "open",
+            updatedAt: now,
+            url: "https://github.com/fixture/issues/issues/1",
+            labels: [],
+            assignees: [],
+          },
+          baseline: {
+            title: task.title,
+            notes: task.notes,
+            status: task.status,
+          },
+          pendingState: "closed",
+          state: "uncertain",
+          message: null,
+          lastSuccessfulSyncAt: null,
+        });
+        const exported = target.dataExport.export("target-owner", now, source);
+        expect(JSON.stringify(exported)).not.toContain(
+          "synthetic-repository-ciphertext",
+        );
+        expect(JSON.stringify(exported)).not.toContain(
+          "synthetic-shared-ciphertext",
+        );
+        for (const table of [
+          "issue_connections",
+          "issue_shared_tokens",
+          "issue_links",
+        ]) {
+          expect(exported.tables).not.toHaveProperty(table);
+          expect(exported.excludedTables).toContain(table);
+        }
+        target.dataExport.restore(
+          "target-owner",
+          sourceDb.dataExport.export("source-owner", now, source),
+          "replace",
+          later,
+        );
+        expect(target.getTask("target-owner", task.id, true)).toBeUndefined();
+        expect(target.issues.links("target-owner")).toEqual([]);
+        expect(
+          target.issues.connection("target-owner", connectionId)?.credential,
+        ).toBe("synthetic-repository-ciphertext");
+        expect(
+          target.issues.sharedToken(
+            "target-owner",
+            "github",
+            "https://github.com",
+          ),
+        ).toBe("synthetic-shared-ciphertext");
+      } finally {
+        sourceDb.close();
+        target.close();
+      }
+    });
+  });
+
   it("exports the owner's rows without secrets, sessions or connector state", async () => {
     await withTemporaryDirectory((directory) => {
       const db = openWithOwner(directory, "owner-a", "a");

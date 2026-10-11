@@ -180,6 +180,14 @@ const routeRules: readonly RouteRule[] = [
   none("(planner|day-plan)", readOnly),
 
   // Calendars, connectors, publication and the bridge.
+  none(`issue-connections/(shared-token|${uuid})/browse`, readOnly),
+  // Import and refresh also write tasks through the ordinary sync feed;
+  // their connection/link status remains online connector state.
+  families(
+    "*",
+    `issue-connections(/(shared-token|${uuid})(/(import|sync))?)?`,
+    "connectors",
+  ),
   families("*", "connectors/baikal", "connectors", "calendar"),
   none("connectors/baikal/probe", preview),
   families("*", "connectors/google", "connectors", "calendar"),

@@ -94,3 +94,11 @@ write reconciliation, authentication/not-found failures, pagination, malformed
 responses, owner authentication, CSRF, allowed origins, and failed-selection
 import atomicity. Real provider acceptance and production deployment require
 separate evidence.
+
+Portable owner exports include the imported tasks but exclude issue grants,
+connector links, and pending provider-write state. These belong to the current
+installation. A replace restore clears the old issue links before replacing
+tasks and retains the target installation's saved grants, consistent with other
+connectors. A matched SQLite/key backup preserves complete issue-sync state.
+Issue mutations announce the connector resource family to other clients; task
+imports and updates also enter the ordinary task sync feed.
