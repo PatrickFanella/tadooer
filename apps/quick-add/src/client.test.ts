@@ -44,6 +44,11 @@ describe("quick-add automation HTTP client", () => {
                 affected: [],
                 baseRevisions: [],
                 expiresAt: "2026-08-06T16:10:00.000Z",
+                confirmation: {
+                  policy: "ordinary",
+                  category: null,
+                  tokenPolicy: "confirm_all",
+                },
                 requiresConfirmation: true,
               },
             }),
@@ -85,6 +90,58 @@ describe("quick-add automation HTTP client", () => {
       JSON.stringify({ idempotencyKey: "capture-inbox-20260806" }),
     );
     expect(calls.every(({ url }) => !url.includes("/api/tasks"))).toBe(true);
+  });
+
+  it("stops before confirmation when the preview would create tags unless --create-tags is set", async () => {
+    const preview = {
+      id,
+      operation: "tasks.create",
+      inputHash: "a".repeat(64),
+      summary: 'Create task "Capture"; creates tag "inbox"',
+      affected: [{ entityKind: "tag", entityId: id }],
+      baseRevisions: [],
+      expiresAt: "2026-08-06T16:10:00.000Z",
+      confirmation: {
+        policy: "ordinary",
+        category: null,
+        tokenPolicy: "confirm_all",
+      },
+      requiresConfirmation: true,
+    };
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        calls.push(url);
+        return Promise.resolve(
+          url.endsWith("/previews")
+            ? jsonResponse({ preview })
+            : jsonResponse({
+                previewId: id,
+                operation: "tasks.create",
+                replayed: false,
+                result: { task, replayed: false },
+              }),
+        );
+      }),
+    );
+    const config = {
+      baseUrl: "https://suite.example",
+      idempotencyKey: "capture-inbox-20260806",
+      title: "Capture #inbox",
+      notes: "",
+      structured: true,
+    };
+    const token = `suite_at_${id}.${"A".repeat(43)}`;
+    await expect(submitQuickAdd(config, token)).rejects.toThrow(
+      "Re-run with --create-tags",
+    );
+    expect(calls).toHaveLength(1);
+    await expect(
+      submitQuickAdd({ ...config, createTags: true }, token),
+    ).resolves.toMatchObject({ replayed: false });
+    expect(calls).toHaveLength(3);
+    expect(calls[2]).toContain("/confirm");
   });
 
   it("returns the bounded Suite error rather than continuing to confirmation", async () => {

@@ -5,9 +5,11 @@ import type {
   Task,
 } from "@suite/contracts";
 import { TimeBlockForm } from "../../time-block-form.tsx";
+import { Badge } from "../ui/badge.tsx";
+import { Button } from "../ui/button.tsx";
 
 export type TaskListItemState =
-  "overdue" | "scheduled" | "planning" | "completed";
+  "overdue" | "scheduled" | "planned-day" | "planning" | "completed";
 
 interface TaskListItemProps {
   readonly task: Task;
@@ -29,6 +31,14 @@ interface TaskListItemProps {
     task: Task,
   ) => Promise<void>;
   readonly onRemoveTimeBlock: (task: Task) => Promise<void>;
+  /** ADR 0027: move controls for a saved day order. */
+  readonly moveControls?:
+    | {
+        readonly canMoveUp: boolean;
+        readonly canMoveDown: boolean;
+        readonly onMove: (direction: -1 | 1) => void;
+      }
+    | undefined;
 }
 
 const taskTime = (value: string, timeZone: string): string =>
@@ -52,6 +62,7 @@ export const TaskListItem = ({
   onChangeTaskStatus,
   onSubmitTimeBlock,
   onRemoveTimeBlock,
+  moveControls,
 }: TaskListItemProps) => {
   const hasNonterminalFocus =
     activeSession !== null &&
@@ -65,22 +76,50 @@ export const TaskListItem = ({
       : `Change schedule for “${task.title}”`;
 
   return (
-    <li className="today-task-row">
+    <li className="today-task-row" data-task-id={task.id}>
       <div>
         <strong>{task.title}</strong>
         <p className="today-task-meta">
           {state === "overdue"
-            ? "Overdue"
-            : state === "planning" || state === "completed"
-              ? "No time set"
-              : taskTime(task.plannedStart ?? at, timeZone)}
+            ? task.plannedStart == null && task.plannedDay != null
+              ? `Overdue · planned for ${task.plannedDay}`
+              : "Overdue"
+            : state === "planned-day"
+              ? "Today · no time set"
+              : state === "planning" || state === "completed"
+                ? "No time set"
+                : taskTime(task.plannedStart ?? at, timeZone)}
           {task.estimateMinutes === null
             ? ""
             : ` · ${String(task.estimateMinutes)} min`}
         </p>
       </div>
       <div className="today-task-actions">
-        <button
+        {moveControls === undefined ? null : (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy || !moveControls.canMoveUp}
+              aria-label={`Move “${task.title}” up`}
+              onClick={() => moveControls.onMove(-1)}
+            >
+              Up
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy || !moveControls.canMoveDown}
+              aria-label={`Move “${task.title}” down`}
+              onClick={() => moveControls.onMove(1)}
+            >
+              Down
+            </Button>
+          </>
+        )}
+        <Button
           type="button"
           disabled={busy}
           aria-label={`${task.status === "completed" ? "Reopen" : "Complete"} “${task.title}”`}
@@ -92,25 +131,27 @@ export const TaskListItem = ({
           }
         >
           {task.status === "completed" ? "Reopen" : "Complete"}
-        </button>
+        </Button>
         {state === "completed" ? null : focusRunning ? (
-          <span>Focus running</span>
+          <Badge variant="now">Focus running</Badge>
         ) : (
-          <button
+          <Button
             type="button"
             disabled={busy || !focusActionsAvailable || focusBlocked}
             aria-label={`Start focus on “${task.title}”`}
             onClick={() => onStartFocus(task)}
           >
             Start focus
-          </button>
+          </Button>
         )}
         {state === "completed" ? null : !focusActionsAvailable ? (
           <span className="hint">Reconnect to start focus.</span>
         ) : null}
         {state === "completed" ? null : (
           <details>
-            <summary>{scheduleLabel}</summary>
+            <summary aria-label={scheduleLabel}>
+              {task.plannedStart === null ? "Schedule" : "Change schedule"}
+            </summary>
             <TimeBlockForm
               task={task}
               calendars={calendars}

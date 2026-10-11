@@ -1,17 +1,43 @@
-import { isHabitSyncOperation, habitCommandSchema } from "@suite/contracts";
+import {
+  coreTaskFieldSchema,
+  isHabitSyncOperation,
+  habitCommandSchema,
+  syncOperationEntity,
+} from "@suite/contracts";
 import { randomUUID, createHash, randomBytes } from "node:crypto";
 import type {
   ClientRegistrationResponse,
+  CoreTaskField,
+  SavedDayOrder,
+  SyncOperation,
   SyncRoundResponse,
   SyncSnapshotResponse,
 } from "@suite/contracts";
+import type {
+  NoteRecord,
+  ProjectRecord,
+  SavedDayOrderRecord,
+  TimeEntryRecord,
+  SubtaskRecord,
+  SuiteDatabase,
+  TagRecord,
+  TaskRecord,
+} from "@suite/persistence";
 import {
   clientRegistrationRequestSchema,
   clientAuthenticationHeadersSchema,
+  liveSyncPath,
   syncRoundRequestSchema,
 } from "@suite/contracts";
-import { sendJson, sendError, readJson, sameOrigin } from "../http-utils.ts";
+import {
+  sendJson,
+  sendError,
+  readJson,
+  sameOrigin,
+  securityHeaders,
+} from "../http-utils.ts";
 import type { RouteHandler } from "./shared.ts";
+import { timeEntryResponse } from "./time-history.ts";
 import {
   cursorFor,
   parseCursor,
@@ -20,6 +46,7 @@ import {
   projectResponse,
   tagResponse,
   subtaskResponse,
+  noteResponse,
   templateResponse,
   templateBlueprintResponse,
   templateSetResponse,
@@ -31,6 +58,65 @@ import {
   activeFromRecord,
   activeResponse,
 } from "./shared.ts";
+
+type NoteSyncOperation = Extract<
+  SyncOperation,
+  { readonly kind: "note.create" | "note.patch" | "note.delete" }
+>;
+
+/** ADR 0046: the persistence command for one queued note operation. */
+const noteSyncCommand = (
+  operation: NoteSyncOperation,
+): Parameters<SuiteDatabase["applyNoteSync"]>[0]["command"] =>
+  operation.kind === "note.create"
+    ? { action: "create", ...operation.note }
+    : operation.kind === "note.patch"
+      ? {
+          action: "update",
+          id: operation.noteId,
+          baseRevision: operation.baseRevision,
+          patch: operation.fields,
+        }
+      : {
+          action: "delete",
+          id: operation.noteId,
+          baseRevision: operation.baseRevision,
+        };
+
+type TimeEntrySyncOperation = Extract<
+  SyncOperation,
+  {
+    readonly kind:
+      "time_entry.create" | "time_entry.patch" | "time_entry.delete";
+  }
+>;
+
+/** ADR 0050: the persistence command for one queued time entry operation. */
+const timeEntrySyncCommand = (
+  operation: TimeEntrySyncOperation,
+): Parameters<SuiteDatabase["applyTimeEntrySync"]>[0]["command"] =>
+  operation.kind === "time_entry.create"
+    ? { action: "create", ...operation.timeEntry }
+    : operation.kind === "time_entry.patch"
+      ? {
+          action: "update",
+          id: operation.timeEntryId,
+          baseRevision: operation.baseRevision,
+          patch: operation.fields,
+        }
+      : {
+          action: "delete",
+          id: operation.timeEntryId,
+          baseRevision: operation.baseRevision,
+        };
+
+/** ADR 0050: the saved ranks of one date as the feed carries them. */
+const savedDayOrderResponse = (record: SavedDayOrderRecord): SavedDayOrder => ({
+  date: record.date,
+  revision: record.revision,
+  taskIds: [...record.taskIds],
+  updatedAt: record.updatedAt,
+});
 
 export const handleSync: RouteHandler = async (request, response, url, ctx) => {
   const { stores: database, auth } = ctx;
@@ -154,9 +240,15 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
 
   if (
     (method === "POST" && url.pathname === "/api/sync/round") ||
-    (method === "GET" && url.pathname === "/api/sync/snapshot")
+    (method === "GET" && url.pathname === "/api/sync/snapshot") ||
+    (method === "GET" && url.pathname === liveSyncPath)
   ) {
-    const session = auth.authenticate(request, method === "POST");
+    // ADR 0045: the hint stream and a round started by a hint do not count
+    // as owner activity, so neither refreshes the session idle timer.
+    const session = auth.authenticate(
+      request,
+      method === "POST" && request.headers["x-suite-sync-trigger"] !== "push",
+    );
     if (session === undefined) {
       sendError(response, 401, "AUTH_REQUIRED", "Authentication required");
       return true;
@@ -211,16 +303,82 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
       );
       return true;
     }
+    if (method === "GET" && url.pathname === liveSyncPath) {
+      const { hub } = ctx.liveSync;
+      if (!hub.accepts(session.owner.id, client.id)) {
+        if (hub.closed)
+          sendError(
+            response,
+            503,
+            "LIVE_SYNC_UNAVAILABLE",
+            "The server is shutting down",
+          );
+        else
+          sendError(
+            response,
+            429,
+            "LIVE_SYNC_STREAM_LIMIT",
+            "Too many live sync streams are open for this owner",
+          );
+        return true;
+      }
+      response.writeHead(200, {
+        ...securityHeaders,
+        "Cache-Control": "no-store",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "X-Accel-Buffering": "no",
+        // The connection carries one stream; closing it with the stream
+        // keeps shutdown from waiting on an idle keep-alive socket.
+        Connection: "close",
+      });
+      request.socket.setNoDelay(true);
+      const handle = hub.open({
+        ownerId: session.owner.id,
+        clientId: client.id,
+        head: database.getSyncState(session.owner.id),
+        sink: {
+          write: (chunk) => response.write(chunk),
+          end: (chunk) => {
+            response.end(chunk);
+          },
+          destroy: () => {
+            response.destroy();
+          },
+        },
+        check: () =>
+          !auth.sessionActive(session)
+            ? "session-ended"
+            : database
+                  .listSyncClients(session.owner.id)
+                  .some(
+                    ({ id, revokedAt }) =>
+                      id === client.id && revokedAt === null,
+                  )
+              ? undefined
+              : "client-revoked",
+      });
+      if (handle === undefined) {
+        response.destroy();
+        return true;
+      }
+      response.on("drain", handle.drained);
+      response.on("close", handle.closed);
+      return true;
+    }
     if (method === "GET") {
       const snapshot = database.fullSyncSnapshot(session.owner.id);
+      // Each entry is built only for the requested page: the per-entity
+      // reads (field versions, blueprints, pool items) are the larger cost
+      // and a client pages through the list 200 at a time.
       const allSnapshots = [
         ...database.habits
           .list(session.owner.id)
-          .map((value) => ({ entityKind: "habit" as const, value })),
-        ...database.habits
-          .occurrences(session.owner.id)
-          .map((value) => ({ entityKind: "habit_occurrence" as const, value })),
-        ...snapshot.tasks.map((task) => ({
+          .map((value) => () => ({ entityKind: "habit" as const, value })),
+        ...database.habits.occurrences(session.owner.id).map((value) => () => ({
+          entityKind: "habit_occurrence" as const,
+          value,
+        })),
+        ...snapshot.tasks.map((task) => () => ({
           entityKind: "task" as const,
           value: {
             task: taskResponse(task),
@@ -237,24 +395,54 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
                 projectId: versions.projectId ?? task.revision,
                 tagIds: versions.tagIds ?? task.revision,
                 deadline: versions.deadline ?? task.revision,
+                parent: versions.parent ?? task.revision,
+                plannedStart: versions.plannedStart ?? task.revision,
               };
             })(),
             changeSequence: task.revision,
           },
         })),
-        ...snapshot.projects.map((project) => ({
+        ...snapshot.projects.map((project) => () => ({
           entityKind: "project" as const,
           value: projectResponse(project),
         })),
-        ...snapshot.tags.map((tag) => ({
+        ...snapshot.tags.map((tag) => () => ({
           entityKind: "tag" as const,
           value: tagResponse(tag),
         })),
-        ...snapshot.subtasks.map((subtask) => ({
+        ...snapshot.subtasks.map((subtask) => () => ({
           entityKind: "subtask" as const,
           value: subtaskResponse(subtask),
         })),
-        ...snapshot.templates.map((template) => ({
+        // ADR 0046: notes travel whole, in the owner's order.
+        ...snapshot.notes.map((note) => () => ({
+          entityKind: "note" as const,
+          value: noteResponse(note),
+        })),
+        // ADR 0050: every saved day order; members stay derived from tasks.
+        ...snapshot.dayOrders.map((order) => () => ({
+          entityKind: "day_order" as const,
+          value: savedDayOrderResponse(order),
+        })),
+        // ADR 0050: stored time entries of the rolling window, not all
+        // history. Focus time is projected from the session, never listed.
+        ...database
+          .listSyncTimeEntries(
+            session.owner.id,
+            ctx.sessionClock.now().toISOString(),
+          )
+          .map((entry) => () => ({
+            entityKind: "time_entry" as const,
+            value: timeEntryResponse(entry),
+          })),
+        () => ({
+          entityKind: "focus_preferences" as const,
+          value: {
+            id: session.owner.id,
+            ...database.focus.getPreferences(session.owner.id),
+          },
+        }),
+        ...snapshot.templates.map((template) => () => ({
           entityKind: "template" as const,
           value: {
             template: templateResponse(template),
@@ -264,28 +452,30 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
             poolSlots: [...database.listTemplatePoolSlots(template.id)],
           },
         })),
-        ...snapshot.templateSets.map((set) => ({
+        ...snapshot.templateSets.map((set) => () => ({
           entityKind: "template_set" as const,
           value: {
             set: templateSetResponse(set),
             members: [...database.listTemplateSetMembers(set.id)],
           },
         })),
-        ...database.listChoicePools(session.owner.id, true).map((pool) => ({
-          entityKind: "choice_pool" as const,
-          value: {
-            pool: choicePoolResponse(pool),
-            items: database
-              .listChoicePoolItems(pool.id, true)
-              .map(choicePoolItemResponse),
-            history: database
-              .listChoicePoolHistory(pool.id)
-              .map(choicePoolHistoryResponse),
-          },
-        })),
+        ...database
+          .listChoicePools(session.owner.id, true)
+          .map((pool) => () => ({
+            entityKind: "choice_pool" as const,
+            value: {
+              pool: choicePoolResponse(pool),
+              items: database
+                .listChoicePoolItems(pool.id, true)
+                .map(choicePoolItemResponse),
+              history: database
+                .listChoicePoolHistory(pool.id)
+                .map(choicePoolHistoryResponse),
+            },
+          })),
         ...database
           .listPlanningPlaceholders(session.owner.id)
-          .map((placeholder) => ({
+          .map((placeholder) => () => ({
             entityKind: "planning_placeholder" as const,
             value: {
               placeholder: planningPlaceholderResponse(placeholder),
@@ -310,7 +500,9 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
         );
         return true;
       }
-      const snapshots = allSnapshots.slice(offset, offset + 200);
+      const snapshots = allSnapshots
+        .slice(offset, offset + 200)
+        .map((build) => build());
       const body: SyncSnapshotResponse = {
         snapshots,
         nextCursor: cursorFor(snapshot.cursor),
@@ -408,69 +600,175 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
           ),
         };
       }
-      const result =
-        operation.kind === "task.create"
-          ? database.applyTaskCreateSync({
-              ownerId: session.owner.id,
-              clientId: client.id,
-              operationId: operation.operationId,
-              requestHash: operation.requestHash,
-              now,
-              task: {
-                ...operation.task,
-                deadline: operation.task.deadline ?? null,
-                status: "open",
-                revision: 1,
-                createdAt: now,
-                updatedAt: now,
-              },
+      const entity = syncOperationEntity(operation);
+      if (entity === null)
+        return {
+          kind: "rejected" as const,
+          operationId: operation.operationId,
+          code: "INVALID_SYNC_OPERATION" as const,
+        };
+      const common = {
+        ownerId: session.owner.id,
+        clientId: client.id,
+        operationId: operation.operationId,
+        requestHash: operation.requestHash,
+        now,
+      };
+      const result: {
+        readonly kind:
+          "applied" | "replayed" | "conflict" | "idempotency-conflict";
+        readonly task?: TaskRecord;
+        readonly record?:
+          | ProjectRecord
+          | TagRecord
+          | SubtaskRecord
+          | NoteRecord
+          | SavedDayOrderRecord
+          | TimeEntryRecord;
+        readonly fields?: readonly string[];
+        readonly revision?: number;
+      } =
+        operation.kind === "task.move"
+          ? database.taskHierarchy.applyMoveSync({
+              ...common,
+              taskId: operation.taskId,
+              parentId: operation.parentId,
+              index: operation.index,
+              baseParentVersion: operation.baseParentVersion,
             })
-          : operation.kind === "task.patch"
-            ? database.applyTaskFieldSync({
-                ownerId: session.owner.id,
-                clientId: client.id,
-                operationId: operation.operationId,
-                requestHash: operation.requestHash,
-                taskId: operation.taskId,
-                baseVersions: Object.fromEntries(
-                  Object.entries(operation.baseFieldVersions).filter(
-                    ([, value]) => value !== undefined,
-                  ),
-                ),
-                patch: Object.fromEntries(
-                  Object.entries(operation.fields).filter(
-                    ([, value]) => value !== undefined,
-                  ),
-                ),
-                now,
+          : operation.kind === "task.create"
+            ? database.applyTaskCreateSync({
+                ...common,
+                task: {
+                  ...operation.task,
+                  deadline: operation.task.deadline ?? null,
+                  status: "open",
+                  revision: 1,
+                  createdAt: now,
+                  updatedAt: now,
+                },
               })
-            : operation.kind === "task.complete" ||
-                operation.kind === "task.reopen"
-              ? database.applyTaskCompletionSync({
-                  ownerId: session.owner.id,
-                  clientId: client.id,
-                  operationId: operation.operationId,
-                  requestHash: operation.requestHash,
+            : operation.kind === "task.patch"
+              ? database.applyTaskFieldSync({
+                  ...common,
                   taskId: operation.taskId,
-                  baseStatusVersion: operation.baseStatusVersion,
-                  completed: operation.kind === "task.complete",
-                  now,
+                  baseVersions: Object.fromEntries(
+                    Object.entries(operation.baseFieldVersions).filter(
+                      ([, value]) => value !== undefined,
+                    ),
+                  ),
+                  patch: Object.fromEntries(
+                    Object.entries(operation.fields).filter(
+                      ([, value]) => value !== undefined,
+                    ),
+                  ),
                 })
-              : database.applyTaskDeletionSync({
-                  ownerId: session.owner.id,
-                  clientId: client.id,
-                  operationId: operation.operationId,
-                  requestHash: operation.requestHash,
-                  taskId: operation.taskId,
-                  baseRevision: (
-                    operation as Extract<
-                      typeof operation,
-                      { readonly kind: "task.delete" | "task.restore" }
-                    >
-                  ).baseRevision,
-                  restore: operation.kind === "task.restore",
-                  now,
-                });
+              : operation.kind === "task.complete" ||
+                  operation.kind === "task.reopen"
+                ? database.applyTaskCompletionSync({
+                    ...common,
+                    taskId: operation.taskId,
+                    baseStatusVersion: operation.baseStatusVersion,
+                    completed: operation.kind === "task.complete",
+                  })
+                : operation.kind === "task.delete" ||
+                    operation.kind === "task.restore"
+                  ? database.applyTaskDeletionSync({
+                      ...common,
+                      taskId: operation.taskId,
+                      baseRevision: operation.baseRevision,
+                      restore: operation.kind === "task.restore",
+                    })
+                  : // ADR 0033: projects, tags and checklist items.
+                    operation.kind === "project.create"
+                    ? database.applyOrganizationSync({
+                        ...common,
+                        kind: "project",
+                        id: operation.project.id,
+                        baseRevision: null,
+                        fields: { title: operation.project.title },
+                      })
+                    : operation.kind === "tag.create"
+                      ? database.applyOrganizationSync({
+                          ...common,
+                          kind: "tag",
+                          id: operation.tag.id,
+                          baseRevision: null,
+                          fields: { title: operation.tag.title },
+                        })
+                      : operation.kind === "project.patch"
+                        ? database.applyOrganizationSync({
+                            ...common,
+                            kind: "project",
+                            id: operation.projectId,
+                            baseRevision: operation.baseRevision,
+                            fields: operation.fields,
+                          })
+                        : operation.kind === "tag.patch"
+                          ? database.applyOrganizationSync({
+                              ...common,
+                              kind: "tag",
+                              id: operation.tagId,
+                              baseRevision: operation.baseRevision,
+                              fields: operation.fields,
+                            })
+                          : operation.kind === "subtask.create"
+                            ? database.applyChecklistSync({
+                                ...common,
+                                command: {
+                                  action: "create",
+                                  ...operation.subtask,
+                                },
+                              })
+                            : operation.kind === "subtask.patch"
+                              ? database.applyChecklistSync({
+                                  ...common,
+                                  command: {
+                                    action: "update",
+                                    id: operation.subtaskId,
+                                    baseRevision: operation.baseRevision,
+                                    patch: Object.fromEntries(
+                                      Object.entries(operation.fields).filter(
+                                        ([, value]) => value !== undefined,
+                                      ),
+                                    ),
+                                  },
+                                })
+                              : operation.kind === "subtask.delete"
+                                ? database.applyChecklistSync({
+                                    ...common,
+                                    command: {
+                                      action: "delete",
+                                      id: operation.subtaskId,
+                                      baseRevision: operation.baseRevision,
+                                    },
+                                  })
+                                : operation.kind === "day_order.reorder"
+                                  ? // ADR 0050: saved day orders.
+                                    database.applyDayOrderSync({
+                                      ...common,
+                                      date: operation.date,
+                                      baseRevision: operation.baseRevision,
+                                      taskIds: operation.taskIds,
+                                    })
+                                  : operation.kind === "time_entry.create" ||
+                                      operation.kind === "time_entry.patch" ||
+                                      operation.kind === "time_entry.delete"
+                                    ? // ADR 0050: stored time entries.
+                                      database.applyTimeEntrySync({
+                                        ...common,
+                                        command:
+                                          timeEntrySyncCommand(operation),
+                                      })
+                                    : // ADR 0046: notes.
+                                      database.applyNoteSync({
+                                        ...common,
+                                        command: noteSyncCommand(
+                                          // The enum-kind task operations above
+                                          // are not narrowed away by TypeScript.
+                                          operation as NoteSyncOperation,
+                                        ),
+                                      });
       if (result.kind === "idempotency-conflict") {
         return {
           kind: "rejected" as const,
@@ -478,28 +776,12 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
           code: "IDEMPOTENCY_CONFLICT" as const,
         };
       }
+      const stored = result.task ?? result.record;
       if (result.kind === "conflict") {
         const conflictFields =
-          "fields" in result && Array.isArray(result.fields)
-            ? result.fields.filter(
-                (
-                  field,
-                ): field is
-                  | "title"
-                  | "notes"
-                  | "status"
-                  | "estimateMinutes"
-                  | "projectId"
-                  | "tagIds" =>
-                  [
-                    "title",
-                    "notes",
-                    "status",
-                    "estimateMinutes",
-                    "projectId",
-                    "tagIds",
-                    "deadline",
-                  ].includes(String(field)),
+          Array.isArray(result.fields) && entity.entityKind === "task"
+            ? result.fields.filter((field): field is CoreTaskField =>
+                coreTaskFieldSchema.options.includes(field as CoreTaskField),
               )
             : undefined;
         return {
@@ -509,18 +791,22 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
             conflictFields === undefined || conflictFields.length === 0
               ? ("SYNC_RESOURCE_CONFLICT" as const)
               : ("SYNC_FIELD_CONFLICT" as const),
-          taskId:
-            operation.kind === "task.create"
-              ? operation.task.id
-              : operation.taskId,
-          taskRevision: result.task?.revision ?? 1,
+          entityKind: entity.entityKind,
+          taskId: entity.entityId,
+          taskRevision: stored?.revision ?? 1,
           ...(conflictFields === undefined || conflictFields.length === 0
             ? {}
             : { conflictingFields: conflictFields }),
+          // ADR 0050: why a record operation was refused.
+          ...(entity.entityKind === "task" || !Array.isArray(result.fields)
+            ? {}
+            : { reasons: result.fields.slice(0, 8) }),
         };
       }
-      const task = result.task;
-      if (task === undefined)
+      // An applied deletion leaves no record; its outcome carries the
+      // revision recorded with the operation.
+      const revision = stored?.revision ?? result.revision;
+      if (revision === undefined)
         return {
           kind: "rejected" as const,
           operationId: operation.operationId,
@@ -529,8 +815,8 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
       return {
         kind: result.kind,
         operationId: operation.operationId,
-        entityId: task.id,
-        entityRevision: task.revision,
+        entityId: entity.entityId,
+        entityRevision: revision,
         changeSequence: database.getSyncState(session.owner.id).cursor,
       };
     });
@@ -575,10 +861,15 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
             snapshot,
           };
         }
-        const task =
+        const stored =
           change.entityType === "task"
             ? database.getTask(session.owner.id, change.entityId, true)
             : undefined;
+        // ADR 0022: archived history leaves the offline cache. Whatever the
+        // recorded change kind, a task that is archived now is sent as a
+        // removal without a snapshot; restoring it sends a fresh upsert.
+        const archived = stored?.archivedAt != null;
+        const task = archived ? undefined : stored;
         const versions =
           task === undefined
             ? undefined
@@ -605,6 +896,22 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
                 .fullSyncSnapshot(session.owner.id)
                 .subtasks.find(({ id }) => id === change.entityId)
             : undefined;
+        const note =
+          change.entityType === "note"
+            ? database.notes.get(session.owner.id, change.entityId)
+            : undefined;
+        const dayOrder =
+          change.entityType === "day_order"
+            ? database.dayOrders.getSaved(session.owner.id, change.entityId)
+            : undefined;
+        const timeEntry =
+          change.entityType === "time_entry"
+            ? database.timeEntries.get(session.owner.id, change.entityId)
+            : undefined;
+        const focusPreferences =
+          change.entityType === "focus_preferences"
+            ? database.focus.getPreferences(session.owner.id)
+            : undefined;
         const template =
           change.entityType === "template"
             ? database.getTaskTemplate(session.owner.id, change.entityId, true)
@@ -630,6 +937,10 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
             | "project"
             | "tag"
             | "subtask"
+            | "note"
+            | "day_order"
+            | "time_entry"
+            | "focus_preferences"
             | "template"
             | "template_set"
             | "choice_pool"
@@ -637,7 +948,7 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
             | "active_session",
           entityId: change.entityId,
           kind:
-            change.kind === "deleted"
+            change.kind === "deleted" || archived
               ? ("deleted" as const)
               : change.kind === "session_changed"
                 ? ("session_changed" as const)
@@ -645,104 +956,140 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
           entityRevision: change.revision,
           changedAt: change.createdAt,
           snapshot:
-            task !== undefined && versions !== undefined
+            dayOrder !== undefined
               ? {
-                  entityKind: "task" as const,
-                  value: {
-                    task: taskResponse(task),
-                    fieldVersions: {
-                      title: versions.title ?? task.revision,
-                      notes: versions.notes ?? task.revision,
-                      status: versions.status ?? task.revision,
-                      estimateMinutes:
-                        versions.estimateMinutes ?? task.revision,
-                      projectId: versions.projectId ?? task.revision,
-                      tagIds: versions.tagIds ?? task.revision,
-                      deadline: versions.deadline ?? task.revision,
-                    },
-                    changeSequence: change.sequence,
-                  },
+                  entityKind: "day_order" as const,
+                  value: savedDayOrderResponse(dayOrder),
                 }
-              : project !== undefined
+              : timeEntry !== undefined
                 ? {
-                    entityKind: "project" as const,
-                    value: projectResponse(project),
+                    entityKind: "time_entry" as const,
+                    value: timeEntryResponse(timeEntry),
                   }
-                : tag !== undefined
+                : focusPreferences !== undefined
                   ? {
-                      entityKind: "tag" as const,
-                      value: tagResponse(tag),
+                      entityKind: "focus_preferences" as const,
+                      value: {
+                        id: session.owner.id,
+                        ...focusPreferences,
+                      },
                     }
-                  : subtask !== undefined
+                  : task !== undefined && versions !== undefined
                     ? {
-                        entityKind: "subtask" as const,
-                        value: subtaskResponse(subtask),
-                      }
-                    : template !== undefined
-                      ? {
-                          entityKind: "template" as const,
-                          value: {
-                            template: templateResponse(template),
-                            blueprints: database
-                              .listTemplateSubtaskBlueprints(template.id)
-                              .map(templateBlueprintResponse),
-                            poolSlots: [
-                              ...database.listTemplatePoolSlots(template.id),
-                            ],
+                        entityKind: "task" as const,
+                        value: {
+                          task: taskResponse(task),
+                          fieldVersions: {
+                            title: versions.title ?? task.revision,
+                            notes: versions.notes ?? task.revision,
+                            status: versions.status ?? task.revision,
+                            estimateMinutes:
+                              versions.estimateMinutes ?? task.revision,
+                            projectId: versions.projectId ?? task.revision,
+                            tagIds: versions.tagIds ?? task.revision,
+                            deadline: versions.deadline ?? task.revision,
+                            parent: versions.parent ?? task.revision,
+                            plannedStart:
+                              versions.plannedStart ?? task.revision,
                           },
+                          changeSequence: change.sequence,
+                        },
+                      }
+                    : project !== undefined
+                      ? {
+                          entityKind: "project" as const,
+                          value: projectResponse(project),
                         }
-                      : templateSet !== undefined
+                      : tag !== undefined
                         ? {
-                            entityKind: "template_set" as const,
-                            value: {
-                              set: templateSetResponse(templateSet),
-                              members: [
-                                ...database.listTemplateSetMembers(
-                                  templateSet.id,
-                                ),
-                              ],
-                            },
+                            entityKind: "tag" as const,
+                            value: tagResponse(tag),
                           }
-                        : choicePool !== undefined
+                        : subtask !== undefined
                           ? {
-                              entityKind: "choice_pool" as const,
-                              value: {
-                                pool: choicePoolResponse(choicePool),
-                                items: database
-                                  .listChoicePoolItems(choicePool.id, true)
-                                  .map(choicePoolItemResponse),
-                                history: database
-                                  .listChoicePoolHistory(choicePool.id)
-                                  .map(choicePoolHistoryResponse),
-                              },
+                              entityKind: "subtask" as const,
+                              value: subtaskResponse(subtask),
                             }
-                          : planningPlaceholder !== undefined
+                          : note !== undefined
                             ? {
-                                entityKind: "planning_placeholder" as const,
-                                value: {
-                                  placeholder:
-                                    planningPlaceholderResponse(
-                                      planningPlaceholder,
-                                    ),
-                                  resolution: (() => {
-                                    const resolution =
-                                      database.getPlanningPlaceholderResolution(
-                                        planningPlaceholder.id,
-                                      );
-                                    return resolution === undefined
-                                      ? null
-                                      : planningResolutionResponse(resolution);
-                                  })(),
-                                },
+                                entityKind: "note" as const,
+                                value: noteResponse(note),
                               }
-                            : active?.id === change.entityId
+                            : template !== undefined
                               ? {
-                                  entityKind: "active_session" as const,
-                                  value: activeResponse(
-                                    activeFromRecord(active, database),
-                                  ),
+                                  entityKind: "template" as const,
+                                  value: {
+                                    template: templateResponse(template),
+                                    blueprints: database
+                                      .listTemplateSubtaskBlueprints(
+                                        template.id,
+                                      )
+                                      .map(templateBlueprintResponse),
+                                    poolSlots: [
+                                      ...database.listTemplatePoolSlots(
+                                        template.id,
+                                      ),
+                                    ],
+                                  },
                                 }
-                              : null,
+                              : templateSet !== undefined
+                                ? {
+                                    entityKind: "template_set" as const,
+                                    value: {
+                                      set: templateSetResponse(templateSet),
+                                      members: [
+                                        ...database.listTemplateSetMembers(
+                                          templateSet.id,
+                                        ),
+                                      ],
+                                    },
+                                  }
+                                : choicePool !== undefined
+                                  ? {
+                                      entityKind: "choice_pool" as const,
+                                      value: {
+                                        pool: choicePoolResponse(choicePool),
+                                        items: database
+                                          .listChoicePoolItems(
+                                            choicePool.id,
+                                            true,
+                                          )
+                                          .map(choicePoolItemResponse),
+                                        history: database
+                                          .listChoicePoolHistory(choicePool.id)
+                                          .map(choicePoolHistoryResponse),
+                                      },
+                                    }
+                                  : planningPlaceholder !== undefined
+                                    ? {
+                                        entityKind:
+                                          "planning_placeholder" as const,
+                                        value: {
+                                          placeholder:
+                                            planningPlaceholderResponse(
+                                              planningPlaceholder,
+                                            ),
+                                          resolution: (() => {
+                                            const resolution =
+                                              database.getPlanningPlaceholderResolution(
+                                                planningPlaceholder.id,
+                                              );
+                                            return resolution === undefined
+                                              ? null
+                                              : planningResolutionResponse(
+                                                  resolution,
+                                                );
+                                          })(),
+                                        },
+                                      }
+                                    : active?.id === change.entityId
+                                      ? {
+                                          entityKind: "active_session" as const,
+                                          value: activeResponse(
+                                            activeFromRecord(active, database),
+                                          ),
+                                        }
+                                      : null,
         };
       }),
       nextCursor: cursorFor({

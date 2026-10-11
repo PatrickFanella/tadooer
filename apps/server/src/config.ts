@@ -1,5 +1,9 @@
 import { resolve } from "node:path";
 import { isIP } from "node:net";
+import {
+  defaultBridgeWorkerSettings,
+  type BridgeWorkerSettings,
+} from "./calendar-bridge/worker.ts";
 
 export interface ServerConfig {
   readonly host: string;
@@ -14,6 +18,22 @@ export interface ServerConfig {
   readonly secureCookies: boolean;
   readonly publicOrigin?: string;
   readonly trustedProxyCidrs?: readonly string[];
+  /** Hosted OAuth authorization is inert unless explicitly enabled. */
+  readonly hostedOAuth?: {
+    readonly enabled: boolean;
+    readonly clientConfigPath?: string;
+    readonly resource?: string;
+  };
+  /**
+   * ADR 0043 background bridge worker. Absent means no worker runs; the
+   * environment loader always supplies it (enabled unless switched off).
+   */
+  readonly calendarBridgeWorker?: BridgeWorkerSettings;
+  /**
+   * ADR 0045: days of sync feed changes to retain. Absent or 0 means the
+   * feed is never pruned; the environment loader supplies 30 by default.
+   */
+  readonly syncRetentionDays?: number;
   readonly build: {
     readonly version: string;
     readonly revision: string;
@@ -99,10 +119,142 @@ const parseTrustedProxyCidrs = (value: string | undefined): readonly string[] =>
       return item;
     });
 
+const parseSeconds = (
+  name: string,
+  value: string | undefined,
+  fallbackMs: number,
+  minimumSeconds: number,
+  allowZero = false,
+): number => {
+  if (value === undefined || value === "") return fallbackMs;
+  const seconds = Number(value);
+  if (
+    !Number.isInteger(seconds) ||
+    seconds > 86_400 ||
+    !(seconds >= minimumSeconds || (allowZero && seconds === 0))
+  )
+    throw new Error(
+      `${name} must be an integer from ${String(minimumSeconds)} to 86400${allowZero ? " or 0" : ""}`,
+    );
+  return seconds * 1000;
+};
+
+const parseCount = (
+  name: string,
+  value: string | undefined,
+  fallback: number,
+): number => {
+  if (value === undefined || value === "") return fallback;
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1 || count > 16)
+    throw new Error(`${name} must be an integer from 1 to 16`);
+  return count;
+};
+
+export const defaultSyncRetentionDays = 30;
+const minimumSyncRetentionDays = 7;
+const maximumSyncRetentionDays = 3650;
+
+/**
+ * ADR 0045 feed retention. `0` switches pruning off. Windows shorter than a
+ * week are rejected: a device that was offline for less than that should
+ * catch up from the feed, not from a snapshot.
+ */
+export const parseSyncRetentionDays = (value: string | undefined): number => {
+  if (value === undefined || value === "") return defaultSyncRetentionDays;
+  const days = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  if (
+    days !== 0 &&
+    !(days >= minimumSyncRetentionDays && days <= maximumSyncRetentionDays)
+  )
+    throw new Error(
+      `SUITE_SYNC_RETENTION_DAYS must be 0 or an integer from ${String(minimumSyncRetentionDays)} to ${String(maximumSyncRetentionDays)}`,
+    );
+  return days;
+};
+
+/** ADR 0043 toggles; see docs/operations/tadooer-production.md. */
+export const loadBridgeWorkerSettings = (
+  environment: NodeJS.ProcessEnv,
+): BridgeWorkerSettings => {
+  const defaults = defaultBridgeWorkerSettings;
+  const value = environment.SUITE_CALENDAR_BRIDGE_WORKER;
+  return {
+    enabled:
+      value === undefined || value === ""
+        ? defaults.enabled
+        : parseBoolean("SUITE_CALENDAR_BRIDGE_WORKER", value),
+    bridgeIntervalMs: parseSeconds(
+      "SUITE_CALENDAR_BRIDGE_INTERVAL_SECONDS",
+      environment.SUITE_CALENDAR_BRIDGE_INTERVAL_SECONDS,
+      defaults.bridgeIntervalMs,
+      60,
+    ),
+    projectionIntervalMs: parseSeconds(
+      "SUITE_CALENDAR_BRIDGE_PROJECTION_INTERVAL_SECONDS",
+      environment.SUITE_CALENDAR_BRIDGE_PROJECTION_INTERVAL_SECONDS,
+      defaults.projectionIntervalMs,
+      60,
+      true,
+    ),
+    maxBackoffMs: parseSeconds(
+      "SUITE_CALENDAR_BRIDGE_MAX_BACKOFF_SECONDS",
+      environment.SUITE_CALENDAR_BRIDGE_MAX_BACKOFF_SECONDS,
+      defaults.maxBackoffMs,
+      60,
+    ),
+    concurrency: parseCount(
+      "SUITE_CALENDAR_BRIDGE_CONCURRENCY",
+      environment.SUITE_CALENDAR_BRIDGE_CONCURRENCY,
+      defaults.concurrency,
+    ),
+    ownerConcurrency: parseCount(
+      "SUITE_CALENDAR_BRIDGE_OWNER_CONCURRENCY",
+      environment.SUITE_CALENDAR_BRIDGE_OWNER_CONCURRENCY,
+      defaults.ownerConcurrency,
+    ),
+    shutdownGraceMs: parseSeconds(
+      "SUITE_CALENDAR_BRIDGE_SHUTDOWN_GRACE_SECONDS",
+      environment.SUITE_CALENDAR_BRIDGE_SHUTDOWN_GRACE_SECONDS,
+      defaults.shutdownGraceMs,
+      0,
+    ),
+  };
+};
+
 export const loadConfig = (
   environment: NodeJS.ProcessEnv = process.env,
 ): ServerConfig => {
   const publicOrigin = parsePublicOrigin(environment.SUITE_PUBLIC_ORIGIN);
+  const hostedOAuthEnabled = parseBoolean(
+    "SUITE_HOSTED_OAUTH_ENABLED",
+    environment.SUITE_HOSTED_OAUTH_ENABLED,
+  );
+  const hostedOAuthClientConfigPath =
+    environment.SUITE_HOSTED_OAUTH_CLIENT_CONFIG_PATH;
+  const hostedOAuthResource = environment.SUITE_HOSTED_OAUTH_RESOURCE;
+  if (
+    hostedOAuthEnabled &&
+    (publicOrigin === undefined ||
+      hostedOAuthClientConfigPath === undefined ||
+      hostedOAuthClientConfigPath === "" ||
+      hostedOAuthResource === undefined ||
+      hostedOAuthResource === "")
+  )
+    throw new Error(
+      "Hosted OAuth requires SUITE_PUBLIC_ORIGIN, SUITE_HOSTED_OAUTH_CLIENT_CONFIG_PATH, and SUITE_HOSTED_OAUTH_RESOURCE",
+    );
+  if (hostedOAuthResource !== undefined && hostedOAuthResource !== "") {
+    const resource = new URL(hostedOAuthResource);
+    if (
+      resource.protocol !== "https:" ||
+      resource.username !== "" ||
+      resource.password !== "" ||
+      resource.search !== "" ||
+      resource.hash !== ""
+    )
+      throw new Error("SUITE_HOSTED_OAUTH_RESOURCE must be an HTTPS URI");
+  }
   return {
     host: environment.HOST ?? "0.0.0.0",
     port: parsePort(environment.PORT),
@@ -155,6 +307,20 @@ export const loadConfig = (
     ...(publicOrigin === undefined ? {} : { publicOrigin }),
     trustedProxyCidrs: parseTrustedProxyCidrs(
       environment.SUITE_TRUSTED_PROXY_CIDRS,
+    ),
+    hostedOAuth: {
+      enabled: hostedOAuthEnabled,
+      ...(hostedOAuthClientConfigPath === undefined ||
+      hostedOAuthClientConfigPath === ""
+        ? {}
+        : { clientConfigPath: resolve(hostedOAuthClientConfigPath) }),
+      ...(hostedOAuthResource === undefined || hostedOAuthResource === ""
+        ? {}
+        : { resource: new URL(hostedOAuthResource).href }),
+    },
+    calendarBridgeWorker: loadBridgeWorkerSettings(environment),
+    syncRetentionDays: parseSyncRetentionDays(
+      environment.SUITE_SYNC_RETENTION_DAYS,
     ),
     build: {
       version: environment.SUITE_VERSION ?? "0.0.0-dev",

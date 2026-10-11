@@ -1,5 +1,16 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
-import type { ActiveSession, Task } from "@suite/contracts";
+import type {
+  ActiveSession,
+  FocusMode,
+  FocusTimer,
+  Task,
+} from "@suite/contracts";
+import { formatCountdown, localCountdown, modeLabel } from "./focus-timer.ts";
+import { Button } from "./components/ui/button.tsx";
+import { Card, CardContent, CardHeader } from "./components/ui/card.tsx";
+import { NativeSelect } from "./components/ui/native-select.tsx";
+import { SectionHeading } from "./components/ui/section-heading.tsx";
+import { useApplicationPreferences } from "./application-preferences.tsx";
 
 export type FocusPanelCommand =
   | {
@@ -18,6 +29,14 @@ export type FocusPanelCommand =
       readonly expectedRevision: number;
     };
 
+/** Server timer state and the preset control (ADR 0029). */
+export interface FocusPanelTimerProps {
+  readonly timer: FocusTimer | null;
+  /** Local `Date.now()` when `timer` was received. */
+  readonly receivedAt: number;
+  readonly onSelectMode: (mode: FocusMode | null) => void;
+}
+
 export interface FocusPanelProps {
   readonly tasks: readonly Task[];
   readonly activeSession: ActiveSession | null;
@@ -26,7 +45,82 @@ export interface FocusPanelProps {
   readonly online: boolean;
   readonly onCommand: (command: FocusPanelCommand) => void;
   readonly showStartForm?: boolean;
+  readonly focus?: FocusPanelTimerProps | undefined;
 }
+
+const TimerDisplay = ({
+  focus,
+  session,
+  owner,
+  disabled,
+}: {
+  readonly focus: FocusPanelTimerProps;
+  readonly session: ActiveSession;
+  readonly owner: boolean;
+  readonly disabled: boolean;
+}) => {
+  const [now, setNow] = useState(() => Date.now());
+  const running = session.state === "running";
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [running, focus.receivedAt]);
+  const timer = focus.timer;
+  const plan = timer?.plan ?? null;
+  const countdown =
+    timer === null ? null : localCountdown(timer, focus.receivedAt, now);
+  return (
+    <div className="grid gap-2" aria-live="polite">
+      {countdown === null ? null : (
+        <p className="focus-timer text-2xl font-semibold tabular-nums">
+          <span className="sr-only">
+            {countdown.phase === "focus" ? "Focus" : "Break"}{" "}
+            {countdown.remainingMs === null ? "elapsed" : "remaining"}:{" "}
+          </span>
+          {formatCountdown(countdown.remainingMs ?? countdown.elapsedMs)}
+          <span className="ml-2 text-sm font-normal text-subtext-2">
+            {countdown.remainingMs === null
+              ? "elapsed"
+              : countdown.done
+                ? countdown.phase === "focus"
+                  ? "focus time complete"
+                  : "break over"
+                : "left"}
+            {plan?.mode === "pomodoro"
+              ? ` · cycle ${String(countdown.cycle)} of ${String(plan.cyclesBeforeLongBreak)}${countdown.isLongBreak ? " · long break" : ""}`
+              : ""}
+          </span>
+        </p>
+      )}
+      {owner ? (
+        <label className="field">
+          <span>Preset</span>
+          <NativeSelect
+            value={plan?.mode ?? ""}
+            disabled={disabled}
+            onChange={(event) =>
+              focus.onSelectMode(
+                event.target.value === ""
+                  ? null
+                  : (event.target.value as FocusMode),
+              )
+            }
+          >
+            <option value="">No timer</option>
+            {(Object.keys(modeLabel) as FocusMode[]).map((mode) => (
+              <option key={mode} value={mode}>
+                {modeLabel[mode]}
+              </option>
+            ))}
+          </NativeSelect>
+        </label>
+      ) : plan === null ? null : (
+        <p className="hint">Preset: {modeLabel[plan.mode]}</p>
+      )}
+    </div>
+  );
+};
 
 const startableTasks = (tasks: readonly Task[]): readonly Task[] =>
   tasks.filter((task) => task.status === "open" && task.deletedAt === null);
@@ -59,7 +153,7 @@ const StartSession = ({
 
   if (availableTasks.length === 0) {
     return (
-      <p className="hint">Create or reopen a task before starting focus.</p>
+      <p className="hint">Focus needs an open task. Add one or reopen one.</p>
     );
   }
 
@@ -67,7 +161,7 @@ const StartSession = ({
     <form className="task-actions" onSubmit={submit}>
       <label className="field">
         <span>Focus task</span>
-        <select
+        <NativeSelect
           value={taskId}
           onChange={(event) => setTaskId(event.target.value)}
           disabled={busy || !online}
@@ -77,11 +171,11 @@ const StartSession = ({
               {task.title}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </label>
-      <button type="submit" disabled={busy || !online || taskId === ""}>
+      <Button type="submit" disabled={busy || !online || taskId === ""}>
         Start focus
-      </button>
+      </Button>
     </form>
   );
 };
@@ -94,7 +188,10 @@ export const FocusPanel = ({
   online,
   onCommand,
   showStartForm = true,
+  focus,
 }: FocusPanelProps) => {
+  const { notifyWhenEstimateExceeded } =
+    useApplicationPreferences().snapshot.preferences;
   const session = activeSession;
   const isTerminal = terminal(session);
 
@@ -103,26 +200,34 @@ export const FocusPanel = ({
       activeSession?.state === "expired"
         ? "This focus session expired. Start a new session to continue."
         : activeSession?.state === "completed"
-          ? "The previous focus session is complete. Start a new session when ready."
+          ? "The last focus session is finished. Start another when you want one."
           : null;
     return (
-      <section aria-labelledby="focus-panel-title">
-        <h2 id="focus-panel-title">Focus session</h2>
-        {recoveryMessage === null ? null : (
-          <p className="hint">{recoveryMessage}</p>
-        )}
-        {!online ? (
-          <p className="hint">Reconnect to start a focus session.</p>
-        ) : null}
-        {showStartForm ? (
-          <StartSession
-            tasks={tasks}
-            busy={busy}
-            online={online}
-            onCommand={onCommand}
-          />
-        ) : null}
-      </section>
+      <Card aria-labelledby="focus-panel-title">
+        <CardHeader>
+          <SectionHeading id="focus-panel-title" title="Focus session" />
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {recoveryMessage === null ? null : (
+            <p className="hint">{recoveryMessage}</p>
+          )}
+          {!online ? (
+            <p className="hint">Reconnect to start a focus session.</p>
+          ) : null}
+          {showStartForm ? (
+            <StartSession
+              tasks={tasks}
+              busy={busy}
+              online={online}
+              onCommand={onCommand}
+            />
+          ) : recoveryMessage === null && online ? (
+            <p className="hint">
+              No session running. Start focus from a task below.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
     );
   }
 
@@ -130,6 +235,16 @@ export const FocusPanel = ({
 
   const owner = session.controllerClientId === clientId;
   const controlsDisabled = busy || !online;
+  // ADR 0030 notifyWhenEstimateExceeded: session time since start against
+  // the task estimate (breaks included; net focus time is server-side).
+  const focusTask = tasks.find((task) => task.id === session.taskId);
+  const exceeded =
+    notifyWhenEstimateExceeded &&
+    focusTask?.estimateMinutes != null &&
+    Date.now() - Date.parse(session.startedAt) >
+      focusTask.estimateMinutes * 60_000
+      ? { title: focusTask.title, minutes: focusTask.estimateMinutes }
+      : undefined;
   const phaseLabel = session.phase === "focus" ? "Focus" : "Break";
   const stateLabel = session.state === "running" ? "Running" : "Paused";
   const command = (name: Exclude<FocusPanelCommand["command"], "start">) => {
@@ -141,55 +256,73 @@ export const FocusPanel = ({
   };
 
   return (
-    <section aria-labelledby="focus-panel-title">
-      <h2 id="focus-panel-title">Focus session</h2>
-      <p className="hint">
-        {phaseLabel} · {stateLabel}
-      </p>
-      {!online ? (
-        <p className="hint">Reconnect to control this session.</p>
-      ) : null}
-      {owner ? (
-        <div className="task-actions" aria-label="Focus session controls">
-          <button
-            type="button"
+    <Card aria-labelledby="focus-panel-title">
+      <CardHeader>
+        <SectionHeading id="focus-panel-title" title="Focus session" />
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <p className="hint">
+          {phaseLabel} · {stateLabel}
+        </p>
+        {focus === undefined ? null : (
+          <TimerDisplay
+            focus={focus}
+            session={session}
+            owner={owner}
             disabled={controlsDisabled}
-            onClick={() =>
-              command(session.state === "running" ? "pause" : "resume")
-            }
-          >
-            {session.state === "running" ? "Pause" : "Resume"}
-          </button>
-          <button
-            type="button"
-            disabled={controlsDisabled}
-            onClick={() =>
-              command(session.phase === "focus" ? "start_break" : "end_break")
-            }
-          >
-            {session.phase === "focus" ? "Start break" : "End break"}
-          </button>
-          <button
-            className="btn-ghost"
-            type="button"
-            disabled={controlsDisabled}
-            onClick={() => command("complete")}
-          >
-            Complete focus session
-          </button>
-        </div>
-      ) : (
-        <div className="task-actions">
-          <p className="hint">Controlled on another registered device.</p>
-          <button
-            type="button"
-            disabled={controlsDisabled}
-            onClick={() => command("takeover")}
-          >
-            Take over on this device
-          </button>
-        </div>
-      )}
-    </section>
+          />
+        )}
+        {exceeded !== undefined ? (
+          <p className="message message-warning" role="status">
+            This session has run longer than the {exceeded.minutes}
+            -minute estimate for “{exceeded.title}”.
+          </p>
+        ) : null}
+        {!online ? (
+          <p className="hint">Reconnect to control this session.</p>
+        ) : null}
+        {owner ? (
+          <div className="task-actions" aria-label="Focus session controls">
+            <Button
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() =>
+                command(session.state === "running" ? "pause" : "resume")
+              }
+            >
+              {session.state === "running" ? "Pause" : "Resume"}
+            </Button>
+            <Button
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() =>
+                command(session.phase === "focus" ? "start_break" : "end_break")
+              }
+            >
+              {session.phase === "focus" ? "Start break" : "End break"}
+            </Button>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() => command("complete")}
+            >
+              Complete focus session
+            </Button>
+          </div>
+        ) : (
+          <div className="task-actions">
+            <p className="hint">Another device controls this session.</p>
+            <Button
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() => command("takeover")}
+            >
+              Take over on this device
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };

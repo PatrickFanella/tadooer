@@ -34,10 +34,25 @@ export interface AuthorizationContext {
 export * from "./active-session.ts";
 export * from "./choice-pool.ts";
 export * from "./day-planning.ts";
+export * from "./date-only-planning.ts";
+export * from "./reminder-schedule.ts";
 export * from "./habits.ts";
 export * from "./notifications.ts";
 export * from "./structured-capture.ts";
+export * from "./capture-recurrence.ts";
+export * from "./capture-paste.ts";
+export * from "./task-hierarchy.ts";
 
 export * from "./calendar-freshness.ts";
 
 export * from "./calendar-bridge.ts";
+export * from "./task-archive.ts";
+
+export * from "./recurrence.ts";
+export * from "./time-history.ts";
+export * from "./counters.ts";
+export * from "./day-order.ts";
+export * from "./boards.ts";
+export * from "./focus.ts";
+
+export * from "./ical-subscription.ts";

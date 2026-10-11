@@ -9,12 +9,12 @@ groups:
         annotations:
           summary: Tadooer is unavailable
       - alert: TadooerMigrationMismatch
-        expr: suite_database_migrations{job="tadooer"} != 19
+        expr: suite_database_migrations{job="tadooer"} != suite_database_migrations_expected{job="tadooer"}
         for: 5m
         labels:
           severity: critical
         annotations:
-          summary: Tadooer database migration count differs from the release
+          summary: Tadooer applied migrations differ from what the running build expects
       - alert: TadooerServerErrors
         expr: increase(suite_http_requests_total{job="tadooer",status=~"5.."}[10m]) > 2
         for: 5m
@@ -50,3 +50,24 @@ groups:
           severity: critical
         annotations:
           summary: Tadooer has no successful backup in 36 hours
+      - alert: TadooerCalendarBridgeFailing
+        expr: sum(suite_calendar_bridge_jobs_failing{job="tadooer"}) > 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: A Tadooer calendar bridge job has failed for two hours
+      - alert: TadooerCalendarBridgeGrantExpired
+        expr: sum(suite_calendar_bridge_jobs_failing{job="tadooer",class="grant-expired"}) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tadooer calendar bridge needs a Google or Baikal reconnect
+      - alert: TadooerCalendarBridgeStuckOperations
+        expr: suite_calendar_bridge_stuck_operations{job="tadooer"} > 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: Tadooer calendar bridge operations are retrying repeatedly

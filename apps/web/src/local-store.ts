@@ -5,20 +5,60 @@ import {
   type HabitCommand,
   type HabitListResponse,
   syncEntitySnapshotSchema,
+  syncFieldVersionKey,
+  syncOperationEntity,
   syncOperationSchema,
+  noteSchema,
+  savedDayOrderSchema,
+  syncEntityKindsSignature,
+  projectSchema,
+  subtaskSchema,
+  tagSchema,
+  timeEntrySchema,
+  focusPreferencesResponseSchema,
   type ClientRegistrationResponse,
   type CoreTaskField,
+  type Note,
+  type Project,
+  type SavedDayOrder,
+  type Subtask,
   type SyncChange,
   type SyncDiagnosticManifest,
+  type SyncEntityKind,
   type SyncOperation,
   type SyncRoundResponse,
   type SyncSnapshotResponse,
   type SyncTaskSnapshot,
+  type Tag,
   type Task,
   type TaskFieldVersions,
+  type TimeEntry,
+  type FocusPreferencesResponse,
   type PlanningPreferences,
   planningPreferencesSchema,
 } from "@suite/contracts";
+import { compareChildren, planChildPosition } from "@suite/domain";
+import {
+  applyNoteOperation,
+  compareNotes,
+  isNoteOperation,
+  nextNotePosition,
+  noteIdForOperation,
+  type NoteOperation,
+} from "./local-notes.ts";
+import {
+  applyDayOrderOperation,
+  isDayOrderOperation,
+  type DayOrderOperation,
+} from "./local-day-orders.ts";
+import {
+  applyTimeEntryOperation,
+  compareTimeEntries,
+  inCachedTimeEntryWindow,
+  isTimeEntryOperation,
+  timeEntryIdForOperation,
+  type TimeEntryOperation,
+} from "./local-time-entries.ts";
 
 const databaseName = "suite-local-v1";
 const databaseVersion = 2;
@@ -37,6 +77,10 @@ export type CachedEntityKind =
   | "project"
   | "tag"
   | "subtask"
+  | "note"
+  | "day_order"
+  | "time_entry"
+  | "focus_preferences"
   | "template"
   | "template_set"
   | "choice_pool"
@@ -60,25 +104,150 @@ export interface LocalClientIdentity {
 
 export interface LocalConflict {
   readonly operationId: string;
+  /** The conflicting entity's ID; a task unless `entityKind` says otherwise. */
   readonly taskId: string;
   readonly taskRevision: number;
   readonly conflictingFields: readonly CoreTaskField[] | null;
   readonly code: "SYNC_FIELD_CONFLICT" | "SYNC_RESOURCE_CONFLICT";
+  /** ADR 0033: absent in conflicts recorded before structural writes. */
+  readonly entityKind?: SyncEntityKind;
+  /** ADR 0050: why a record operation was refused, when the server said. */
+  readonly reasons?: readonly string[];
+}
+
+/** Task fields the outbox can patch (ADR 0010, 0017, 0033). */
+export interface LocalTaskPatch {
+  readonly title?: string;
+  readonly notes?: string;
+  readonly estimateMinutes?: number | null;
+  readonly deadline?: Task["deadline"];
+  readonly plannedStart?: string | null;
+  readonly plannedDay?: string | null;
+  readonly projectId?: string | null;
+  readonly tagIds?: string[];
+}
+
+/** Project and tag fields the outbox can patch (ADR 0033). */
+export interface LocalOrganizationPatch {
+  readonly title?: string;
+  readonly archived?: boolean;
+  readonly completed?: boolean;
+  readonly color?: string | null;
+  readonly icon?: string | null;
+}
+
+/** Note fields the outbox can patch (ADR 0046). */
+export interface LocalNotePatch {
+  readonly content?: string;
+  readonly projectId?: string | null;
+  readonly tagId?: string | null;
+  readonly pinnedToToday?: boolean;
+  readonly position?: number;
 }
 
 export type LocalOutboxState =
-  "queued" | "sending" | "acknowledged" | "conflicted" | "rejected";
+  | "queued"
+  | "sending"
+  | "acknowledged"
+  | "resolved"
+  | "conflicted"
+  | "rejected";
 
 export interface LocalOutboxEntry {
   readonly operation: SyncOperation;
   readonly state: LocalOutboxState;
   readonly safeErrorCode: string | null;
+  /** Local audit metadata retained with the immutable original operation. */
+  readonly resolvedAt?: string;
+  readonly resolutionChoice?: "keep-current" | "retry-local" | "keep-both";
+  readonly replacementOperationId?: string;
+}
+
+/**
+ * ADR 0046: both versions of a conflicted note operation. Nothing is merged
+ * or overwritten until the owner picks one, the other, or both.
+ */
+export interface NoteConflictVersions {
+  /** The server's note as cached after the conflict; null when it is gone. */
+  readonly canonical: Note | null;
+  /** What the conflicted operation did; null when it left the outbox. */
+  readonly attempted: "create" | "patch" | "delete" | null;
+  /** The note as the local operation wanted it; null for a delete. */
+  readonly local: Pick<
+    Note,
+    "content" | "projectId" | "tagId" | "pinnedToToday"
+  > | null;
+  /** The local text can be saved as a separate new note. */
+  readonly keepBothSupported: boolean;
+}
+
+/**
+ * ADR 0050: both orders of a conflicted day-order reorder. The server's
+ * saved order is in the cache and the local attempt is in the outbox.
+ */
+export interface DayOrderConflictVersions {
+  readonly date: string;
+  /** The saved order as cached after the conflict; null when none is saved. */
+  readonly canonical: SavedDayOrder | null;
+  /** The order the local reorder wanted; null when it left the outbox. */
+  readonly attempted: readonly string[] | null;
+}
+
+type TaskPatchOperation = Extract<
+  SyncOperation,
+  { readonly kind: "task.patch" }
+>;
+
+export interface TaskConflictReview {
+  readonly conflict: LocalConflict;
+  /** The server-authoritative task snapshot currently cached for review. */
+  readonly canonical: SyncTaskSnapshot | null;
+  /** The immutable fields requested by the original conflicted operation. */
+  readonly attemptedFields: TaskPatchOperation["fields"] | null;
+  /** Resource and non-patch conflicts stay visible but cannot be retried locally. */
+  readonly retryLocalSupported: boolean;
+  /** Why retry is unavailable, so the UI can distinguish an unsupported resource. */
+  readonly retryLocalUnavailableReason:
+    "pending-local-sync" | "unsupported" | null;
+  /** Present for a note conflict (ADR 0046). */
+  readonly note?: NoteConflictVersions;
+  /** Present for a day-order conflict (ADR 0050). */
+  readonly dayOrder?: DayOrderConflictVersions;
+}
+
+export interface ResolveTaskConflictInput {
+  readonly operationId: string;
+  /** `keep-both` saves the local note text as a new note (ADR 0046). */
+  readonly choice: "keep-current" | "retry-local" | "keep-both";
+  /** Revision displayed to the person resolving this conflict. */
+  readonly reviewedTaskRevision: number;
+  /** Field versions displayed to the person resolving this conflict. */
+  readonly reviewedFieldVersions: Readonly<Partial<TaskFieldVersions>>;
 }
 
 interface LocalMetadata extends LocalClientIdentity {
   readonly nextClientSequence: number;
   readonly syncProtocolVersion: 2;
   readonly resetRequired: boolean;
+  /**
+   * ADR 0050: changes and snapshot records skipped since the last snapshot
+   * because their entity kind was unknown, and the kinds signature of the
+   * build that skipped them. A build with another signature replaces the
+   * cache from a snapshot, so the skipped records are not lost.
+   */
+  readonly skippedUnknownKinds?: number;
+  readonly skippedByKinds?: string;
+  /**
+   * ADR 0050: the cursor of the last round that delivered a time entry
+   * change, whatever its work date. Views that read the server's time
+   * report reload when it changes.
+   */
+  readonly timeEntryFeedMark?: string;
+}
+
+/** What a sync round or snapshot skipped while it was read (ADR 0050). */
+interface SkippedKinds {
+  readonly skippedUnknownKinds?: number | undefined;
 }
 
 type RegisterClient = () => Promise<ClientRegistrationResponse>;
@@ -147,13 +316,187 @@ const initialFieldVersions = (): TaskFieldVersions => ({
   projectId: 1,
   tagIds: 1,
   deadline: 1,
+  parent: 1,
+  plannedStart: 1,
 });
+
+/** The exclusive planned start / planned day slot (ADR 0020, 0033). */
+const planningSlot = (
+  task: Task,
+  fields: {
+    readonly plannedStart?: string | null | undefined;
+    readonly plannedDay?: string | null | undefined;
+  },
+): Pick<Task, "plannedStart" | "plannedDay"> => {
+  if (fields.plannedStart !== undefined)
+    return {
+      plannedStart: fields.plannedStart,
+      plannedDay:
+        fields.plannedStart === null
+          ? (fields.plannedDay ?? task.plannedDay ?? null)
+          : null,
+    };
+  if (fields.plannedDay !== undefined)
+    return {
+      plannedDay: fields.plannedDay,
+      plannedStart:
+        fields.plannedDay === null ? (task.plannedStart ?? null) : null,
+    };
+  return {
+    plannedStart: task.plannedStart ?? null,
+    plannedDay: task.plannedDay ?? null,
+  };
+};
+
+const conflictEntityKind = (conflict: LocalConflict): SyncEntityKind =>
+  conflict.entityKind ?? "task";
 
 const isTaskSnapshot = (value: unknown): value is SyncTaskSnapshot =>
   value !== null &&
   typeof value === "object" &&
   "task" in value &&
   "fieldVersions" in value;
+
+const taskIdForOperation = (operation: SyncOperation): string | null => {
+  if (operation.kind === "task.create") return operation.task.id;
+  if (operation.kind.startsWith("task.") && "taskId" in operation)
+    return operation.taskId;
+  return null;
+};
+
+const hasNewerActiveTaskMutation = (
+  entries: readonly LocalOutboxEntry[],
+  taskId: string,
+  clientSequence: number,
+): boolean =>
+  entries.some(
+    (entry) =>
+      entry.operation.clientSequence > clientSequence &&
+      (entry.state === "queued" || entry.state === "sending") &&
+      taskIdForOperation(entry.operation) === taskId,
+  );
+
+const hasNewerActiveNoteMutation = (
+  entries: readonly LocalOutboxEntry[],
+  noteId: string,
+  clientSequence: number,
+): boolean =>
+  entries.some(
+    ({ operation, state }) =>
+      operation.clientSequence > clientSequence &&
+      (state === "queued" || state === "sending") &&
+      isNoteOperation(operation) &&
+      noteIdForOperation(operation) === noteId,
+  );
+
+const dayOrderEntity = (
+  order: SavedDayOrder,
+  changeSequence = 0,
+): CachedEntity => ({
+  entityKind: "day_order",
+  id: order.date,
+  value: order,
+  revision: order.revision,
+  changeSequence,
+});
+
+const timeEntryEntity = (
+  entry: TimeEntry,
+  changeSequence = 0,
+): CachedEntity => ({
+  entityKind: "time_entry",
+  id: entry.id,
+  value: entry,
+  revision: entry.revision ?? 1,
+  changeSequence,
+});
+
+const hasNewerActiveDayOrderMutation = (
+  entries: readonly LocalOutboxEntry[],
+  date: string,
+  clientSequence: number,
+): boolean =>
+  entries.some(
+    ({ operation, state }) =>
+      operation.clientSequence > clientSequence &&
+      (state === "queued" || state === "sending") &&
+      isDayOrderOperation(operation) &&
+      operation.date === date,
+  );
+
+const noteEntity = (note: Note, changeSequence = 0): CachedEntity => ({
+  entityKind: "note",
+  id: note.id,
+  value: note,
+  revision: note.revision,
+  changeSequence,
+});
+
+/** ADR 0046: what a conflicted note operation wanted, beside the canonical note. */
+const noteConflictVersions = (
+  canonical: Note | null,
+  operation: SyncOperation | undefined,
+): NoteConflictVersions => {
+  if (operation === undefined || !isNoteOperation(operation))
+    return {
+      canonical,
+      attempted: null,
+      local: null,
+      keepBothSupported: false,
+    };
+  if (operation.kind === "note.delete")
+    return {
+      canonical,
+      attempted: "delete",
+      local: null,
+      keepBothSupported: false,
+    };
+  if (operation.kind === "note.create") {
+    const { content, projectId, tagId, pinnedToToday } = operation.note;
+    return {
+      canonical,
+      attempted: "create",
+      local: { content, projectId, tagId, pinnedToToday },
+      keepBothSupported: true,
+    };
+  }
+  const { fields } = operation;
+  const merged =
+    canonical === null ? null : applyNoteOperation(canonical, operation);
+  // With the note gone, only an edit that carried text describes a note.
+  const local =
+    merged ??
+    (fields.content === undefined
+      ? null
+      : {
+          content: fields.content,
+          projectId: fields.projectId ?? null,
+          tagId: fields.projectId != null ? null : (fields.tagId ?? null),
+          pinnedToToday: fields.pinnedToToday ?? false,
+        });
+  return {
+    canonical,
+    attempted: "patch",
+    local:
+      local === null
+        ? null
+        : {
+            content: local.content,
+            projectId: local.projectId,
+            tagId: local.tagId,
+            pinnedToToday: local.pinnedToToday,
+          },
+    // Only an edit that carried text has a second version worth keeping.
+    keepBothSupported: local !== null && fields.content !== undefined,
+  };
+};
+
+const compareOrganization = (
+  left: { readonly archivedAt: string | null; readonly position: number },
+  right: { readonly archivedAt: string | null; readonly position: number },
+): number =>
+  Number(left.archivedAt !== null) - Number(right.archivedAt !== null) ||
+  left.position - right.position;
 
 const safeOutcomeCode = (value: unknown): string => {
   if (
@@ -224,7 +567,13 @@ export class LocalStore {
 
   async requiresSnapshot(): Promise<boolean> {
     const metadata = await this.#metadata();
-    return metadata?.syncProtocolVersion !== 2 || metadata.resetRequired;
+    return (
+      metadata?.syncProtocolVersion !== 2 ||
+      metadata.resetRequired ||
+      // ADR 0050: an older build skipped records this build can cache.
+      ((metadata.skippedUnknownKinds ?? 0) > 0 &&
+        metadata.skippedByKinds !== syncEntityKindsSignature)
+    );
   }
 
   async markResetRequired(): Promise<void> {
@@ -349,6 +698,87 @@ export class LocalStore {
     );
   }
 
+  async loadCachedProjects(): Promise<readonly Project[]> {
+    return (await this.loadCachedEntities())
+      .filter(({ entityKind }) => entityKind === "project")
+      .map(({ value }) => projectSchema.parse(value))
+      .sort(compareOrganization);
+  }
+
+  async loadCachedTags(): Promise<readonly Tag[]> {
+    return (await this.loadCachedEntities())
+      .filter(({ entityKind }) => entityKind === "tag")
+      .map(({ value }) => tagSchema.parse(value))
+      .sort(compareOrganization);
+  }
+
+  async loadCachedSubtasks(): Promise<readonly Subtask[]> {
+    return (await this.loadCachedEntities())
+      .filter(({ entityKind }) => entityKind === "subtask")
+      .map(({ value }) => subtaskSchema.parse(value))
+      .sort(
+        (left, right) =>
+          left.position - right.position || left.id.localeCompare(right.id),
+      );
+  }
+
+  /** ADR 0046: cached notes in the owner's order, pending edits included. */
+  async loadCachedNotes(): Promise<readonly Note[]> {
+    return (await this.loadCachedEntities())
+      .filter(({ entityKind }) => entityKind === "note")
+      .map(({ value }) => noteSchema.parse(value))
+      .sort(compareNotes);
+  }
+
+  /**
+   * ADR 0050: the saved day orders in the cache, pending reorders included.
+   * `taskIds` are saved ranks; the views derive each date's members from the
+   * cached tasks and sort them by these ranks.
+   */
+  async loadCachedDayOrders(): Promise<readonly SavedDayOrder[]> {
+    return (await this.loadCachedEntities())
+      .filter(({ entityKind }) => entityKind === "day_order")
+      .map(({ value }) => savedDayOrderSchema.parse(value))
+      .sort((left, right) => left.date.localeCompare(right.date));
+  }
+
+  /**
+   * ADR 0050: the stored time entries in the cache, pending writes
+   * included, bounded to the rolling window. Focus time is not cached.
+   */
+  async loadCachedTimeEntries(): Promise<readonly TimeEntry[]> {
+    const now = this.#now();
+    return (await this.loadCachedEntities())
+      .filter(({ entityKind }) => entityKind === "time_entry")
+      .map(({ value }) => timeEntrySchema.parse(value))
+      .filter(({ workDate }) => inCachedTimeEntryWindow(workDate, now))
+      .sort(compareTimeEntries);
+  }
+
+  /** Issue #114: the latest focus preferences, readable without a connection. */
+  async loadCachedFocusPreferences(): Promise<
+    FocusPreferencesResponse | undefined
+  > {
+    const record = (await this.loadCachedEntities()).find(
+      ({ entityKind }) => entityKind === "focus_preferences",
+    );
+    if (record === undefined) return undefined;
+    const value = record.value as FocusPreferencesResponse;
+    return focusPreferencesResponseSchema.parse({
+      preferences: value.preferences,
+      revision: value.revision,
+      imported: value.imported,
+    });
+  }
+
+  /**
+   * ADR 0050: changes when a sync round delivered a time entry change of
+   * any date, including one outside the cached window.
+   */
+  async loadTimeEntryFeedMark(): Promise<string | null> {
+    return (await this.#metadata())?.timeEntryFeedMark ?? null;
+  }
+
   /** Cache an acknowledged initial create without moving the sync cursor. */
   async cacheCreatedTask(task: Task): Promise<void> {
     if (task.revision !== 1) return;
@@ -382,6 +812,282 @@ export class LocalStore {
     )) as LocalConflict[];
     await transactionDone(transaction);
     return conflicts;
+  }
+
+  async loadConflictReviews(): Promise<readonly TaskConflictReview[]> {
+    const database = await this.#open();
+    const transaction = database.transaction(
+      [entityStore, outboxStore, conflictStore],
+      "readonly",
+    );
+    const conflicts = (await requestResult(
+      transaction.objectStore(conflictStore).getAll(),
+    )) as LocalConflict[];
+    const outbox = transaction.objectStore(outboxStore);
+    const entities = transaction.objectStore(entityStore);
+    const allEntries = (await requestResult(
+      outbox.getAll(),
+    )) as LocalOutboxEntry[];
+    const reviews = await Promise.all(
+      conflicts.map(async (conflict): Promise<TaskConflictReview> => {
+        const entry = (await requestResult(
+          outbox.get(conflict.operationId),
+        )) as LocalOutboxEntry | undefined;
+        const cached =
+          conflictEntityKind(conflict) === "task"
+            ? ((await requestResult(
+                entities.get(entityKey("task", conflict.taskId)),
+              )) as CachedEntity | undefined)
+            : undefined;
+        const canonical =
+          cached !== undefined && isTaskSnapshot(cached.value)
+            ? cached.value
+            : null;
+        if (conflictEntityKind(conflict) === "note") {
+          // ADR 0046: the canonical note beside the local attempt.
+          const cachedNote = (await requestResult(
+            entities.get(entityKey("note", conflict.taskId)),
+          )) as CachedEntity | undefined;
+          const versions = noteConflictVersions(
+            cachedNote === undefined
+              ? null
+              : noteSchema.parse(cachedNote.value),
+            entry?.operation,
+          );
+          const pending =
+            entry !== undefined &&
+            hasNewerActiveNoteMutation(
+              allEntries,
+              conflict.taskId,
+              entry.operation.clientSequence,
+            );
+          const retryable =
+            versions.canonical !== null &&
+            (versions.attempted === "patch" || versions.attempted === "delete");
+          return {
+            conflict,
+            canonical: null,
+            attemptedFields: null,
+            retryLocalSupported: retryable && !pending,
+            retryLocalUnavailableReason: pending
+              ? "pending-local-sync"
+              : retryable
+                ? null
+                : "unsupported",
+            note: versions,
+          };
+        }
+        if (conflictEntityKind(conflict) === "day_order") {
+          // ADR 0050: the saved order beside the order this client wanted.
+          const cachedOrder = (await requestResult(
+            entities.get(entityKey("day_order", conflict.taskId)),
+          )) as CachedEntity | undefined;
+          const attempted =
+            entry !== undefined && isDayOrderOperation(entry.operation)
+              ? entry.operation.taskIds
+              : null;
+          const pending =
+            entry !== undefined &&
+            hasNewerActiveDayOrderMutation(
+              allEntries,
+              conflict.taskId,
+              entry.operation.clientSequence,
+            );
+          return {
+            conflict,
+            canonical: null,
+            attemptedFields: null,
+            retryLocalSupported: attempted !== null && !pending,
+            retryLocalUnavailableReason: pending
+              ? "pending-local-sync"
+              : attempted === null
+                ? "unsupported"
+                : null,
+            dayOrder: {
+              date: conflict.taskId,
+              canonical:
+                cachedOrder === undefined
+                  ? null
+                  : savedDayOrderSchema.parse(cachedOrder.value),
+              attempted,
+            },
+          };
+        }
+        const attemptedFields =
+          entry?.operation.kind === "task.patch"
+            ? entry.operation.fields
+            : null;
+        const pendingLocalSync =
+          entry !== undefined &&
+          hasNewerActiveTaskMutation(
+            allEntries,
+            conflict.taskId,
+            entry.operation.clientSequence,
+          );
+        const retrySupportedByConflict =
+          canonical !== null &&
+          attemptedFields !== null &&
+          conflict.conflictingFields !== null &&
+          conflict.conflictingFields.length > 0;
+        return {
+          conflict,
+          canonical,
+          attemptedFields,
+          retryLocalSupported: retrySupportedByConflict && !pendingLocalSync,
+          retryLocalUnavailableReason: pendingLocalSync
+            ? "pending-local-sync"
+            : retrySupportedByConflict
+              ? null
+              : "unsupported",
+        };
+      }),
+    );
+    await transactionDone(transaction);
+    return reviews.sort((left, right) =>
+      left.conflict.operationId.localeCompare(right.conflict.operationId),
+    );
+  }
+
+  async resolveTaskConflict(
+    input: ResolveTaskConflictInput,
+  ): Promise<SyncOperation | null> {
+    const review = (await this.loadConflictReviews()).find(
+      ({ conflict }) => conflict.operationId === input.operationId,
+    );
+    if (review === undefined)
+      throw new Error("Sync conflict is no longer available");
+    if (review.note !== undefined)
+      return this.#resolveNoteConflict(review, review.note, input);
+    if (review.dayOrder !== undefined)
+      return this.#resolveDayOrderConflict(review, review.dayOrder, input);
+    if (input.choice === "keep-both")
+      throw new Error("Only a note conflict can keep both versions");
+    if (conflictEntityKind(review.conflict) !== "task") {
+      // ADR 0033: project, tag and checklist conflicts are dismissed once the
+      // canonical record has been re-sent; nothing is retried locally.
+      if (input.choice !== "keep-current")
+        throw new Error("This sync conflict cannot be retried locally");
+      if (input.reviewedTaskRevision !== review.conflict.taskRevision)
+        throw new Error("The record changed; review the latest values");
+      await this.#dismissConflict(input.operationId);
+      return null;
+    }
+    if (review.canonical === null)
+      throw new Error("The current task is no longer available for review");
+    this.#assertConflictPreview(review, input);
+    if (
+      input.choice === "retry-local" &&
+      review.retryLocalUnavailableReason === "pending-local-sync"
+    )
+      throw new Error(
+        "A newer local change must finish syncing before retrying",
+      );
+
+    const metadata = await this.#requiredMetadata();
+    const retry =
+      input.choice === "retry-local"
+        ? await this.#conflictRetryOperation(review, metadata)
+        : null;
+    const database = await this.#open();
+    const transaction = database.transaction(
+      [metadataStore, entityStore, outboxStore, conflictStore],
+      "readwrite",
+    );
+    const metadataHandle = transaction.objectStore(metadataStore);
+    const currentMetadata = (await requestResult(
+      metadataHandle.get(metadataKey),
+    )) as LocalMetadata | undefined;
+    const conflicts = transaction.objectStore(conflictStore);
+    const conflict = (await requestResult(conflicts.get(input.operationId))) as
+      LocalConflict | undefined;
+    const outbox = transaction.objectStore(outboxStore);
+    const original = (await requestResult(outbox.get(input.operationId))) as
+      LocalOutboxEntry | undefined;
+    const allEntries = (await requestResult(
+      outbox.getAll(),
+    )) as LocalOutboxEntry[];
+    const entities = transaction.objectStore(entityStore);
+    const cached = (await requestResult(
+      entities.get(entityKey("task", review.conflict.taskId)),
+    )) as CachedEntity | undefined;
+    if (
+      currentMetadata === undefined ||
+      conflict === undefined ||
+      original === undefined ||
+      cached === undefined ||
+      !isTaskSnapshot(cached.value)
+    ) {
+      transaction.abort();
+      throw new Error("Sync conflict changed before it could be resolved");
+    }
+    const currentReview: TaskConflictReview = {
+      conflict,
+      canonical: cached.value,
+      attemptedFields:
+        original.operation.kind === "task.patch"
+          ? original.operation.fields
+          : null,
+      retryLocalSupported:
+        original.operation.kind === "task.patch" &&
+        conflict.conflictingFields !== null &&
+        conflict.conflictingFields.length > 0,
+      retryLocalUnavailableReason: null,
+    };
+    this.#assertConflictPreview(currentReview, input);
+    if (
+      input.choice === "retry-local" &&
+      hasNewerActiveTaskMutation(
+        allEntries,
+        conflict.taskId,
+        original.operation.clientSequence,
+      )
+    ) {
+      transaction.abort();
+      throw new Error(
+        "A newer local change must finish syncing before retrying",
+      );
+    }
+    if (
+      retry !== null &&
+      currentMetadata.nextClientSequence !== metadata.nextClientSequence
+    ) {
+      transaction.abort();
+      throw new Error("A newer local change requires a fresh conflict review");
+    }
+    outbox.put({
+      ...original,
+      state: "resolved",
+      resolvedAt: this.#now(),
+      resolutionChoice: input.choice,
+      ...(retry === null ? {} : { replacementOperationId: retry.operationId }),
+    } satisfies LocalOutboxEntry);
+    conflicts.delete(input.operationId);
+    if (retry !== null) {
+      const task = {
+        ...cached.value.task,
+        ...retry.fields,
+        ...planningSlot(cached.value.task, retry.fields),
+        updatedAt: this.#now(),
+      };
+      entities.put({
+        ...cached,
+        value: { ...cached.value, task },
+      } satisfies CachedEntity);
+      metadataHandle.put(
+        {
+          ...currentMetadata,
+          nextClientSequence: currentMetadata.nextClientSequence + 1,
+        },
+        metadataKey,
+      );
+      outbox.put({
+        operation: retry,
+        state: "queued",
+        safeErrorCode: null,
+      } satisfies LocalOutboxEntry);
+    }
+    await transactionDone(transaction);
+    return retry;
   }
 
   async queueTaskCreate(input: {
@@ -428,17 +1134,18 @@ export class LocalStore {
 
   async queueTaskPatch(
     taskId: string,
-    fields: {
-      readonly title?: string;
-      readonly notes?: string;
-      readonly estimateMinutes?: number | null;
-      readonly deadline?: Task["deadline"];
-    },
+    fields: LocalTaskPatch,
   ): Promise<SyncOperation> {
     const snapshot = await this.#requiredTask(taskId);
-    const changed = Object.keys(fields) as (
-      "title" | "notes" | "estimateMinutes" | "deadline"
-    )[];
+    const changed = [
+      ...new Set(
+        Object.keys(fields)
+          .filter(
+            (field) => fields[field as keyof LocalTaskPatch] !== undefined,
+          )
+          .map(syncFieldVersionKey),
+      ),
+    ] as CoreTaskField[];
     if (changed.length === 0)
       throw new Error("At least one task field is required");
     const metadata = await this.#requiredMetadata();
@@ -454,8 +1161,342 @@ export class LocalStore {
       fields,
       baseFieldVersions,
     });
-    const task = { ...snapshot.task, ...fields, updatedAt: this.#now() };
+    const task = {
+      ...snapshot.task,
+      ...fields,
+      ...planningSlot(snapshot.task, fields),
+      updatedAt: this.#now(),
+    };
     await this.#queueAndWriteTask(operation, { ...snapshot, task });
+    return operation;
+  }
+
+  /** ADR 0033: create a project or tag offline with a client-generated ID. */
+  async queueOrganizationCreate(
+    kind: "project" | "tag",
+    title: string,
+  ): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const id = this.#uuid();
+    const now = this.#now();
+    const operation = await this.#operation(
+      metadata,
+      kind === "project" ? "project.create" : "tag.create",
+      kind === "project" ? { project: { id, title } } : { tag: { id, title } },
+    );
+    const position = (
+      kind === "project"
+        ? await this.loadCachedProjects()
+        : await this.loadCachedTags()
+    ).reduce((max, record) => Math.max(max, record.position + 1), 0);
+    const base = {
+      id,
+      ownerId: metadata.clientId,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+      color: null,
+      icon: null,
+      position,
+    };
+    await this.#queueAndWriteEntity(operation, {
+      entityKind: kind,
+      id,
+      revision: 1,
+      changeSequence: 0,
+      value:
+        kind === "project"
+          ? projectSchema.parse({ ...base, title })
+          : tagSchema.parse({
+              ...base,
+              displayName: title,
+              normalizedName: title.normalize("NFKC").toLocaleLowerCase(),
+            }),
+    });
+    return operation;
+  }
+
+  /** ADR 0033: rename, archive, restore or recolour a cached project or tag. */
+  async queueOrganizationPatch(
+    kind: "project" | "tag",
+    id: string,
+    fields: LocalOrganizationPatch,
+  ): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity(kind, id);
+    const current =
+      kind === "project"
+        ? projectSchema.parse(cached.value)
+        : tagSchema.parse(cached.value);
+    const operation = await this.#operation(
+      metadata,
+      kind === "project" ? "project.patch" : "tag.patch",
+      {
+        ...(kind === "project" ? { projectId: id } : { tagId: id }),
+        fields,
+        baseRevision: current.revision,
+      },
+    );
+    const now = this.#now();
+    const archivedAt =
+      fields.archived === false || fields.completed === false
+        ? null
+        : fields.archived === true || fields.completed === true
+          ? (current.archivedAt ?? now)
+          : current.archivedAt;
+    const next = {
+      ...current,
+      ...(fields.title === undefined
+        ? {}
+        : kind === "project"
+          ? { title: fields.title }
+          : {
+              displayName: fields.title,
+              normalizedName: fields.title
+                .normalize("NFKC")
+                .toLocaleLowerCase(),
+            }),
+      ...(fields.color === undefined ? {} : { color: fields.color }),
+      ...(fields.icon === undefined ? {} : { icon: fields.icon }),
+      archivedAt,
+      ...("completedAt" in current
+        ? {
+            completedAt:
+              fields.completed === true
+                ? (current.completedAt ?? now)
+                : fields.completed === false || fields.archived === false
+                  ? null
+                  : current.completedAt,
+          }
+        : {}),
+      updatedAt: now,
+    };
+    await this.#queueAndWriteEntity(operation, { ...cached, value: next });
+    return operation;
+  }
+
+  /** ADR 0033: add a checklist item to a cached task. */
+  async queueSubtaskCreate(
+    taskId: string,
+    title: string,
+    position: number,
+  ): Promise<SyncOperation> {
+    await this.#requiredTask(taskId);
+    const metadata = await this.#requiredMetadata();
+    const id = this.#uuid();
+    const now = this.#now();
+    const operation = await this.#operation(metadata, "subtask.create", {
+      subtask: { id, taskId, title, position },
+    });
+    await this.#queueAndWriteEntity(operation, {
+      entityKind: "subtask",
+      id,
+      revision: 1,
+      changeSequence: 0,
+      value: subtaskSchema.parse({
+        id,
+        taskId,
+        title,
+        completed: false,
+        revision: 1,
+        position,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    });
+    return operation;
+  }
+
+  async queueSubtaskPatch(
+    subtaskId: string,
+    fields: {
+      readonly title?: string;
+      readonly completed?: boolean;
+      readonly position?: number;
+    },
+  ): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity("subtask", subtaskId);
+    const current = subtaskSchema.parse(cached.value);
+    const operation = await this.#operation(metadata, "subtask.patch", {
+      subtaskId,
+      fields,
+      baseRevision: current.revision,
+    });
+    await this.#queueAndWriteEntity(operation, {
+      ...cached,
+      value: { ...current, ...fields, updatedAt: this.#now() },
+    });
+    return operation;
+  }
+
+  async queueSubtaskDelete(subtaskId: string): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity("subtask", subtaskId);
+    const current = subtaskSchema.parse(cached.value);
+    const operation = await this.#operation(metadata, "subtask.delete", {
+      subtaskId,
+      baseRevision: current.revision,
+    });
+    await this.#queueAndWriteEntity(operation, null, ["subtask", subtaskId]);
+    return operation;
+  }
+
+  /** ADR 0046: write a note offline with a client-generated ID. */
+  async queueNoteCreate(input: {
+    readonly content: string;
+    readonly projectId?: string | null;
+    readonly tagId?: string | null;
+    readonly pinnedToToday?: boolean;
+  }): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const operation = await this.#noteOperation(metadata, "note.create", {
+      note: {
+        id: this.#uuid(),
+        content: input.content,
+        projectId: input.projectId ?? null,
+        tagId: input.tagId ?? null,
+        pinnedToToday: input.pinnedToToday ?? false,
+      },
+    });
+    await this.#queueNoteOperation(operation);
+    return operation;
+  }
+
+  /**
+   * ADR 0046: edit, re-associate, pin or move a cached note. The base
+   * revision is the cached one, which already counts this client's pending
+   * edits, so consecutive offline edits do not conflict with each other.
+   */
+  async queueNotePatch(
+    noteId: string,
+    fields: LocalNotePatch,
+  ): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity("note", noteId);
+    const operation = await this.#noteOperation(metadata, "note.patch", {
+      noteId,
+      fields,
+      baseRevision: noteSchema.parse(cached.value).revision,
+    });
+    await this.#queueNoteOperation(operation);
+    return operation;
+  }
+
+  /** ADR 0046: deletion is permanent once the server applies it. */
+  async queueNoteDelete(noteId: string): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity("note", noteId);
+    const operation = await this.#noteOperation(metadata, "note.delete", {
+      noteId,
+      baseRevision: noteSchema.parse(cached.value).revision,
+    });
+    await this.#queueNoteOperation(operation);
+    return operation;
+  }
+
+  /**
+   * ADR 0050: save the order of a date offline. The base revision is the
+   * cached one (0 when the date has no saved order), which already counts
+   * this client's pending reorders.
+   */
+  async queueDayOrderReorder(
+    date: string,
+    taskIds: readonly string[],
+  ): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const database = await this.#open();
+    const read = database.transaction(entityStore, "readonly");
+    const cached = (await requestResult(
+      read.objectStore(entityStore).get(entityKey("day_order", date)),
+    )) as CachedEntity | undefined;
+    await transactionDone(read);
+    const operation = await this.#dayOrderOperation(
+      metadata,
+      date,
+      taskIds,
+      cached?.revision ?? 0,
+    );
+    await this.#queueDayOrderOperation(operation);
+    return operation;
+  }
+
+  /**
+   * ADR 0050: add manual time offline. The task must be cached and active;
+   * the server checks the day's total when it applies the operation, so the
+   * entry is provisional until then.
+   */
+  async queueTimeEntryCreate(input: {
+    readonly id?: string;
+    readonly taskId: string;
+    readonly workDate: string;
+    readonly durationMs: number;
+    readonly note: string;
+  }): Promise<SyncOperation> {
+    const { task } = await this.#requiredTask(input.taskId);
+    if (task.deletedAt != null || task.archivedAt != null)
+      throw new Error("Time can be recorded only on active tasks");
+    const metadata = await this.#requiredMetadata();
+    const operation = await this.#timeEntryOperation(
+      metadata,
+      "time_entry.create",
+      {
+        timeEntry: {
+          id: input.id ?? this.#uuid(),
+          taskId: input.taskId,
+          workDate: input.workDate,
+          durationMs: input.durationMs,
+          note: input.note,
+        },
+      },
+    );
+    const entry = applyTimeEntryOperation(undefined, operation);
+    await this.#queueAndWriteEntity(
+      operation,
+      entry == null ? null : timeEntryEntity(entry),
+    );
+    return operation;
+  }
+
+  /** ADR 0050: correct a cached manual or imported entry offline. */
+  async queueTimeEntryPatch(
+    timeEntryId: string,
+    fields: {
+      readonly workDate?: string | undefined;
+      readonly durationMs?: number | undefined;
+      readonly note?: string | undefined;
+    },
+  ): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity("time_entry", timeEntryId);
+    const current = timeEntrySchema.parse(cached.value);
+    const operation = await this.#timeEntryOperation(
+      metadata,
+      "time_entry.patch",
+      { timeEntryId, fields, baseRevision: cached.revision },
+    );
+    const next = applyTimeEntryOperation(current, operation);
+    await this.#queueAndWriteEntity(
+      operation,
+      next == null ? null : timeEntryEntity(next, cached.changeSequence),
+    );
+    return operation;
+  }
+
+  /** ADR 0050: deletion is permanent once the server applies it. */
+  async queueTimeEntryDelete(timeEntryId: string): Promise<SyncOperation> {
+    const metadata = await this.#requiredMetadata();
+    const cached = await this.#requiredEntity("time_entry", timeEntryId);
+    const operation = await this.#timeEntryOperation(
+      metadata,
+      "time_entry.delete",
+      { timeEntryId, baseRevision: cached.revision },
+    );
+    await this.#queueAndWriteEntity(operation, null, [
+      "time_entry",
+      timeEntryId,
+    ]);
     return operation;
   }
 
@@ -478,6 +1519,50 @@ export class LocalStore {
         status: completed ? "completed" : "open",
         completedAt: completed ? now : null,
         updatedAt: now,
+      },
+    });
+    return operation;
+  }
+
+  /**
+   * Queue a structural move (ADR 0018). `parentId` null makes the task
+   * top-level. The server validates depth and cycles on replay; a rejected
+   * move becomes a visible conflict and the canonical placement returns.
+   */
+  async queueTaskMove(
+    taskId: string,
+    parentId: string | null,
+    index: number | null = null,
+  ): Promise<SyncOperation> {
+    const snapshot = await this.#requiredTask(taskId);
+    const metadata = await this.#requiredMetadata();
+    const siblings =
+      parentId === null
+        ? []
+        : (await this.loadCachedTasks())
+            .map(({ task }) => task)
+            .filter((task) => task.parentId === parentId && task.id !== taskId)
+            .toSorted(compareChildren);
+    const operation = await this.#operation(metadata, "task.move", {
+      taskId,
+      parentId,
+      index,
+      baseParentVersion:
+        snapshot.fieldVersions.parent ?? snapshot.task.revision,
+    });
+    await this.#queueAndWriteTask(operation, {
+      ...snapshot,
+      task: {
+        ...snapshot.task,
+        parentId,
+        childPosition:
+          parentId === null
+            ? null
+            : planChildPosition(
+                siblings.map(({ childPosition }) => childPosition ?? 0),
+                index,
+              ).position,
+        updatedAt: this.#now(),
       },
     });
     return operation;
@@ -507,7 +1592,9 @@ export class LocalStore {
     );
   }
 
-  async applySyncRound(response: SyncRoundResponse): Promise<void> {
+  async applySyncRound(
+    response: SyncRoundResponse & SkippedKinds,
+  ): Promise<void> {
     const database = await this.#open();
     const transaction = database.transaction(
       [metadataStore, entityStore, outboxStore, conflictStore, diagnosticStore],
@@ -537,6 +1624,10 @@ export class LocalStore {
           taskRevision: outcome.taskRevision,
           conflictingFields: outcome.conflictingFields ?? null,
           code: outcome.code,
+          entityKind: outcome.entityKind ?? "task",
+          ...(outcome.reasons === undefined
+            ? {}
+            : { reasons: outcome.reasons }),
         } satisfies LocalConflict);
       } else {
         outbox.put({
@@ -545,9 +1636,61 @@ export class LocalStore {
           safeErrorCode: safeOutcomeCode(outcome),
         });
       }
+      // ADR 0046: a note the server did not create must not linger in the
+      // cache. If the ID already holds a note of this owner, its canonical
+      // value is among the changes applied next.
+      if (
+        outcome.kind !== "applied" &&
+        outcome.kind !== "replayed" &&
+        entry.operation.kind === "note.create"
+      )
+        entities.delete(entityKey("note", entry.operation.note.id));
+      // ADR 0050: a refused reorder must not stay as the cached order. The
+      // saved order, when one exists, is among the changes applied next;
+      // without one the date falls back to its derived order.
+      if (
+        outcome.kind !== "applied" &&
+        outcome.kind !== "replayed" &&
+        entry.operation.kind === "day_order.reorder"
+      )
+        entities.delete(entityKey("day_order", entry.operation.date));
+      // ADR 0050: a time entry the server did not create (a day rule, an
+      // unavailable task) must not linger either.
+      if (
+        outcome.kind !== "applied" &&
+        outcome.kind !== "replayed" &&
+        entry.operation.kind === "time_entry.create"
+      )
+        entities.delete(entityKey("time_entry", entry.operation.timeEntry.id));
     }
 
     for (const change of response.changes) this.#applyChange(entities, change);
+    await this.#rebasePendingNotes(
+      entities,
+      outbox,
+      new Set(
+        response.changes
+          .filter(({ entityKind }) => entityKind === "note")
+          .map(({ entityId }) => entityId),
+      ),
+    );
+    await this.#rebasePendingDayOrders(
+      entities,
+      outbox,
+      new Set([
+        ...response.changes
+          .filter(({ entityKind }) => entityKind === "day_order")
+          .map(({ entityId }) => entityId),
+      ]),
+    );
+
+    const timeEntryIds = new Set(
+      response.changes
+        .filter(({ entityKind }) => entityKind === "time_entry")
+        .map(({ entityId }) => entityId),
+    );
+    await this.#rebasePendingTimeEntries(entities, outbox, timeEntryIds);
+    if (timeEntryIds.size > 0) await this.#pruneTimeEntries(entities);
 
     const metadata = (await requestResult(
       metadataStoreHandle.get(metadataKey),
@@ -556,10 +1699,24 @@ export class LocalStore {
       transaction.abort();
       throw new Error("A registered client is required before applying sync");
     }
+    // ADR 0050: changes of a kind this build does not know were skipped
+    // while the round was read. The cursor still advances past them, and
+    // the count is kept so a newer build takes a snapshot.
+    const skipped = response.skippedUnknownKinds ?? 0;
     metadataStoreHandle.put(
       {
         ...metadata,
         cursor: response.nextCursor,
+        ...(timeEntryIds.size === 0
+          ? {}
+          : { timeEntryFeedMark: response.nextCursor }),
+        ...(skipped === 0
+          ? {}
+          : {
+              skippedUnknownKinds:
+                (metadata.skippedUnknownKinds ?? 0) + skipped,
+              skippedByKinds: syncEntityKindsSignature,
+            }),
       },
       metadataKey,
     );
@@ -569,11 +1726,14 @@ export class LocalStore {
       at: response.serverTimestamp,
       outcomeCount: response.outcomes.length,
       changeCount: response.changes.length,
+      skippedUnknownKinds: skipped,
     });
     await transactionDone(transaction);
   }
 
-  async replaceFromSnapshot(response: SyncSnapshotResponse): Promise<void> {
+  async replaceFromSnapshot(
+    response: SyncSnapshotResponse & SkippedKinds,
+  ): Promise<void> {
     if (response.hasMore)
       throw new Error(
         "A complete snapshot is required before cache replacement",
@@ -600,9 +1760,43 @@ export class LocalStore {
       transaction.objectStore(outboxStore).getAll(),
     )) as LocalOutboxEntry[];
     const taskSnapshots = new Map<string, SyncTaskSnapshot>();
+    const structural = new Map<string, CachedEntity>();
     entities.clear();
     for (const snapshot of response.snapshots) {
-      if (snapshot.entityKind === "task") {
+      if (
+        snapshot.entityKind === "project" ||
+        snapshot.entityKind === "tag" ||
+        snapshot.entityKind === "subtask" ||
+        snapshot.entityKind === "note"
+      )
+        structural.set(`${snapshot.entityKind}:${snapshot.value.id}`, {
+          entityKind: snapshot.entityKind,
+          id: snapshot.value.id,
+          value: snapshot.value,
+          revision: snapshot.value.revision,
+          changeSequence: 0,
+        });
+      if (snapshot.entityKind === "time_entry") {
+        // ADR 0050: only the rolling window is cached.
+        if (!inCachedTimeEntryWindow(snapshot.value.workDate, this.#now()))
+          continue;
+        const entity = timeEntryEntity(snapshot.value);
+        structural.set(`time_entry:${entity.id}`, entity);
+        entities.put(entity);
+      } else if (snapshot.entityKind === "day_order") {
+        // ADR 0050: a saved day order is keyed by its date.
+        const entity = dayOrderEntity(snapshot.value);
+        structural.set(`day_order:${entity.id}`, entity);
+        entities.put(entity);
+      } else if (snapshot.entityKind === "focus_preferences") {
+        entities.put({
+          entityKind: "focus_preferences",
+          id: snapshot.value.id,
+          value: snapshot.value,
+          revision: snapshot.value.revision,
+          changeSequence: 0,
+        } satisfies CachedEntity);
+      } else if (snapshot.entityKind === "task") {
         const value = snapshot.value;
         taskSnapshots.set(value.task.id, value);
         entities.put({
@@ -667,8 +1861,14 @@ export class LocalStore {
           left.operation.clientSequence - right.operation.clientSequence,
       )) {
       if (isHabitSyncOperation(operation)) continue;
-      const taskId =
-        operation.kind === "task.create" ? operation.task.id : operation.taskId;
+      const target = syncOperationEntity(operation);
+      if (target === null) continue;
+      if (target.entityKind !== "task") {
+        // ADR 0033, ADR 0046: record writes replay over the canonical records.
+        this.#replayStructuralOperation(entities, structural, operation);
+        continue;
+      }
+      const taskId = target.entityId;
       let snapshot = taskSnapshots.get(taskId);
       if (operation.kind === "task.create") {
         const task: Task = {
@@ -706,24 +1906,45 @@ export class LocalStore {
                 ...(operation.fields.deadline === undefined
                   ? {}
                   : { deadline: operation.fields.deadline }),
+                ...(operation.fields.projectId === undefined
+                  ? {}
+                  : { projectId: operation.fields.projectId }),
+                ...(operation.fields.tagIds === undefined
+                  ? {}
+                  : { tagIds: operation.fields.tagIds }),
+                ...planningSlot(snapshot.task, operation.fields),
                 updatedAt: now,
               }
-            : operation.kind === "task.complete" ||
-                operation.kind === "task.reopen"
+            : operation.kind === "task.move"
               ? {
                   ...snapshot.task,
-                  status:
-                    operation.kind === "task.complete"
-                      ? ("completed" as const)
-                      : ("open" as const),
-                  completedAt: operation.kind === "task.complete" ? now : null,
+                  parentId: operation.parentId,
+                  // Pending until the server assigns the canonical key.
+                  childPosition:
+                    operation.parentId === null
+                      ? null
+                      : operation.parentId === snapshot.task.parentId
+                        ? (snapshot.task.childPosition ?? null)
+                        : Number.MAX_SAFE_INTEGER,
                   updatedAt: now,
                 }
-              : {
-                  ...snapshot.task,
-                  deletedAt: operation.kind === "task.delete" ? now : null,
-                  updatedAt: now,
-                };
+              : operation.kind === "task.complete" ||
+                  operation.kind === "task.reopen"
+                ? {
+                    ...snapshot.task,
+                    status:
+                      operation.kind === "task.complete"
+                        ? ("completed" as const)
+                        : ("open" as const),
+                    completedAt:
+                      operation.kind === "task.complete" ? now : null,
+                    updatedAt: now,
+                  }
+                : {
+                    ...snapshot.task,
+                    deletedAt: operation.kind === "task.delete" ? now : null,
+                    updatedAt: now,
+                  };
         snapshot = { ...snapshot, task };
       }
       if (snapshot !== undefined) {
@@ -744,6 +1965,10 @@ export class LocalStore {
         cursor: response.nextCursor,
         syncProtocolVersion: 2,
         resetRequired: false,
+        // ADR 0050: the count restarts with the cache it describes.
+        skippedUnknownKinds: response.skippedUnknownKinds ?? 0,
+        skippedByKinds: syncEntityKindsSignature,
+        timeEntryFeedMark: response.nextCursor,
       },
       metadataKey,
     );
@@ -752,6 +1977,7 @@ export class LocalStore {
     diagnostics.add({
       at: response.serverTimestamp,
       snapshotCount: response.snapshots.length,
+      skippedUnknownKinds: response.skippedUnknownKinds ?? 0,
       reset: true,
     });
     await transactionDone(transaction);
@@ -771,15 +1997,14 @@ export class LocalStore {
         ({ state }) => state === "queued" || state === "sending",
       ).length,
       conflictCount: conflicts.length,
+      skippedUnknownKindCount: metadata.skippedUnknownKinds ?? 0,
       operations: outbox.map(({ operation, state, safeErrorCode }) => ({
         operationId: operation.operationId,
         entityId: isHabitSyncOperation(operation)
           ? operation.kind === "habit.create"
             ? operation.habit.id
             : operation.habitId
-          : "taskId" in operation
-            ? operation.taskId
-            : operation.task.id,
+          : (syncOperationEntity(operation)?.entityId ?? null),
         kind: operation.kind,
         state,
         requestHash: operation.requestHash,
@@ -794,6 +2019,26 @@ export class LocalStore {
     this.#database?.close();
     this.#database = undefined;
     return Promise.resolve();
+  }
+
+  async #dismissConflict(operationId: string): Promise<void> {
+    const database = await this.#open();
+    const transaction = database.transaction(
+      [outboxStore, conflictStore],
+      "readwrite",
+    );
+    const outbox = transaction.objectStore(outboxStore);
+    const original = (await requestResult(outbox.get(operationId))) as
+      LocalOutboxEntry | undefined;
+    if (original !== undefined)
+      outbox.put({
+        ...original,
+        state: "resolved",
+        resolvedAt: this.#now(),
+        resolutionChoice: "keep-current",
+      } satisfies LocalOutboxEntry);
+    transaction.objectStore(conflictStore).delete(operationId);
+    await transactionDone(transaction);
   }
 
   async #queueStructuralTaskOperation(
@@ -836,6 +2081,54 @@ export class LocalStore {
     return { ...normalized, requestHash: await hash(payloadToHash) };
   }
 
+  #assertConflictPreview(
+    review: TaskConflictReview,
+    input: ResolveTaskConflictInput,
+  ): void {
+    if (review.canonical === null)
+      throw new Error("The current task is no longer available for review");
+    if (review.canonical.task.revision !== input.reviewedTaskRevision)
+      throw new Error("The task changed; review the latest values");
+    const fields = Object.keys(review.attemptedFields ?? {}).map(
+      syncFieldVersionKey,
+    ) as CoreTaskField[];
+    for (const field of fields) {
+      if (
+        input.reviewedFieldVersions[field] !==
+        review.canonical.fieldVersions[field]
+      )
+        throw new Error("A task field changed; review the latest values");
+    }
+  }
+
+  async #conflictRetryOperation(
+    review: TaskConflictReview,
+    metadata: LocalMetadata,
+  ): Promise<TaskPatchOperation> {
+    if (!review.retryLocalSupported || review.canonical === null)
+      throw new Error("This sync conflict cannot be retried locally");
+    const canonical = review.canonical;
+    const fields = review.attemptedFields;
+    if (fields === null)
+      throw new Error("The original task patch is unavailable");
+    const baseFieldVersions = Object.fromEntries(
+      (Object.keys(fields).map(syncFieldVersionKey) as CoreTaskField[]).map(
+        (field) => [
+          field,
+          canonical.fieldVersions[field] ?? canonical.task.revision,
+        ],
+      ),
+    );
+    const operation = await this.#operation(metadata, "task.patch", {
+      taskId: review.conflict.taskId,
+      fields,
+      baseFieldVersions,
+    });
+    if (operation.kind !== "task.patch")
+      throw new Error("Expected a task patch conflict retry");
+    return operation;
+  }
+
   async #queueAndWriteTask(
     operation: SyncOperation,
     snapshot: SyncTaskSnapshot,
@@ -866,23 +2159,676 @@ export class LocalStore {
       changeSequence: snapshot.changeSequence,
     } satisfies CachedEntity);
     const outbox = transaction.objectStore(outboxStore);
-    const conflicts = transaction.objectStore(conflictStore);
-    const taskConflicts = (
-      (await requestResult(conflicts.getAll())) as LocalConflict[]
-    ).filter(({ taskId }) => taskId === snapshot.task.id);
-    for (const conflict of taskConflicts) {
-      conflicts.delete(conflict.operationId);
-      const prior = (await requestResult(outbox.get(conflict.operationId))) as
-        LocalOutboxEntry | undefined;
-      if (prior !== undefined)
-        outbox.put({ ...prior, state: "acknowledged", safeErrorCode: null });
-    }
     outbox.put({
       operation,
       state: "queued",
       safeErrorCode: null,
     } satisfies LocalOutboxEntry);
     await transactionDone(transaction);
+  }
+
+  async #noteOperation(
+    metadata: LocalMetadata,
+    kind: NoteOperation["kind"],
+    payload: Record<string, unknown>,
+  ): Promise<NoteOperation> {
+    const operation = await this.#operation(metadata, kind, payload);
+    if (!isNoteOperation(operation))
+      throw new Error("Expected a note operation");
+    return operation;
+  }
+
+  /**
+   * Queue one note operation and apply it to the cached note in the same
+   * transaction. With `resolves`, the conflicted operation it replaces is
+   * retired and its conflict removed atomically (ADR 0046).
+   */
+  async #queueNoteOperation(
+    operation: NoteOperation,
+    resolves?: {
+      readonly operationId: string;
+      readonly choice: "retry-local" | "keep-both";
+      /** The canonical revision the owner reviewed; null when it is gone. */
+      readonly reviewedRevision: number | null;
+    },
+  ): Promise<void> {
+    const database = await this.#open();
+    const transaction = database.transaction(
+      [metadataStore, entityStore, outboxStore, conflictStore],
+      "readwrite",
+    );
+    const fail = (message: string): never => {
+      transaction.abort();
+      throw new Error(message);
+    };
+    const metadataHandle = transaction.objectStore(metadataStore);
+    const metadata = (await requestResult(metadataHandle.get(metadataKey))) as
+      LocalMetadata | undefined;
+    if (metadata === undefined)
+      return fail("A registered client is required before queueing");
+    // A replacement must follow the review it resolves without a gap.
+    if (
+      resolves !== undefined &&
+      metadata.nextClientSequence !== operation.clientSequence
+    )
+      return fail("A newer local change requires a fresh conflict review");
+    const entities = transaction.objectStore(entityStore);
+    const outbox = transaction.objectStore(outboxStore);
+    const noteId = noteIdForOperation(operation);
+    const cached = (await requestResult(
+      entities.get(entityKey("note", noteId)),
+    )) as CachedEntity | undefined;
+    const current =
+      cached === undefined ? undefined : noteSchema.parse(cached.value);
+    if (resolves !== undefined) {
+      const conflicts = transaction.objectStore(conflictStore);
+      const original = (await requestResult(
+        outbox.get(resolves.operationId),
+      )) as LocalOutboxEntry | undefined;
+      const conflict: unknown = await requestResult(
+        conflicts.get(resolves.operationId),
+      );
+      const conflicted =
+        original === undefined || !isNoteOperation(original.operation)
+          ? undefined
+          : (
+              (await requestResult(
+                entities.get(
+                  entityKey("note", noteIdForOperation(original.operation)),
+                ),
+              )) as CachedEntity | undefined
+            )?.revision;
+      if (
+        original === undefined ||
+        conflict === undefined ||
+        (conflicted ?? null) !== resolves.reviewedRevision
+      )
+        return fail("Sync conflict changed before it could be resolved");
+      outbox.put({
+        ...original,
+        state: "resolved",
+        resolvedAt: this.#now(),
+        resolutionChoice: resolves.choice,
+        replacementOperationId: operation.operationId,
+      } satisfies LocalOutboxEntry);
+      conflicts.delete(resolves.operationId);
+    }
+    const notes =
+      operation.kind === "note.create"
+        ? ((await requestResult(entities.getAll())) as CachedEntity[])
+            .filter(({ entityKind }) => entityKind === "note")
+            .map(({ value }) => noteSchema.parse(value))
+        : [];
+    const next = applyNoteOperation(
+      current,
+      operation,
+      nextNotePosition(notes),
+    );
+    if (next === undefined)
+      return fail("The note is not present in the local cache");
+    if (next === null) entities.delete(entityKey("note", noteId));
+    else entities.put(noteEntity(next, cached?.changeSequence));
+    metadataHandle.put(
+      { ...metadata, nextClientSequence: metadata.nextClientSequence + 1 },
+      metadataKey,
+    );
+    outbox.put({
+      operation,
+      state: "queued",
+      safeErrorCode: null,
+    } satisfies LocalOutboxEntry);
+    await transactionDone(transaction);
+  }
+
+  /**
+   * ADR 0046: after a round delivered canonical notes, re-apply this
+   * client's still-pending operations on them. Without this, an edit queued
+   * while the round was in flight would vanish from view until the next
+   * round, and a further edit would be queued against a stale revision.
+   */
+  async #rebasePendingNotes(
+    entities: IDBObjectStore,
+    outbox: IDBObjectStore,
+    noteIds: ReadonlySet<string>,
+  ): Promise<void> {
+    if (noteIds.size === 0) return;
+    const pending = (
+      (await requestResult(outbox.getAll())) as LocalOutboxEntry[]
+    )
+      .filter(({ state }) => state === "queued" || state === "sending")
+      .map(({ operation }) => operation)
+      .filter(isNoteOperation)
+      .filter((operation) => noteIds.has(noteIdForOperation(operation)))
+      .sort((left, right) => left.clientSequence - right.clientSequence);
+    for (const operation of pending) {
+      const key = entityKey("note", noteIdForOperation(operation));
+      const cached = (await requestResult(entities.get(key))) as
+        CachedEntity | undefined;
+      const next = applyNoteOperation(
+        cached === undefined ? undefined : noteSchema.parse(cached.value),
+        operation,
+      );
+      if (next === null) entities.delete(key);
+      else if (next !== undefined)
+        entities.put(noteEntity(next, cached?.changeSequence));
+    }
+  }
+
+  /**
+   * ADR 0046: a note conflict keeps both versions until the owner chooses.
+   * `keep-current` leaves the server's note, `retry-local` re-queues the
+   * local edit or delete against the note as reviewed, and `keep-both` saves
+   * the local text as a new note beside the server's.
+   */
+  async #resolveNoteConflict(
+    review: TaskConflictReview,
+    versions: NoteConflictVersions,
+    input: ResolveTaskConflictInput,
+  ): Promise<SyncOperation | null> {
+    const reviewedRevision = versions.canonical?.revision ?? null;
+    if (
+      input.reviewedTaskRevision !==
+      (reviewedRevision ?? review.conflict.taskRevision)
+    )
+      throw new Error("The note changed; review the latest values");
+    if (input.choice === "keep-current") {
+      await this.#dismissConflict(input.operationId);
+      return null;
+    }
+    const original = (await this.loadOutbox()).find(
+      ({ operation }) => operation.operationId === input.operationId,
+    )?.operation;
+    const metadata = await this.#requiredMetadata();
+    let operation: NoteOperation;
+    if (input.choice === "keep-both") {
+      if (!versions.keepBothSupported || versions.local === null)
+        throw new Error("This conflict has no local note text to keep");
+      operation = await this.#noteOperation(metadata, "note.create", {
+        note: { id: this.#uuid(), ...versions.local },
+      });
+    } else {
+      if (review.retryLocalUnavailableReason === "pending-local-sync")
+        throw new Error(
+          "A newer local change must finish syncing before retrying",
+        );
+      if (
+        !review.retryLocalSupported ||
+        reviewedRevision === null ||
+        original === undefined ||
+        !isNoteOperation(original) ||
+        original.kind === "note.create"
+      )
+        throw new Error("This sync conflict cannot be retried locally");
+      operation =
+        original.kind === "note.patch"
+          ? await this.#noteOperation(metadata, "note.patch", {
+              noteId: original.noteId,
+              fields: original.fields,
+              baseRevision: reviewedRevision,
+            })
+          : await this.#noteOperation(metadata, "note.delete", {
+              noteId: original.noteId,
+              baseRevision: reviewedRevision,
+            });
+    }
+    await this.#queueNoteOperation(operation, {
+      operationId: input.operationId,
+      choice: input.choice,
+      reviewedRevision,
+    });
+    return operation;
+  }
+
+  async #timeEntryOperation(
+    metadata: LocalMetadata,
+    kind: TimeEntryOperation["kind"],
+    payload: Record<string, unknown>,
+  ): Promise<TimeEntryOperation> {
+    const operation = await this.#operation(metadata, kind, payload);
+    if (!isTimeEntryOperation(operation))
+      throw new Error("Expected a time entry operation");
+    return operation;
+  }
+
+  /**
+   * ADR 0050: after a round delivered canonical time entries, re-apply this
+   * client's still-pending operations on them.
+   */
+  async #rebasePendingTimeEntries(
+    entities: IDBObjectStore,
+    outbox: IDBObjectStore,
+    entryIds: ReadonlySet<string>,
+  ): Promise<void> {
+    if (entryIds.size === 0) return;
+    const pending = (
+      (await requestResult(outbox.getAll())) as LocalOutboxEntry[]
+    )
+      .filter(({ state }) => state === "queued" || state === "sending")
+      .map(({ operation }) => operation)
+      .filter(isTimeEntryOperation)
+      .filter((operation) => entryIds.has(timeEntryIdForOperation(operation)))
+      .sort((left, right) => left.clientSequence - right.clientSequence);
+    for (const operation of pending) {
+      const key = entityKey("time_entry", timeEntryIdForOperation(operation));
+      const cached = (await requestResult(entities.get(key))) as
+        CachedEntity | undefined;
+      const next = applyTimeEntryOperation(
+        cached === undefined ? undefined : timeEntrySchema.parse(cached.value),
+        operation,
+      );
+      if (next === null) entities.delete(key);
+      else if (next !== undefined)
+        entities.put(timeEntryEntity(next, cached?.changeSequence));
+    }
+  }
+
+  /**
+   * ADR 0050: delete cached time entries that are older than the rolling
+   * window: those that aged out, and one a change moved to an older date.
+   */
+  async #pruneTimeEntries(entities: IDBObjectStore): Promise<void> {
+    const now = this.#now();
+    for (const record of (await requestResult(
+      entities.getAll(),
+    )) as CachedEntity[]) {
+      if (record.entityKind !== "time_entry") continue;
+      const entry = timeEntrySchema.safeParse(record.value);
+      if (!entry.success || !inCachedTimeEntryWindow(entry.data.workDate, now))
+        entities.delete(entityKey("time_entry", record.id));
+    }
+  }
+
+  async #dayOrderOperation(
+    metadata: LocalMetadata,
+    date: string,
+    taskIds: readonly string[],
+    baseRevision: number,
+  ): Promise<DayOrderOperation> {
+    const operation = await this.#operation(metadata, "day_order.reorder", {
+      date,
+      taskIds,
+      baseRevision,
+    });
+    if (!isDayOrderOperation(operation))
+      throw new Error("Expected a day-order operation");
+    return operation;
+  }
+
+  /**
+   * ADR 0050: queue one reorder and write the order it produces to the
+   * cache in the same transaction. With `resolves`, the conflicted reorder
+   * it replaces is retired and its conflict removed atomically.
+   */
+  async #queueDayOrderOperation(
+    operation: DayOrderOperation,
+    resolves?: {
+      readonly operationId: string;
+      /** The saved revision the owner reviewed; null when none is saved. */
+      readonly reviewedRevision: number | null;
+    },
+  ): Promise<void> {
+    const database = await this.#open();
+    const transaction = database.transaction(
+      [metadataStore, entityStore, outboxStore, conflictStore],
+      "readwrite",
+    );
+    const fail = (message: string): never => {
+      transaction.abort();
+      throw new Error(message);
+    };
+    const metadataHandle = transaction.objectStore(metadataStore);
+    const metadata = (await requestResult(metadataHandle.get(metadataKey))) as
+      LocalMetadata | undefined;
+    if (metadata === undefined)
+      return fail("A registered client is required before queueing");
+    // The base revision was read before this transaction; a reorder queued
+    // in between would make it stale.
+    if (metadata.nextClientSequence !== operation.clientSequence)
+      return fail("A newer local change was queued first; try again");
+    const entities = transaction.objectStore(entityStore);
+    const outbox = transaction.objectStore(outboxStore);
+    const key = entityKey("day_order", operation.date);
+    const cached = (await requestResult(entities.get(key))) as
+      CachedEntity | undefined;
+    if (resolves !== undefined) {
+      const conflicts = transaction.objectStore(conflictStore);
+      const original = (await requestResult(
+        outbox.get(resolves.operationId),
+      )) as LocalOutboxEntry | undefined;
+      const conflict: unknown = await requestResult(
+        conflicts.get(resolves.operationId),
+      );
+      if (
+        original === undefined ||
+        conflict === undefined ||
+        (cached?.revision ?? null) !== resolves.reviewedRevision
+      )
+        return fail("Sync conflict changed before it could be resolved");
+      outbox.put({
+        ...original,
+        state: "resolved",
+        resolvedAt: this.#now(),
+        resolutionChoice: "retry-local",
+        replacementOperationId: operation.operationId,
+      } satisfies LocalOutboxEntry);
+      conflicts.delete(resolves.operationId);
+    }
+    entities.put(
+      dayOrderEntity(applyDayOrderOperation(operation), cached?.changeSequence),
+    );
+    metadataHandle.put(
+      { ...metadata, nextClientSequence: metadata.nextClientSequence + 1 },
+      metadataKey,
+    );
+    outbox.put({
+      operation,
+      state: "queued",
+      safeErrorCode: null,
+    } satisfies LocalOutboxEntry);
+    await transactionDone(transaction);
+  }
+
+  /**
+   * ADR 0050: after a round delivered saved day orders, re-apply this
+   * client's still-pending reorders of those dates, so a reorder queued
+   * while the round was in flight stays visible and the next one is queued
+   * against the revision it will produce.
+   */
+  async #rebasePendingDayOrders(
+    entities: IDBObjectStore,
+    outbox: IDBObjectStore,
+    dates: ReadonlySet<string>,
+  ): Promise<void> {
+    if (dates.size === 0) return;
+    const pending = (
+      (await requestResult(outbox.getAll())) as LocalOutboxEntry[]
+    )
+      .filter(({ state }) => state === "queued" || state === "sending")
+      .map(({ operation }) => operation)
+      .filter(isDayOrderOperation)
+      .filter(({ date }) => dates.has(date))
+      .sort((left, right) => left.clientSequence - right.clientSequence);
+    for (const operation of pending) {
+      const key = entityKey("day_order", operation.date);
+      const cached = (await requestResult(entities.get(key))) as
+        CachedEntity | undefined;
+      entities.put(
+        dayOrderEntity(
+          applyDayOrderOperation(operation),
+          cached?.changeSequence,
+        ),
+      );
+    }
+  }
+
+  /**
+   * ADR 0050: a day-order conflict keeps both orders until the owner
+   * chooses. `keep-current` leaves the saved order; `retry-local` queues the
+   * local order again against the saved revision that was reviewed.
+   */
+  async #resolveDayOrderConflict(
+    review: TaskConflictReview,
+    versions: DayOrderConflictVersions,
+    input: ResolveTaskConflictInput,
+  ): Promise<SyncOperation | null> {
+    const reviewedRevision = versions.canonical?.revision ?? null;
+    if (
+      input.reviewedTaskRevision !==
+      (reviewedRevision ?? review.conflict.taskRevision)
+    )
+      throw new Error("The day order changed; review the latest order");
+    if (input.choice === "keep-current") {
+      await this.#dismissConflict(input.operationId);
+      return null;
+    }
+    if (input.choice !== "retry-local")
+      throw new Error("Only a note conflict can keep both versions");
+    if (review.retryLocalUnavailableReason === "pending-local-sync")
+      throw new Error(
+        "A newer local change must finish syncing before retrying",
+      );
+    if (!review.retryLocalSupported || versions.attempted === null)
+      throw new Error("This sync conflict cannot be retried locally");
+    const operation = await this.#dayOrderOperation(
+      await this.#requiredMetadata(),
+      versions.date,
+      versions.attempted,
+      reviewedRevision ?? 0,
+    );
+    await this.#queueDayOrderOperation(operation, {
+      operationId: input.operationId,
+      reviewedRevision,
+    });
+    return operation;
+  }
+
+  /** Queue one structural operation and apply it to the cache atomically. */
+  async #queueAndWriteEntity(
+    operation: SyncOperation,
+    entity: CachedEntity | null,
+    remove?: [CachedEntityKind, string],
+  ): Promise<void> {
+    const database = await this.#open();
+    const transaction = database.transaction(
+      [metadataStore, entityStore, outboxStore],
+      "readwrite",
+    );
+    const metadataHandle = transaction.objectStore(metadataStore);
+    const metadata = (await requestResult(metadataHandle.get(metadataKey))) as
+      LocalMetadata | undefined;
+    if (metadata === undefined) {
+      transaction.abort();
+      throw new Error("A registered client is required before queueing");
+    }
+    metadataHandle.put(
+      { ...metadata, nextClientSequence: metadata.nextClientSequence + 1 },
+      metadataKey,
+    );
+    const entities = transaction.objectStore(entityStore);
+    if (entity !== null) entities.put(entity);
+    if (remove !== undefined) entities.delete(entityKey(...remove));
+    transaction.objectStore(outboxStore).put({
+      operation,
+      state: "queued",
+      safeErrorCode: null,
+    } satisfies LocalOutboxEntry);
+    await transactionDone(transaction);
+  }
+
+  #replayStructuralOperation(
+    entities: IDBObjectStore,
+    records: Map<string, CachedEntity>,
+    operation: SyncOperation,
+  ): void {
+    const target = syncOperationEntity(operation);
+    if (target === null) return;
+    const key = `${target.entityKind}:${target.entityId}`;
+    const current = records.get(key);
+    const now = operation.createdAt;
+    const base = {
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+      color: null,
+      icon: null,
+      position: Number.MAX_SAFE_INTEGER,
+    };
+    let next: CachedEntity | null;
+    switch (operation.kind) {
+      case "project.create":
+        next =
+          current ??
+          this.#structuralEntity("project", target.entityId, {
+            ...base,
+            id: target.entityId,
+            ownerId: target.entityId,
+            title: operation.project.title,
+          });
+        break;
+      case "tag.create":
+        next =
+          current ??
+          this.#structuralEntity("tag", target.entityId, {
+            ...base,
+            id: target.entityId,
+            ownerId: target.entityId,
+            displayName: operation.tag.title,
+            normalizedName: operation.tag.title
+              .normalize("NFKC")
+              .toLocaleLowerCase(),
+          });
+        break;
+      case "project.patch":
+      case "tag.patch": {
+        if (current === undefined) return;
+        const { fields } = operation;
+        const record = current.value as {
+          readonly archivedAt: string | null;
+          readonly completedAt?: string | null;
+        };
+        const archivedAt =
+          fields.archived === false || fields.completed === false
+            ? null
+            : fields.archived === true || fields.completed === true
+              ? (record.archivedAt ?? now)
+              : record.archivedAt;
+        next = {
+          ...current,
+          value: {
+            ...(current.value as object),
+            ...(fields.title === undefined
+              ? {}
+              : operation.kind === "project.patch"
+                ? { title: fields.title }
+                : {
+                    displayName: fields.title,
+                    normalizedName: fields.title
+                      .normalize("NFKC")
+                      .toLocaleLowerCase(),
+                  }),
+            ...(fields.color === undefined ? {} : { color: fields.color }),
+            ...(fields.icon === undefined ? {} : { icon: fields.icon }),
+            archivedAt,
+            ...(operation.kind === "project.patch"
+              ? {
+                  completedAt:
+                    fields.completed === true
+                      ? (record.completedAt ?? now)
+                      : fields.completed === false || fields.archived === false
+                        ? null
+                        : (record.completedAt ?? null),
+                }
+              : {}),
+            updatedAt: now,
+          },
+        };
+        break;
+      }
+      case "subtask.create":
+        next =
+          current ??
+          this.#structuralEntity("subtask", target.entityId, {
+            ...operation.subtask,
+            completed: false,
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+        break;
+      case "subtask.patch":
+        if (current === undefined) return;
+        next = {
+          ...current,
+          value: {
+            ...(current.value as object),
+            ...operation.fields,
+            updatedAt: now,
+          },
+        };
+        break;
+      case "subtask.delete":
+        next = null;
+        break;
+      case "note.create":
+      case "note.patch":
+      case "note.delete": {
+        const note = applyNoteOperation(
+          current === undefined ? undefined : noteSchema.parse(current.value),
+          operation,
+        );
+        if (note === undefined) return;
+        next = note === null ? null : noteEntity(note, current?.changeSequence);
+        break;
+      }
+      case "time_entry.create":
+      case "time_entry.patch":
+      case "time_entry.delete": {
+        const entry = applyTimeEntryOperation(
+          current === undefined
+            ? undefined
+            : timeEntrySchema.parse(current.value),
+          operation,
+        );
+        if (entry === undefined) return;
+        next =
+          entry === null
+            ? null
+            : timeEntryEntity(entry, current?.changeSequence);
+        break;
+      }
+      case "day_order.reorder":
+        // ADR 0050: the queued order stands in for the saved one. A reorder
+        // of a stale revision still conflicts when the server applies it.
+        next = dayOrderEntity(
+          applyDayOrderOperation(operation),
+          current?.changeSequence,
+        );
+        break;
+      default:
+        return;
+    }
+    if (next === null) {
+      records.delete(key);
+      entities.delete(entityKey(target.entityKind, target.entityId));
+      return;
+    }
+    records.set(key, next);
+    entities.put(next);
+  }
+
+  #structuralEntity(
+    entityKind: "project" | "tag" | "subtask",
+    id: string,
+    value: unknown,
+  ): CachedEntity {
+    return {
+      entityKind,
+      id,
+      value:
+        entityKind === "project"
+          ? projectSchema.parse(value)
+          : entityKind === "tag"
+            ? tagSchema.parse(value)
+            : subtaskSchema.parse(value),
+      revision: 1,
+      changeSequence: 0,
+    };
+  }
+
+  async #requiredEntity(
+    entityKind: CachedEntityKind,
+    id: string,
+  ): Promise<CachedEntity> {
+    const database = await this.#open();
+    const transaction = database.transaction(entityStore, "readonly");
+    const record = (await requestResult(
+      transaction.objectStore(entityStore).get(entityKey(entityKind, id)),
+    )) as CachedEntity | undefined;
+    await transactionDone(transaction);
+    if (record === undefined)
+      throw new Error("The record is not present in the local cache");
+    return record;
   }
 
   #applyChange(store: IDBObjectStore, change: SyncChange): void {

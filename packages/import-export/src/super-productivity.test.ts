@@ -49,6 +49,28 @@ describe("Super Productivity migration preview", () => {
       tags: 0,
       repeatConfigurations: 1,
       trackedMilliseconds: 90000,
+      // Only dated daily values import; 30 s of leaf timeSpent has no day.
+      time: {
+        sourceLeafMs: 90000,
+        sourceLeafDailyMs: 60000,
+        taskDayEntries: 1,
+        taskDayMs: 60000,
+        parentResidualEntries: 0,
+        parentResidualMs: 0,
+        undatedMs: 30000,
+        datedExcessMs: 0,
+        workContextDays: 0,
+      },
+      // No counters or metric days in this export (ADR 0025).
+      counters: {
+        definitions: 0,
+        dayValues: 0,
+        clickCount: 0,
+        stopwatchMs: 0,
+        evaluations: 0,
+        focusSessions: 0,
+        focusSessionMs: 0,
+      },
     });
     expect(
       report.tasks.find((task) => task.sourceId === "child"),
@@ -59,11 +81,15 @@ describe("Super Productivity migration preview", () => {
     });
     expect(JSON.stringify(report)).not.toContain("must-not-appear");
     expect(report.issues.map((issue) => issue.code)).toEqual(
-      expect.arrayContaining([
-        "hierarchy_parity_required",
-        "recurrence_parity_required",
-        "time_history_parity_required",
-      ]),
+      expect.arrayContaining(["recurrence_unmappable", "time_reconciliation"]),
+    );
+    // Work history applies since #41 (ADR 0024).
+    expect(report.issues.map((issue) => issue.code)).not.toContain(
+      "time_history_parity_required",
+    );
+    // Children map to full child tasks (ADR 0018); hierarchy no longer blocks.
+    expect(report.issues.map((issue) => issue.code)).not.toContain(
+      "hierarchy_parity_required",
     );
   });
   it("reports duplicate IDs, broken references, invalid dates, and time mismatches", () => {
@@ -80,7 +106,8 @@ describe("Super Productivity migration preview", () => {
     const report = previewSuperProductivity(
       JSON.stringify({
         task: state({ t: task }),
-        archiveOld: { task: state({ t: task }) },
+        // Divergent copies block; identical copies would collapse (ADR 0022).
+        archiveOld: { task: state({ t: { ...task, isDone: true } }) },
       }),
     );
     expect(report.totals.tasks).toBe(1);
@@ -151,7 +178,7 @@ it("detects cycles, inconsistent child lists, missing tags, and malformed time h
       "hierarchy_mismatch",
       "missing_child",
       "missing_tag",
-      "duplicate_reference",
+      "duplicate_child_reference",
       "invalid_time_history",
       "invalid_reference",
       "invalid_reference_list",

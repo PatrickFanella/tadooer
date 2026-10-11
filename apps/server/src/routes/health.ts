@@ -4,6 +4,8 @@ import type {
   ReadinessResponse,
 } from "@suite/contracts";
 import { sendJson, securityHeaders } from "../http-utils.ts";
+import { calendarBridgeMetricLines } from "../calendar-bridge/worker.ts";
+import { syncFeedMetricLines } from "../sync-retention.ts";
 import type { RouteHandler } from "./shared.ts";
 
 const startedAt = Date.now();
@@ -38,6 +40,10 @@ export const handleHealth: RouteHandler = async (
       "# HELP suite_database_migrations Applied SQLite migrations.",
       "# TYPE suite_database_migrations gauge",
       `suite_database_migrations ${String(state.appliedMigrationCount)}`,
+      "# HELP suite_database_migrations_expected SQLite migrations this build expects.",
+      "# TYPE suite_database_migrations_expected gauge",
+      `suite_database_migrations_expected ${String(state.expectedMigrationCount)}`,
+      ...syncFeedMetricLines(database, Date.now()),
       "# HELP suite_http_requests_total Completed HTTP responses by status.",
       "# TYPE suite_http_requests_total counter",
       ...[...requestCounts.entries()]
@@ -46,6 +52,13 @@ export const handleHealth: RouteHandler = async (
           ([status, count]) =>
             `suite_http_requests_total{status="${String(status)}"} ${String(count)}`,
         ),
+      ...calendarBridgeMetricLines({
+        snapshot: database.calendarBridgeWorker.health(),
+        nowMs: Date.now(),
+        worker: ctx.calendarBridgeWorker,
+        throttle: ctx.googleThrottle,
+      }),
+      ...ctx.liveSync.metricLines(),
       "",
     ];
     response.writeHead(200, {
@@ -72,12 +85,22 @@ export const handleHealth: RouteHandler = async (
       const state = database.state();
       const current =
         state.appliedMigrationCount === state.expectedMigrationCount;
+      let calendarBridge: ReadinessResponse["checks"]["calendarBridge"];
+      try {
+        calendarBridge =
+          ctx.calendarBridgeWorker?.healthState(
+            database.calendarBridgeWorker.health(),
+          ) ?? "disabled";
+      } catch {
+        calendarBridge = undefined;
+      }
       const body: ReadinessResponse = {
         service: "productivity-suite",
         status: current ? "ok" : "not_ready",
         checks: {
           database: "ok",
           migrations: current ? "current" : "pending",
+          ...(calendarBridge === undefined ? {} : { calendarBridge }),
         },
         instanceId: state.install.instanceId,
         migrationCount: state.appliedMigrationCount,

@@ -1,4 +1,5 @@
 import { prepareSuperProductivityImport } from "@suite/import-export";
+import { planningDate } from "@suite/domain";
 import {
   superProductivityPreviewSchema,
   superProductivityImportLimits as limits,
@@ -40,9 +41,29 @@ export const handleTaskImport: RouteHandler = async (
   }
   try {
     const input = await readJson(request, limits.bytes);
-    const { report, records } = prepareSuperProductivityImport(
-      JSON.stringify(input),
-    );
+    const preferences = stores.getPlanningPreferences(session.owner.id);
+    const {
+      report,
+      records,
+      recurrence,
+      workContexts,
+      counters,
+      evaluations,
+      plugins,
+      dayOrders,
+      boards,
+      focusPreferences,
+      applicationPreferences,
+    } = prepareSuperProductivityImport(JSON.stringify(input), {
+      timeZone: preferences.timeZone,
+      // ADR 0027: TODAY_TAG.taskIds is the order of the owner's current
+      // planning date when the preview or apply runs.
+      today: planningDate(
+        new Date(),
+        preferences.timeZone,
+        preferences.dayStartsAt,
+      ),
+    });
     if (url.pathname.endsWith("/preview")) {
       sendJson(response, 200, superProductivityPreviewSchema.parse(report));
     } else if (request.headers["x-import-hash"] !== report.inputHash) {
@@ -65,6 +86,32 @@ export const handleTaskImport: RouteHandler = async (
           session.owner.id,
           records,
           new Date().toISOString(),
+          recurrence,
+          {
+            workContexts,
+            counters,
+            evaluations,
+            pluginData: plugins,
+            dayOrders,
+            boards,
+            ...(focusPreferences === undefined
+              ? {}
+              : {
+                  focusPreferences: {
+                    preferences: focusPreferences.preferences,
+                    provenance: {
+                      source: "super_productivity" as const,
+                      inputHash: report.inputHash,
+                      importedAt: new Date().toISOString(),
+                      fields: [...focusPreferences.fields],
+                    },
+                  },
+                }),
+            // ADR 0030: applied once while preferences were never saved.
+            ...(applicationPreferences === undefined
+              ? {}
+              : { applicationPreferences }),
+          },
         );
         sendJson(response, 200, outcome);
       } catch {

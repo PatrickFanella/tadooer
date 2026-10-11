@@ -18,31 +18,45 @@
       "source": "apps/web/src/api.ts"
     },
     {
+      "id": "trusted-devices",
+      "action": "Keep a device signed in, confirm the password for sensitive actions, list, rename and sign out devices",
+      "webApi": [
+        "confirmPassword",
+        "listSignedInDevices",
+        "renameSignedInDevice",
+        "signOutDevice",
+        "signOutOtherDevices"
+      ],
+      "catalog": [],
+      "status": "owner-only",
+      "issue": 115,
+      "authority": "Device trust and password confirmation are proofs of the owner's identity and need the browser session, same origin and the CSRF token; a bearer credential must not create, extend or revoke a sign-in (ADR 0048).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
       "id": "connector-grants",
-      "action": "Provision Baikal credentials, authorize Google, disconnect grants",
+      "action": "Provision Baikal credentials, authorize Google, grant or withdraw Google write consent, disconnect grants",
       "webApi": [
         "connectBaikal",
+        "probeBaikal",
         "beginGoogleAuthorization",
-        "disconnectGoogle"
+        "disconnectGoogle",
+        "withdrawGoogleWriteConsent"
       ],
       "catalog": [],
       "status": "owner-only",
       "issue": 60,
-      "authority": "Fresh provider consent and secret entry remain interactive. Future delegated disconnect needs explicit consequential approval.",
+      "authority": "Fresh provider consent, secret entry and grant disconnect remain interactive (ADR 0038); the assistant never receives or rotates a credential.",
       "source": "apps/web/src/api.ts"
     },
     {
       "id": "connector-status",
       "action": "Connector health and explicit Google sync/resync",
-      "webApi": [
-        "getBaikalStatus",
-        "getGoogleStatus",
-        "synchronizeGoogle"
-      ],
-      "catalog": [],
-      "status": "gap",
+      "webApi": ["getBaikalStatus", "getGoogleStatus", "synchronizeGoogle"],
+      "catalog": ["connectors.status", "connectors.resync"],
+      "status": "covered",
       "issue": 60,
-      "authority": "Proposed separate connector read/recovery scopes; existing grant permissions must not widen.",
+      "authority": "connectors:read returns Baikal verification with the stored credential, Google state, granted scopes and freshness plus recovery steps; never a credential. connectors:recover retries a Google sync with the stored grant only; scopes cannot widen and a rejected grant needs the owner (ADR 0038).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -53,11 +67,25 @@
         "getPlanningPreferences",
         "updatePlanningPreferences"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": [
+        "planning.day_plan",
+        "planning.preferences",
+        "planning.update_preferences"
+      ],
+      "status": "covered",
       "issue": 59,
-      "authority": "Owner timezone and preference revisions need explicit contracts before delegated writes.",
+      "authority": "Schedule reads and dedicated planning write scope; persisted revisions, preview and atomic confirmation. Browser PUTs invalidate old previews.",
       "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "application-preferences",
+      "action": "Application preferences and keyboard shortcuts: read the record; change theme, locale, start page, capture defaults, completion and reminder defaults, daily note and shortcut bindings",
+      "webApi": ["getApplicationPreferences", "updateApplicationPreferences"],
+      "catalog": ["application.preferences", "application.update_preferences"],
+      "status": "covered",
+      "issue": 67,
+      "authority": "Dedicated application:read and application:write scopes; one persisted revision shared with browser saves, frozen in the preview and checked again at confirmation. Shortcut conflicts and inactive default projects are rejected at preview.",
+      "source": "apps/server/src/routes/automation-application-preferences.ts"
     },
     {
       "id": "notifications",
@@ -68,23 +96,23 @@
         "getNotificationStatus",
         "sendTestNotification"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": [
+        "notifications.preferences",
+        "notifications.status",
+        "notifications.update_preferences",
+        "notifications.send_test",
+        "notifications.delivery"
+      ],
+      "status": "covered",
       "issue": 59,
-      "authority": "External notification delivery is a visible side effect; no secrets in status.",
+      "authority": "Dedicated read/write/test scopes; redacted status and revisioned confirmation. Test confirmation atomically queues one delivery with its audit and replay receipt; worker delivery is separate and uncertain sends are terminal.",
       "source": "apps/web/src/api.ts"
     },
     {
       "id": "tasks-read",
       "action": "Active and deleted task inventory",
-      "webApi": [
-        "getTasks",
-        "getRecoveryTasks"
-      ],
-      "catalog": [
-        "tasks.list",
-        "tasks.deleted"
-      ],
+      "webApi": ["getTasks", "getRecoveryTasks"],
+      "catalog": ["tasks.list", "tasks.deleted"],
       "status": "covered",
       "issue": 39,
       "authority": "Catalog read scopes; owner filtering and recovery visibility.",
@@ -93,40 +121,48 @@
     {
       "id": "tasks-create",
       "action": "Plain or structured task capture",
-      "webApi": [
-        "createTask"
-      ],
-      "catalog": [
-        "tasks.create"
-      ],
+      "webApi": ["createTask"],
+      "catalog": ["tasks.create"],
       "status": "covered",
       "issue": 39,
-      "authority": "Preview resolves source input; caller idempotency key binds one creation.",
+      "authority": "Preview resolves source input, including planned day, reminder settings, estimate words, links per the owner URL setting and an @every series; it rejects a planned day with an exact start and lists every tag it would create as an affected object, so confirmation is the consent (ADR 0031); caller idempotency key binds one creation.",
       "source": "apps/web/src/api.ts"
     },
     {
+      "id": "tasks-create-many",
+      "action": "Create several tasks from a pasted Markdown list or email",
+      "webApi": ["previewTaskCapture", "createTaskBatch"],
+      "catalog": ["tasks.create_many"],
+      "status": "covered",
+      "issue": 90,
+      "authority": "Preview resolves every item and child at once (at most 100 tasks), lists the tags the batch would create as affected objects and names each task in the summary; confirmation creates all of them in one transaction or none. The browser previews pasted text without side effects and requires a ticked consent box before new tags are created.",
+      "source": "apps/server/src/capture-automation.ts"
+    },
+    {
+      "id": "capture-preferences",
+      "action": "Capture URL behavior setting (keep, extract, keep and attach)",
+      "webApi": ["getCapturePreferences", "updateCapturePreferences"],
+      "catalog": [],
+      "status": "owner-only",
+      "issue": 90,
+      "authority": "The owner sets how http(s) addresses in captured titles are handled; saves carry a revision and conflict with 412. The assistant reads the effect through preview summaries and has no catalog path to change it.",
+      "source": "apps/server/src/routes/capture.ts"
+    },
+    {
       "id": "tasks-edit",
-      "action": "Title, notes, dates and estimate edits",
-      "webApi": [
-        "patchTask"
-      ],
-      "catalog": [
-        "tasks.update"
-      ],
+      "action": "Title, notes, dates, planned day, reminder and estimate edits",
+      "webApi": ["patchTask"],
+      "catalog": ["tasks.update"],
       "status": "covered",
       "issue": 39,
-      "authority": "Exact expected task revision; atomic mutation/audit/receipt. Calendar-linked scheduling restrictions still apply.",
+      "authority": "Exact expected task revision; atomic mutation/audit/receipt. Calendar-linked scheduling restrictions still apply: preview rejects a planned day while a calendar block exists and a deadline reminder without a timed deadline (ADR 0020).",
       "source": "apps/web/src/api.ts"
     },
     {
       "id": "tasks-complete",
       "action": "Complete and reopen tasks",
-      "webApi": [
-        "transitionTask"
-      ],
-      "catalog": [
-        "tasks.set_completed"
-      ],
+      "webApi": ["transitionTask"],
+      "catalog": ["tasks.set_completed"],
       "status": "covered",
       "issue": 39,
       "authority": "Expected revision and replay receipt; task completion is distinct from focus completion.",
@@ -135,14 +171,8 @@
     {
       "id": "tasks-delete",
       "action": "Delete and restore tasks",
-      "webApi": [
-        "deleteTask",
-        "restoreTask"
-      ],
-      "catalog": [
-        "tasks.delete",
-        "tasks.restore"
-      ],
+      "webApi": ["deleteTask", "restoreTask"],
+      "catalog": ["tasks.delete", "tasks.restore"],
       "status": "covered",
       "issue": 33,
       "authority": "Explicit consequential approval, expected revision and focus/calendar deletion guards.",
@@ -151,12 +181,8 @@
     {
       "id": "planner-read",
       "action": "Bounded planner and calendar projection",
-      "webApi": [
-        "getPlanner"
-      ],
-      "catalog": [
-        "schedule.get"
-      ],
+      "webApi": ["getPlanner"],
+      "catalog": ["schedule.get"],
       "status": "covered",
       "issue": 39,
       "authority": "Schedule read scope, requested range, provider-qualified identities and visible freshness.",
@@ -165,16 +191,15 @@
     {
       "id": "time-blocks",
       "action": "Create, move and remove a task time block",
-      "webApi": [
-        "putTaskTimeBlock",
-        "removeTaskTimeBlock"
-      ],
+      "webApi": ["putTaskTimeBlock", "removeTaskTimeBlock"],
       "catalog": [
-        "schedule.create_time_block"
+        "schedule.create_time_block",
+        "schedule.move_time_block",
+        "schedule.remove_time_block"
       ],
-      "status": "partial",
+      "status": "covered",
       "issue": 58,
-      "authority": "Create tool exists; move/remove need provider conditional revisions, durable outcomes and explicit removal approval.",
+      "authority": "schedule:write; previews bind the task revision the assistant read; move and remove issue conditional CalDAV writes with the stored ETag, keep one event href and record provider conflicts; removal needs its own confirmation (ADR 0037).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -184,21 +209,21 @@
         "registerSyncClient",
         "syncRound",
         "getSyncSnapshot",
-        "createSyncTransport"
+        "createSyncTransport",
+        "openLiveSyncStream",
+        "noteBackgroundReads",
+        "endBackgroundReads"
       ],
       "catalog": [],
       "status": "internal",
       "issue": 19,
-      "authority": "Browser client proof and immutable outbox remain internal; assistants use domain operations instead of pretending to be browser clients.",
+      "authority": "Browser client proof and immutable outbox remain internal; assistants use domain operations instead of pretending to be browser clients. The outbox queues task fields, planning, assignment, project/tag and checklist writes (ADR 0033). The live sync hint stream uses the same client proof and carries no record content (ADR 0045).",
       "source": "apps/web/src/api.ts"
     },
     {
       "id": "focus",
       "action": "Focus/break lifecycle and takeover",
-      "webApi": [
-        "getActiveSession",
-        "commandActiveSession"
-      ],
+      "webApi": ["getActiveSession", "commandActiveSession"],
       "catalog": [
         "active-session.get",
         "focus.start",
@@ -215,16 +240,35 @@
       "source": "apps/web/src/api.ts"
     },
     {
+      "id": "focus-preferences",
+      "action": "Read and update focus preferences (presets, idle, take-a-break, tracking reminder)",
+      "webApi": ["getFocusPreferences", "updateFocusPreferences"],
+      "catalog": ["focus.preferences", "focus.update_preferences"],
+      "status": "covered",
+      "issue": 65,
+      "authority": "focus:read returns the fields with their revision (0 for defaults); focus:write is revision-bound like planning.update_preferences, and browser writes advance the same revision. A running session keeps the plan it started with (ADR 0029).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "focus-timer",
+      "action": "Focus timer state, per-session preset, idle disposition and break-reminder snooze",
+      "webApi": [
+        "getFocusTimer",
+        "setFocusPlan",
+        "applyIdleDisposition",
+        "snoozeBreakReminder"
+      ],
+      "catalog": ["focus.idle_disposition"],
+      "status": "partial",
+      "issue": 65,
+      "authority": "focus:write. The preview binds the session revision and states the span, the disposition and the focus time removed; confirmation applies the correction for the owner with the controlling device as the interval actor. Timer reads, presets and snooze stay browser operations with client proof (ADR 0029).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
       "id": "organization-read",
       "action": "Project and tag inventory",
-      "webApi": [
-        "getProjects",
-        "getTags"
-      ],
-      "catalog": [
-        "projects.list",
-        "tags.list"
-      ],
+      "webApi": ["getProjects", "getTags"],
+      "catalog": ["projects.list", "tags.list"],
       "status": "covered",
       "issue": 39,
       "authority": "Catalog read scopes with owner-scoped records.",
@@ -232,19 +276,96 @@
     },
     {
       "id": "organization-write",
-      "action": "Project/tag lifecycle and task assignment",
+      "action": "Project/tag lifecycle, appearance, order, backlog and task assignment",
       "webApi": [
         "createProject",
         "createTag",
         "patchProject",
         "patchTag",
+        "reorderProjects",
+        "reorderTags",
+        "setProjectBacklog",
         "assignTaskProject",
         "assignTaskTags"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": [
+        "projects.mutate",
+        "projects.reorder",
+        "projects.set_backlog",
+        "tags.mutate",
+        "tags.reorder",
+        "tasks.assign_project",
+        "tasks.set_tags"
+      ],
+      "status": "covered",
       "issue": 55,
-      "authority": "Proposed project/tag write scopes and task assignment boundaries; revisions and atomic audit/replay required.",
+      "authority": "Project/tag write scopes and task write scope; frozen revisions (every record for reorder), explicit preview confirmation, atomic sync/audit/replay. Completion archives; restore/reopen clears both.",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "notes",
+      "action": "Project, tag and standalone notes: create, edit, pin, reorder and delete",
+      "webApi": [],
+      "catalog": ["notes.list", "notes.mutate"],
+      "status": "covered",
+      "issue": 28,
+      "authority": "Dedicated notes read/write scopes; owner-checked project/tag association, note revisions, complete-membership reorder and atomic audit/replay. Deletion is permanent and needs explicit approval. Notes are sync feed records (ADR 0046): an assistant write appends a feed change in the same transaction and reaches every device in its next round. The browser reads notes from its offline cache and writes them through the sync outbox, so it has no note API function.",
+      "source": "apps/web/src/local-store.ts"
+    },
+    {
+      "id": "task-links",
+      "action": "Task attachments and imported issue links: read, add/edit/remove link and note attachments, remove an issue link",
+      "webApi": [
+        "getTaskLinks",
+        "createTaskAttachment",
+        "patchTaskAttachment",
+        "deleteTaskAttachment",
+        "deleteTaskIssueLink"
+      ],
+      "catalog": ["task_links.get", "task_links.mutate"],
+      "status": "covered",
+      "issue": 30,
+      "authority": "Dedicated task_links read/write scopes; owner-checked task, attachment and issue-link revisions with atomic audit/replay. Only http(s) links without credentials are stored as openable. Previews name hosts, not full addresses. No operation contacts an issue provider; refresh or write-back needs a fresh provider authorization that does not exist yet. Online-only.",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "calendar-subscriptions",
+      "action": "Read-only iCal subscriptions: list feeds and upcoming events, refresh a feed, convert an event to a task, hide an event; add, edit and remove subscriptions",
+      "webApi": [
+        "listCalendarSubscriptions",
+        "createCalendarSubscription",
+        "updateCalendarSubscription",
+        "deleteCalendarSubscription",
+        "refreshCalendarSubscription",
+        "listCalendarSubscriptionEvents",
+        "setCalendarSubscriptionEventHidden",
+        "convertCalendarSubscriptionEvent",
+        "dismissCalendarSubscriptionEvent"
+      ],
+      "catalog": [
+        "calendar_subscriptions.list",
+        "calendar_subscriptions.refresh",
+        "calendar_subscriptions.convert_event",
+        "calendar_subscriptions.hide_event"
+      ],
+      "status": "partial",
+      "issue": 91,
+      "authority": "schedule:read lists subscriptions by host and their events for a window; the feed address is never returned by any route, preview, resource or log. schedule:write refreshes a feed (revision-checked at confirmation) or hides an event; tasks:write converts an event, and a repeat conversion returns the existing task. Adding, editing, dismissing and removing subscriptions stay owner-only in the browser because the address may embed a token. Subscriptions never write upstream. Online-only (ADR 0032).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "plugin-data",
+      "action": "Imported plugin data: list plugin IDs, keys, sizes and enabled flags; download an entry's data; delete an entry or enabled flag",
+      "webApi": [
+        "getPluginData",
+        "getPluginDataContent",
+        "deletePluginDataEntry",
+        "deletePluginMetadata"
+      ],
+      "catalog": ["plugin_data.list"],
+      "status": "partial",
+      "issue": 66,
+      "authority": "Dedicated plugin_data:read scope lists identity, sizes and flags only; no assistant operation returns plugin data. Download and permanent deletion stay owner-only in the browser (session, CSRF and If-Match revisions). Nothing decodes or runs plugin data. Online-only (ADR 0026).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -252,28 +373,178 @@
       "action": "Checklist child create/edit/reorder/delete",
       "webApi": [
         "getSubtasks",
+        "getAllSubtasks",
         "createSubtask",
         "patchSubtask",
         "reorderSubtasks",
         "deleteSubtask"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": ["subtasks.list", "subtasks.mutate"],
+      "status": "covered",
       "issue": 56,
-      "authority": "Current checklist model only; future full task hierarchy remains #27.",
+      "authority": "Task read/write scopes, owner-scoped checklist and parent revisions; exact reorder membership; atomic mutation, sync and confirmation receipt. Explicit approval for deletion/reorder.",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "task-hierarchy",
+      "action": "Create child tasks, move tasks between parents or to top level, reorder children",
+      "webApi": [],
+      "catalog": ["tasks.hierarchy"],
+      "status": "covered",
+      "issue": 27,
+      "authority": "tasks:write; the preview freezes the task, target parent and every reordered child revision, and rejects depth, cycle and deleted-parent targets. The browser writes through the sync outbox (task.move), not api.ts. Hierarchy reads come from tasks.list parentId/childPosition.",
+      "source": "packages/contracts/src/index.ts"
+    },
+    {
+      "id": "task-history",
+      "action": "Search archived task history, archive a top-level task with its children, restore an archived family",
+      "webApi": ["getTaskHistory", "archiveTask", "unarchiveTask"],
+      "catalog": ["tasks.history", "tasks.archive", "tasks.unarchive"],
+      "status": "covered",
+      "issue": 38,
+      "authority": "tasks:read for owner-scoped history search with read-only import provenance; tasks:write for archive and restore. The preview freezes the parent and every child it moves; a changed or added child makes confirmation stale. Online-only in the browser (ADR 0022).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "recurring-series",
+      "action": "List recurring series; create, edit, pause, resume and end a series; skip, restore or delete one occurrence",
+      "webApi": [
+        "getRecurringSeries",
+        "createRecurringSeries",
+        "patchRecurringSeries",
+        "setRecurringSeriesState",
+        "changeRecurrenceOccurrence"
+      ],
+      "catalog": [
+        "recurrence.list",
+        "recurrence.create",
+        "recurrence.update",
+        "recurrence.set_state",
+        "recurrence.occurrence"
+      ],
+      "status": "covered",
+      "issue": 42,
+      "authority": "tasks:read for the owner-scoped series list with upcoming dates and exceptions; tasks:write for series and occurrence changes. Each preview freezes the series revision, and deleting an instance also freezes that task's revision. Generated instances are ordinary tasks changed with the task tools. Online-only in the browser (ADR 0023).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "time-history",
+      "action": "Read the worklog by day, week, task and project; add, edit and delete manual time entries and imported daily totals",
+      "webApi": [
+        "getTimeReport",
+        "createTimeEntry",
+        "updateTimeEntry",
+        "deleteTimeEntry"
+      ],
+      "catalog": ["time.report", "time_entries.mutate"],
+      "status": "covered",
+      "issue": 41,
+      "authority": "tasks:read for the owner-zone worklog report (at most 366 days); tasks:write for corrections. The preview freezes the entry revision, or the task revision and new entry ID for an addition; confirmation rechecks the 0 to 24 hour task-day bound and running focus. Focus entries and archived history are read-only. Stored entries are sync feed records (ADR 0050): an assistant write appends a feed change in the same transaction and reaches every device in its next round. The browser keeps a 90-day window in its offline cache; with a connection it writes through these API functions, offline through the sync outbox.",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "counters",
+      "action": "Read counter values with derived streaks; set, raise or lower a day's value; start and stop a stopwatch; create, edit and delete counters",
+      "webApi": [
+        "getCounterHistory",
+        "createCounter",
+        "updateCounter",
+        "deleteCounter",
+        "recordCounterDay",
+        "controlCounterStopwatch"
+      ],
+      "catalog": ["counters.history", "counters.mutate", "counters.record"],
+      "status": "covered",
+      "issue": 64,
+      "authority": "metrics:read for owner-zone counter history (at most 366 days); metrics:write for writes. Day writes name the day revision read (0 when empty) and are rechecked at confirmation; definition edits, deletes and stopwatch start/stop freeze the counter revision. Deleting removes the counter's recorded days. Online-only in the browser (ADR 0025).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "evaluations",
+      "action": "Read daily evaluations with Tadooer focus per day; create or edit a day's evaluation",
+      "webApi": ["getEvaluations", "saveEvaluation"],
+      "catalog": ["evaluations.list", "evaluations.write"],
+      "status": "covered",
+      "issue": 64,
+      "authority": "metrics:read for evaluations and derived focus over at most 366 days; metrics:write for writes, which name the evaluation revision read (0 for a new day). Imported focus session durations are read-only history (ADR 0025).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "day-order",
+      "action": "Read and reorder the saved order of Today and each planned day; plan tasks for tomorrow",
+      "webApi": [],
+      "catalog": ["day_order.get", "day_order.reorder"],
+      "status": "partial",
+      "issue": 98,
+      "authority": "tasks:read for one date's order (the owner's planning date by default); tasks:write for a full-list reorder. A day order has no entity revision to freeze, so confirmation repeats the preview's day-order revision and exact-membership checks. Plan-for-tomorrow has no dedicated tool: the assistant sets planned days with tasks.update and then reorders. Saved day orders are sync feed records (ADR 0050): an assistant reorder appends a feed change in the same transaction and reaches every device in its next round. The browser reads day orders from its offline cache and reorders through the sync outbox, so it has no day-order API function.",
+      "source": "apps/web/src/local-store.ts"
+    },
+    {
+      "id": "boards",
+      "action": "Boards: list configurations with computed panel membership and markers; create (blank or Eisenhower/Kanban template), edit, reorder and delete boards; order a panel manually; move a task into a panel with an explicit change list",
+      "webApi": [
+        "getBoards",
+        "getBoardView",
+        "createBoard",
+        "updateBoard",
+        "reorderBoards",
+        "deleteBoard",
+        "reorderBoardPanel",
+        "moveTaskToPanel"
+      ],
+      "catalog": ["boards.list", "boards.mutate"],
+      "status": "covered",
+      "issue": 63,
+      "authority": "tasks:read for boards and their computed membership; tasks:write for every board mutation. The preview freezes the board revision (and the task revision for a move) and names the tag, marker, done, project, planned-day and backlog changes a move applies; confirmation repeats the checks inside its transaction. Online-only in the browser (ADR 0028).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "sections",
+      "action": "Sections inside a project or tag: list, create, rename, collapse, set ordered members, reorder and delete",
+      "webApi": [
+        "getSections",
+        "createSection",
+        "updateSection",
+        "reorderSections",
+        "deleteSection"
+      ],
+      "catalog": ["sections.list", "sections.mutate"],
+      "status": "covered",
+      "issue": 63,
+      "authority": "tasks:read for a context's sections; tasks:write for mutations, which freeze the section revisions they touch. Members must be active tasks of the context; a task leaves any sibling section when it is placed (ADR 0028).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "task-views",
+      "action": "Saved task views per context (sort, group, filter, collapsed groups): list and set",
+      "webApi": ["getTaskViews", "setTaskView"],
+      "catalog": ["task_views.list", "task_views.set"],
+      "status": "covered",
+      "issue": 63,
+      "authority": "tasks:read to list; tasks:write to set one context's view with the revision read (0 before the first save). A view has no entity ID to freeze, so confirmation repeats the revision check (ADR 0028).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "menu-folders",
+      "action": "Sidebar folders for projects and tags: list, create, rename, collapse, nest, set items, reorder and delete",
+      "webApi": [
+        "getMenuFolders",
+        "createMenuFolder",
+        "updateMenuFolder",
+        "reorderMenuFolders",
+        "deleteMenuFolder"
+      ],
+      "catalog": ["menu_folders.list", "menu_folders.mutate"],
+      "status": "covered",
+      "issue": 63,
+      "authority": "tasks:read to list; tasks:write for mutations, which freeze the folder revisions they touch. An item sits in one folder; folders nest at most eight levels (ADR 0028).",
       "source": "apps/web/src/api.ts"
     },
     {
       "id": "templates-read",
       "action": "Template and set libraries",
-      "webApi": [
-        "getTemplateLibrary",
-        "getTemplateSets"
-      ],
-      "catalog": [
-        "templates.list",
-        "template-sets.list"
-      ],
+      "webApi": ["getTemplateLibrary", "getTemplateSets"],
+      "catalog": ["templates.list", "template-sets.list"],
       "status": "covered",
       "issue": 39,
       "authority": "Catalog read scope and explicit library query semantics.",
@@ -281,16 +552,17 @@
     },
     {
       "id": "templates-write",
-      "action": "Template authoring, archive, from-task and set creation",
+      "action": "Template authoring, archive, from-task, pool slots and set creation",
       "webApi": [
         "createTemplate",
         "createTemplateFromTask",
         "patchTemplate",
         "archiveTemplate",
+        "createTemplatePoolSlot",
         "createTemplateSet"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": ["templates.mutate", "template_sets.create"],
+      "status": "covered",
       "issue": 57,
       "authority": "Library/source revisions, atomic membership and explicit archive approval.",
       "source": "apps/web/src/api.ts"
@@ -298,14 +570,8 @@
     {
       "id": "templates-use",
       "action": "Instantiate a template or set",
-      "webApi": [
-        "instantiateTemplate",
-        "instantiateTemplateSet"
-      ],
-      "catalog": [
-        "templates.instantiate",
-        "template_sets.instantiate"
-      ],
+      "webApi": ["instantiateTemplate", "instantiateTemplateSet"],
+      "catalog": ["templates.instantiate", "template_sets.instantiate"],
       "status": "covered",
       "issue": 33,
       "authority": "Freeze source revisions and destination; multi-task creation uses consequential approval policy.",
@@ -314,12 +580,8 @@
     {
       "id": "pools-read",
       "action": "Choice pool library",
-      "webApi": [
-        "getChoicePools"
-      ],
-      "catalog": [
-        "pools.list"
-      ],
+      "webApi": ["getChoicePools"],
+      "catalog": ["pools.list"],
       "status": "covered",
       "issue": 39,
       "authority": "Catalog read scope; eligibility and policy data are not new task state.",
@@ -327,17 +589,20 @@
     },
     {
       "id": "pools-write",
-      "action": "Pool authoring, slots, completion history and placeholder creation/suggestion",
+      "action": "Pool authoring, completion history and placeholder creation/suggestion",
       "webApi": [
         "createChoicePool",
         "patchChoicePool",
-        "createTemplatePoolSlot",
         "recordChoicePoolCompletion",
         "createPlanningPlaceholder",
         "suggestPlanningPlaceholder"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": [
+        "pools.mutate",
+        "placeholders.create",
+        "placeholders.suggestion"
+      ],
+      "status": "covered",
       "issue": 57,
       "authority": "History facts and explicit override audit must retain policy semantics and stable replay identities.",
       "source": "apps/web/src/api.ts"
@@ -345,12 +610,8 @@
     {
       "id": "pools-resolve",
       "action": "Resolve a planning placeholder",
-      "webApi": [
-        "resolvePlanningPlaceholder"
-      ],
-      "catalog": [
-        "placeholders.resolve"
-      ],
+      "webApi": ["resolvePlanningPlaceholder"],
+      "catalog": ["placeholders.resolve"],
       "status": "covered",
       "issue": 33,
       "authority": "Expected placeholder/source revisions; atomic task creation, history and consumed preview.",
@@ -360,10 +621,7 @@
       "id": "habits",
       "action": "Habit lifecycle, canonical completion and metrics",
       "webApi": [],
-      "catalog": [
-        "habits.list",
-        "habits.mutate"
-      ],
+      "catalog": ["habits.list", "habits.mutate"],
       "status": "covered",
       "issue": 39,
       "authority": "UI uses immutable sync commands; assistant preview binds habit revision and period completion deduplicates.",
@@ -372,14 +630,11 @@
     {
       "id": "calendar-import",
       "action": "Calendar import preview/apply",
-      "webApi": [
-        "previewCalendarImport",
-        "applyCalendarImport"
-      ],
-      "catalog": [],
-      "status": "gap",
+      "webApi": ["previewCalendarImport", "applyCalendarImport"],
+      "catalog": ["imports.list", "imports.apply"],
+      "status": "covered",
       "issue": 60,
-      "authority": "Read-only preview; reviewed provenance, exact target, permissions and retry-safe apply.",
+      "authority": "imports:read lists the owner's previewed jobs and candidates without rawIcs. imports:write applies one job bound to its exact input fingerprint and destination calendar; preview writes nothing, an applied job replays without writes (ADR 0038). Uploading the file stays owner-only.",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -390,23 +645,20 @@
         "createCalendarFeed",
         "revokeCalendarFeed"
       ],
-      "catalog": [],
-      "status": "gap",
+      "catalog": ["calendar_feeds.list", "calendar_feeds.revoke"],
+      "status": "partial",
       "issue": 60,
-      "authority": "Capability creation/revocation is consequential; never expose capability secrets in logs or read resources.",
+      "authority": "publication:read lists capabilities and per-calendar publication counts; no response carries the secret, its hash or the address. publication:write revokes a feed after preview. Creation stays owner-only because the address is shown once at creation (ADR 0038).",
       "source": "apps/web/src/api.ts"
     },
     {
       "id": "task-import",
       "action": "Super Productivity preview and reviewed apply",
-      "webApi": [
-        "previewTaskImport",
-        "applyTaskImport"
-      ],
+      "webApi": ["previewTaskImport", "applyTaskImport"],
       "catalog": [],
-      "status": "gap",
+      "status": "owner-only",
       "issue": 60,
-      "authority": "Hash-bound reviewed export, all-or-nothing transaction; real source export must not be echoed in tools.",
+      "authority": "The Super Productivity preview is stateless and the export is never stored, so there is no owner-prepared preview for the assistant to bind to; imports.list reports recorded provenance counts only (ADR 0038).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -424,12 +676,24 @@
       "source": "apps/web/src/api.ts"
     },
     {
+      "id": "data-export",
+      "action": "Download the owner's data export; preview and restore an export",
+      "webApi": [
+        "downloadDataExport",
+        "previewDataRestore",
+        "applyDataRestore"
+      ],
+      "catalog": [],
+      "status": "owner-only",
+      "issue": 93,
+      "authority": "A bearer credential must not obtain a complete copy of the owner's data or replace it. Export and restore need the browser session, same origin and the CSRF token; restore is previewed, bound to the previewed file hash and needs an explicit mode (empty account or replace). No secrets are in the file (ADR 0034).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
       "id": "confirm",
       "action": "Execute approved catalog preview",
       "webApi": [],
-      "catalog": [
-        "automation.confirm"
-      ],
+      "catalog": ["automation.confirm"],
       "status": "internal",
       "issue": 33,
       "authority": "Confirmation resolves the stored operation scope; advertised write scopes are alternatives, not a demand for every scope. Approval policy and stale/replay checks remain server enforced.",
@@ -437,22 +701,57 @@
     },
     {
       "id": "future-parity",
-      "action": "Full hierarchy, archived history, recurrence and manual worklogs",
+      "action": "Remaining parity actions: capture syntax and calendar subscriptions",
       "webApi": [],
       "catalog": [],
       "status": "future",
       "issue": 32,
-      "authority": "Add each new user action to this inventory as its domain slice is implemented. Dependencies: #27, #38, #41, #42.",
+      "authority": "Add each new user action to this inventory as its domain slice is implemented. Dependencies: #90, #91. Offline structural writes (#92, ADR 0033) are browser sync internals under the sync-internals row. Hierarchy (#27), archived history (#38), work history (#41), recurrence (#42), boards and views (#63), counters and evaluations (#64), focus preferences (#65), plugin data (#66) and application preferences (#67) have their own rows.",
       "source": "docs/superpowers/plans/2026-09-20-parity-and-calendar-hub.md"
     },
     {
+      "id": "calendar-bridge-review",
+      "action": "Calendar bridge status, pending writes, blocked events, conflicts and deletion decisions",
+      "webApi": [
+        "getCalendarBridgeOverview",
+        "getCalendarBridgeReview",
+        "decideCalendarBridgeDeletion",
+        "resolveCalendarBridgeConflict"
+      ],
+      "catalog": [
+        "calendar_bridge.status",
+        "calendar_bridge.decide_deletion",
+        "calendar_bridge.resolve_conflict"
+      ],
+      "status": "covered",
+      "issue": 48,
+      "authority": "calendar_bridge:read returns mapping summaries and, per mapping, blocked events, conflicts with both retained versions and unfinished writes; never a credential or raw iCalendar. calendar_bridge:review decides one deletion or conflict bound to the link revision: approving a deletion and resolving a conflict are consequential, keeping the other copy is ordinary (ADR 0044).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
+      "id": "calendar-bridge-mappings",
+      "action": "Preview, create, pause/resume, remove and run a calendar mapping",
+      "webApi": [
+        "previewCalendarBridgeMapping",
+        "createCalendarBridgeMapping",
+        "setCalendarBridgeMappingEnabled",
+        "removeCalendarBridgeMapping",
+        "runCalendarBridgeMapping"
+      ],
+      "catalog": [],
+      "status": "owner-only",
+      "issue": 48,
+      "authority": "Choosing which calendars exchange events, discarding pending writes and sending queued writes to both providers stay with the owner in the browser (ADR 0044).",
+      "source": "apps/web/src/api.ts"
+    },
+    {
       "id": "future-bridge",
-      "action": "Calendar mapping/conflict/background bridge controls",
+      "action": "Background calendar bridge passes",
       "webApi": [],
       "catalog": [],
       "status": "future",
-      "issue": 48,
-      "authority": "Require explicit mapped writable calendars and scoped consequential-action approval; no broad provider token reuse.",
+      "issue": 46,
+      "authority": "A scheduled worker runs passes; until then the owner runs them. Require explicit mapped writable calendars and scoped consequential-action approval; no broad provider token reuse.",
       "source": "docs/discovery/2026-09-20-parity-assistants-calendar-hub.md"
     },
     {
@@ -460,9 +759,9 @@
       "action": "Authenticated calendar ICS export",
       "webApi": [],
       "catalog": [],
-      "status": "gap",
+      "status": "owner-only",
       "issue": 60,
-      "authority": "The UI downloads through an authenticated link outside api.ts; delegated export needs an explicit read scope and bounded content delivery.",
+      "authority": "The ICS download is a browser file outside api.ts. calendar_feeds.list reports each calendar's published event count instead of delivering the content (ADR 0038).",
       "source": "apps/web/src/calendar-migration.tsx"
     },
     {

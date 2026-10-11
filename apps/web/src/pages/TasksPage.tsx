@@ -1,16 +1,55 @@
+import { PageHeader } from "../components/ui/page-header.tsx";
 import { DeadlineFields } from "../components/tasks/DeadlineFields.tsx";
-import type { SyntheticEvent } from "react";
+import { useState, type ReactElement, type SyntheticEvent } from "react";
+import { groupTaskHierarchy, zonedCalendarDate } from "@suite/domain";
+import {
+  TaskChildrenSection,
+  TaskPlacementControls,
+  type TaskHierarchyActions,
+} from "../components/tasks/TaskHierarchy.tsx";
 import type {
   BaikalStatusResponse,
+  Note,
   Project,
   Subtask,
   Tag,
   Task,
+  TaskPatchRequest,
 } from "@suite/contracts";
+import { TaskPlanningForm } from "../components/tasks/TaskPlanningForm.tsx";
 import { Field } from "../field.tsx";
 import { TimeBlockForm } from "../time-block-form.tsx";
+import { Button } from "../components/ui/button.tsx";
+import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import { Checkbox } from "../components/ui/checkbox.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
+import { Input } from "../components/ui/input.tsx";
+import { NativeSelect } from "../components/ui/native-select.tsx";
+import { SectionHeading } from "../components/ui/section-heading.tsx";
+import {
+  OrganizationPanel,
+  type NoteQueue,
+  type OrganizationQueue,
+} from "../components/organization/OrganizationPanel.tsx";
+import { TaskLinksPanel } from "../components/tasks/TaskLinksPanel.tsx";
+import { NoteMarkdown } from "../components/notes/NoteMarkdown.tsx";
+import { useApplicationPreferences } from "../application-preferences.tsx";
+import {
+  RecurringSeriesManager,
+  TaskRecurrencePanel,
+} from "../components/tasks/TaskRecurrence.tsx";
+import {
+  MenuFolderManager,
+  SectionsPanel,
+  TaskViewControls,
+  applyTaskView,
+  groupByFolder,
+  useMenuFolders,
+  useSavedTaskView,
+  viewContextFor,
+} from "../components/tasks/TaskViews.tsx";
 
-export interface TasksPageProps {
+export interface TasksPageProps extends TaskHierarchyActions {
   readonly taskIdFilter?: string;
   readonly onClearTaskIdFilter?: () => void;
   readonly tasks: readonly Task[];
@@ -63,11 +102,35 @@ export interface TasksPageProps {
   ) => Promise<boolean>;
   readonly onRemoveTask: (task: Task) => Promise<void>;
   readonly onRecoverTask: (task: Task) => Promise<void>;
+  /** Moves a top-level task and its children to History (ADR 0022); online only. */
+  readonly onArchiveTask?: (task: Task) => Promise<void>;
+  /** Render every task's editor open; the page opens them per task. */
+  readonly editorsOpen?: boolean;
+  /** Enables project/tag/note management when a session is available. */
+  readonly organization?: {
+    readonly csrfToken: string;
+    readonly online: boolean;
+    readonly onProjectsChange: (projects: readonly Project[]) => void;
+    readonly onTagsChange: (tags: readonly Tag[]) => void;
+    /** ADR 0033: lifecycle and appearance edits through the offline outbox. */
+    readonly queue?: OrganizationQueue;
+    /** ADR 0046: notes from the offline cache and their outbox writes. */
+    readonly notes?: readonly Note[];
+    readonly noteQueue?: NoteQueue;
+  };
+  /** Owner planning zone for date-only plans (ADR 0020). */
+  readonly timeZone?: string;
+  readonly onSubmitTaskPlanning?: (
+    task: Task,
+    patch: TaskPatchRequest,
+  ) => Promise<void>;
 }
 
 export const TasksPage = ({
-  taskIdFilter,
+  taskIdFilter = "",
   onClearTaskIdFilter,
+  tasks,
+  organization,
   visibleTasks,
   recovery,
   projects,
@@ -96,295 +159,585 @@ export const TasksPage = ({
   onChangeTaskStatus,
   onRemoveTask,
   onRecoverTask,
+  onArchiveTask,
+  editorsOpen = false,
+  timeZone = "UTC",
+  onSubmitTaskPlanning,
+  onCreateChildTask,
+  onMoveTask,
 }: TasksPageProps) => {
-  return (
-    <>
-      <section aria-labelledby="organization-title">
-        <h3 id="organization-title">Projects and tags</h3>
-        <div className="task-actions">
-          <form
-            onSubmit={(event) => void onSubmitOrganization(event, "project")}
-          >
-            <Field label="New project" name="title" autoComplete="off" />
-            <button disabled={busy}>Add project</button>
-          </form>
-          <form onSubmit={(event) => void onSubmitOrganization(event, "tag")}>
-            <Field label="New tag" name="title" autoComplete="off" />
-            <button disabled={busy}>Add tag</button>
-          </form>
-        </div>
-      </section>
-      <div className="task-filter-bar" role="search" aria-label="Filter tasks">
-        <label>
-          Search
-          <input
-            type="search"
-            value={taskQuery}
-            onChange={(event) => onTaskQueryChange(event.currentTarget.value)}
-          />
-        </label>
-        <label>
-          Status
-          <select
-            value={taskStatusFilter}
-            onChange={(event) =>
-              onTaskStatusFilterChange(
-                event.currentTarget.value as "all" | Task["status"],
-              )
-            }
-          >
-            <option value="all">All</option>
-            <option value="open">Open</option>
-            <option value="completed">Completed</option>
-          </select>
-        </label>
-        <label>
-          Project
-          <select
-            value={taskProjectFilter}
-            onChange={(event) =>
-              onTaskProjectFilterChange(event.currentTarget.value)
-            }
-          >
-            <option value="">All projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Tag
-          <select
-            value={taskTagFilter}
-            onChange={(event) =>
-              onTaskTagFilterChange(event.currentTarget.value)
-            }
-          >
-            <option value="">All tags</option>
-            {tags.map((tag) => (
-              <option key={tag.id} value={tag.id}>
-                {tag.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
+  // ADR 0030: task notes use the same safe Markdown subset as notes.
+  const { markdownInNotes } = useApplicationPreferences().snapshot.preferences;
+  const visibleIds = new Set(visibleTasks.map(({ id }) => id));
+  const today = zonedCalendarDate(new Date(), timeZone);
+  // Saved view, sections and sidebar folders (ADR 0028): online HTTP records.
+  const viewContext = viewContextFor(taskProjectFilter, taskTagFilter);
+  const savedView = useSavedTaskView(
+    organization?.csrfToken,
+    organization?.online === true,
+    viewContext,
+  );
+  const { folders, setFolders } = useMenuFolders(
+    organization?.csrfToken,
+    organization?.online === true,
+  );
+  const viewLabels = {
+    tag: (tagId: string) =>
+      tags.find(({ id }) => id === tagId)?.displayName ?? "Unknown tag",
+    project: (projectId: string) =>
+      projects.find(({ id }) => id === projectId)?.title ?? "Unknown project",
+  };
+  // Children render under a visible parent; a child whose parent is filtered
+  // out stays visible at top level with its placement shown.
+  const topLevel = visibleTasks.filter(
+    (task) => task.parentId == null || !visibleIds.has(task.parentId),
+  );
+  const viewGroups = applyTaskView(
+    topLevel,
+    savedView.view,
+    { today, timeZone },
+    viewLabels,
+    savedView.timeSpentMinutes,
+  );
+  const { childrenByParent } = groupTaskHierarchy(visibleTasks);
+  const allChildren = groupTaskHierarchy(tasks).childrenByParent;
+  const titleById = new Map(tasks.map(({ id, title }) => [id, title]));
+  const parentCandidates = tasks.filter(
+    (task) => task.parentId == null && task.deletedAt == null,
+  );
+  // Every task's editor is several hundred nodes with the tag list, the
+  // planning and schedule forms and the link and recurrence panels; a long
+  // list renders them only for the tasks the owner opened.
+  const [editing, setEditing] = useState<ReadonlySet<string>>(() => new Set());
+  const isEditing = (id: string) => editorsOpen || editing.has(id);
+  const toggleEditing = (id: string) =>
+    setEditing((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const renderTask = (task: Task, siblings: readonly Task[]): ReactElement => (
+    <li
+      key={task.id}
+      className={[
+        task.status === "completed" ? "task--completed" : "",
+        task.parentId == null ? "" : "task--child",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="task-heading">
+        <strong>{task.title}</strong>
+        <small>
+          {task.status === "completed" ? "Completed" : "Open"} · Revision{" "}
+          {task.revision}
+        </small>
       </div>
-      <h3>Captured tasks</h3>
-      {taskIdFilter && (
-        <p>
-          Showing the linked task.{" "}
-          <button type="button" onClick={onClearTaskIdFilter}>
-            Show all tasks
-          </button>
+      {task.notes !== "" &&
+        (markdownInNotes ? (
+          <NoteMarkdown content={task.notes} />
+        ) : (
+          <span>{task.notes}</span>
+        ))}
+      {provenance[task.id] !== undefined && (
+        <p className="template-provenance">Created from a reusable template.</p>
+      )}
+      {task.plannedStart != null && (
+        <p className="planned-time">
+          Planned {new Date(task.plannedStart).toLocaleString()} ·{" "}
+          {task.estimateMinutes} minutes
         </p>
       )}
-      {visibleTasks.length === 0 ? (
-        <p className="muted">No tasks match these filters.</p>
-      ) : (
-        <ul className="tasks">
-          {visibleTasks.map((task) => (
-            <li
-              key={task.id}
-              className={task.status === "completed" ? "task--completed" : ""}
-            >
-              <div className="task-heading">
-                <strong>{task.title}</strong>
-                <small>
-                  {task.status === "completed" ? "Completed" : "Open"} ·
-                  Revision {task.revision}
-                </small>
-              </div>
-              {task.notes !== "" && <span>{task.notes}</span>}
-              {provenance[task.id] !== undefined && (
-                <p className="template-provenance">
-                  Created from a reusable template.
-                </p>
-              )}
-              {task.plannedStart != null && (
-                <p className="planned-time">
-                  Planned {new Date(task.plannedStart).toLocaleString()} ·{" "}
-                  {task.estimateMinutes} minutes
-                </p>
-              )}
-              <form
-                className="task-edit"
-                onSubmit={(event) => void onSubmitTaskEdit(event, task)}
-              >
-                <Field
-                  label="Title"
-                  name="title"
-                  autoComplete="off"
-                  defaultValue={task.title}
-                />
-                <Field
-                  label="Notes"
-                  name="notes"
-                  autoComplete="off"
-                  defaultValue={task.notes}
-                  required={false}
-                />
-                <label className="field">
-                  <span>Estimate minutes</span>
-                  <input
-                    name="estimateMinutes"
-                    type="number"
-                    min="1"
-                    max="720"
-                    defaultValue={task.estimateMinutes ?? ""}
-                  />
-                </label>
-                <DeadlineFields
-                  key={JSON.stringify(task.deadline)}
-                  deadline={task.deadline}
-                />
-                <button disabled={busy}>Save task</button>
-              </form>
-              <TimeBlockForm
-                task={task}
-                calendars={baikalCalendars}
-                busy={busy}
-                available={calendarActionsAvailable}
-                onSubmit={onSubmitTimeBlock}
-                onRemove={onRemoveTimeBlock}
-              />
-              <form
-                className="task-edit"
-                onSubmit={(event) => void onSubmitTaskOrganization(event, task)}
-              >
-                <label className="field">
-                  <span>Project</span>
-                  <select name="projectId" defaultValue={task.projectId ?? ""}>
-                    <option value="">No project</option>
-                    {projects
-                      .filter((project) => project.archivedAt === null)
-                      .map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.title}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <fieldset>
-                  <legend>Tags</legend>
-                  {tags
-                    .filter((tag) => tag.archivedAt === null)
-                    .map((tag) => (
-                      <label key={tag.id}>
-                        <input
-                          type="checkbox"
-                          name="tagIds"
-                          value={tag.id}
-                          defaultChecked={task.tagIds?.includes(tag.id)}
-                        />
-                        {tag.displayName}
-                      </label>
-                    ))}
-                </fieldset>
-                <button disabled={busy}>Save organization</button>
-              </form>
-              <div>
-                <strong>Checklist</strong>
-                <ul>
-                  {(subtasks[task.id] ?? []).map((subtask, index, items) => (
-                    <li key={subtask.id}>
-                      {subtask.completed ? "✓" : "○"} {subtask.title}
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void onChangeSubtask(subtask, "toggle")}
-                      >
-                        {subtask.completed ? "Reopen" : "Complete"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy || index === 0}
-                        onClick={() => void onChangeSubtask(subtask, "up")}
-                      >
-                        Move up
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy || index === items.length - 1}
-                        onClick={() => void onChangeSubtask(subtask, "down")}
-                      >
-                        Move down
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        disabled={busy}
-                        onClick={() => void onChangeSubtask(subtask, "delete")}
-                      >
-                        Delete item
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <form onSubmit={(event) => void onSubmitSubtask(event, task)}>
-                  <Field
-                    label="New checklist item"
-                    name="title"
-                    autoComplete="off"
-                  />
-                  <button disabled={busy}>Add item</button>
-                </form>
-              </div>
-              <div className="task-actions">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onSaveTaskAsTemplate(task)}
-                >
-                  Save as template
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    void onChangeTaskStatus(
-                      task,
-                      task.status === "completed" ? "reopen" : "complete",
-                    )
-                  }
-                >
-                  {task.status === "completed" ? "Reopen" : "Complete"}
-                </button>
-                <button
-                  className="btn-danger"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onRemoveTask(task)}
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {task.plannedStart == null && task.plannedDay != null && (
+        <p className="planned-time">
+          Planned for {task.plannedDay} · no time set
+        </p>
       )}
-      <details className="recovery">
-        <summary>Recently deleted tasks ({recovery.length})</summary>
-        {recovery.length === 0 ? (
-          <p className="muted">Nothing needs recovery.</p>
-        ) : (
-          <ul className="tasks">
-            {recovery.map((task) => (
-              <li key={task.id}>
-                <strong>{task.title}</strong>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onRecoverTask(task)}
-                >
-                  Restore task
-                </button>
-              </li>
-            ))}
-          </ul>
+      {isEditing(task.id) && (
+        <>
+          <form
+            className="task-edit"
+            onSubmit={(event) => void onSubmitTaskEdit(event, task)}
+          >
+            <Field
+              label="Title"
+              name="title"
+              autoComplete="off"
+              defaultValue={task.title}
+            />
+            <Field
+              label="Notes"
+              name="notes"
+              autoComplete="off"
+              defaultValue={task.notes}
+              required={false}
+            />
+            <label className="field">
+              <span>Estimate minutes</span>
+              <Input
+                name="estimateMinutes"
+                type="number"
+                min="1"
+                max="720"
+                defaultValue={task.estimateMinutes ?? ""}
+              />
+            </label>
+            <DeadlineFields
+              key={JSON.stringify(task.deadline)}
+              deadline={task.deadline}
+            />
+            <Button disabled={busy}>Save task</Button>
+          </form>
+          <TaskPlacementControls
+            task={task}
+            siblings={siblings}
+            parents={parentCandidates}
+            parentTitle={
+              task.parentId == null
+                ? null
+                : (titleById.get(task.parentId) ?? null)
+            }
+            hasChildren={(allChildren.get(task.id)?.length ?? 0) > 0}
+            busy={busy}
+            onMoveTask={onMoveTask}
+          />
+          <TimeBlockForm
+            task={task}
+            calendars={baikalCalendars}
+            busy={busy}
+            available={calendarActionsAvailable}
+            onSubmit={onSubmitTimeBlock}
+            onRemove={onRemoveTimeBlock}
+          />
+          {onSubmitTaskPlanning !== undefined && (
+            <TaskPlanningForm
+              key={`${task.id}:${String(task.revision)}`}
+              task={task}
+              timeZone={timeZone}
+              busy={busy}
+              available={true}
+              remindersAvailable={calendarActionsAvailable}
+              onSubmit={onSubmitTaskPlanning}
+            />
+          )}
+          <form
+            className="task-edit"
+            onSubmit={(event) => void onSubmitTaskOrganization(event, task)}
+          >
+            <label className="field">
+              <span>Project</span>
+              <NativeSelect
+                name="projectId"
+                defaultValue={task.projectId ?? ""}
+              >
+                <option value="">No project</option>
+                {projects
+                  .filter((project) => project.archivedAt === null)
+                  .map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+              </NativeSelect>
+            </label>
+            <fieldset>
+              <legend>Tags</legend>
+              {tags
+                .filter((tag) => tag.archivedAt === null)
+                .map((tag) => (
+                  <label key={tag.id}>
+                    <Checkbox
+                      name="tagIds"
+                      value={tag.id}
+                      defaultChecked={task.tagIds?.includes(tag.id) === true}
+                    />
+                    {tag.displayName}
+                  </label>
+                ))}
+            </fieldset>
+            <Button disabled={busy}>Save organization</Button>
+          </form>
+          <div>
+            <strong>Checklist</strong>
+            <ul>
+              {(subtasks[task.id] ?? []).map((subtask, index, items) => (
+                <li key={subtask.id}>
+                  {subtask.completed ? "✓" : "○"} {subtask.title}
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onChangeSubtask(subtask, "toggle")}
+                  >
+                    {subtask.completed ? "Reopen" : "Complete"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || index === 0}
+                    onClick={() => void onChangeSubtask(subtask, "up")}
+                  >
+                    Move up
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || index === items.length - 1}
+                    onClick={() => void onChangeSubtask(subtask, "down")}
+                  >
+                    Move down
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void onChangeSubtask(subtask, "delete")}
+                  >
+                    Delete item
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <form onSubmit={(event) => void onSubmitSubtask(event, task)}>
+              <Field
+                label="New checklist item"
+                name="title"
+                autoComplete="off"
+              />
+              <Button disabled={busy}>Add item</Button>
+            </form>
+          </div>
+        </>
+      )}
+      {task.parentId == null && (
+        <TaskChildrenSection
+          parent={task}
+          items={childrenByParent.get(task.id) ?? []}
+          allItems={allChildren.get(task.id) ?? []}
+          busy={busy}
+          renderChild={(child) =>
+            renderTask(child, allChildren.get(task.id) ?? [])
+          }
+          onCreateChildTask={onCreateChildTask}
+        />
+      )}
+      {isEditing(task.id) && organization !== undefined && (
+        <TaskLinksPanel
+          taskId={task.id}
+          csrfToken={organization.csrfToken}
+          online={organization.online}
+        />
+      )}
+      {isEditing(task.id) && organization !== undefined && (
+        <TaskRecurrencePanel
+          task={task}
+          csrfToken={organization.csrfToken}
+          online={organization.online}
+          today={today}
+          tags={tags}
+        />
+      )}
+      <div className="task-actions">
+        <Button
+          type="button"
+          variant={isEditing(task.id) ? "default" : "outline"}
+          aria-expanded={isEditing(task.id)}
+          aria-label={`${isEditing(task.id) ? "Close editor for" : "Edit"} “${task.title}”`}
+          onClick={() => toggleEditing(task.id)}
+        >
+          {isEditing(task.id) ? "Close editor" : "Edit"}
+        </Button>
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() => void onSaveTaskAsTemplate(task)}
+        >
+          Save as template
+        </Button>
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            void onChangeTaskStatus(
+              task,
+              task.status === "completed" ? "reopen" : "complete",
+            )
+          }
+        >
+          {task.status === "completed" ? "Reopen" : "Complete"}
+        </Button>
+        {onArchiveTask !== undefined && task.parentId == null && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || organization?.online === false}
+            title="Move this task and its children to History"
+            onClick={() => void onArchiveTask(task)}
+          >
+            Archive
+          </Button>
         )}
-      </details>
+        <Button
+          variant="destructive"
+          type="button"
+          disabled={busy}
+          onClick={() => void onRemoveTask(task)}
+        >
+          Delete
+        </Button>
+      </div>
+    </li>
+  );
+  return (
+    <>
+      <PageHeader
+        title="Tasks"
+        description="Every task, with filters and saved views."
+      />
+      <Card aria-labelledby="organization-title">
+        <CardHeader>
+          <SectionHeading
+            id="organization-title"
+            as="h2"
+            title="Projects and tags"
+          />
+        </CardHeader>
+        <CardContent>
+          <div className="task-actions">
+            <form
+              onSubmit={(event) => void onSubmitOrganization(event, "project")}
+            >
+              <Field label="New project" name="title" autoComplete="off" />
+              <Button disabled={busy}>Add project</Button>
+            </form>
+            <form onSubmit={(event) => void onSubmitOrganization(event, "tag")}>
+              <Field label="New tag" name="title" autoComplete="off" />
+              <Button disabled={busy}>Add tag</Button>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
+      {organization !== undefined && (
+        <OrganizationPanel
+          projects={projects}
+          tags={tags}
+          tasks={tasks}
+          {...organization}
+        />
+      )}
+      {organization !== undefined && (
+        <MenuFolderManager
+          csrfToken={organization.csrfToken}
+          online={organization.online}
+          folders={folders}
+          onFoldersChange={setFolders}
+          projects={projects}
+          tags={tags}
+          busy={busy}
+        />
+      )}
+      {organization !== undefined && (
+        <RecurringSeriesManager
+          csrfToken={organization.csrfToken}
+          online={organization.online}
+          projects={projects}
+          today={today}
+        />
+      )}
+      <Card className="task-filter-bar" role="search" aria-label="Filter tasks">
+        <CardContent className="flex flex-wrap items-end gap-2 pt-4">
+          <label>
+            Search
+            <Input
+              type="search"
+              value={taskQuery}
+              onChange={(event) => onTaskQueryChange(event.currentTarget.value)}
+            />
+          </label>
+          <label>
+            Status
+            <NativeSelect
+              value={taskStatusFilter}
+              onChange={(event) =>
+                onTaskStatusFilterChange(
+                  event.currentTarget.value as "all" | Task["status"],
+                )
+              }
+            >
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="completed">Completed</option>
+            </NativeSelect>
+          </label>
+          <label>
+            Project
+            <NativeSelect
+              value={taskProjectFilter}
+              onChange={(event) =>
+                onTaskProjectFilterChange(event.currentTarget.value)
+              }
+            >
+              <option value="">All projects</option>
+              {groupByFolder(
+                projects.filter(
+                  (project) =>
+                    !project.hiddenFromMenu || project.id === taskProjectFilter,
+                ),
+                folders,
+                "project",
+              ).map((group) =>
+                group.folder === null ? (
+                  group.items.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))
+                ) : (
+                  <optgroup
+                    key={group.folder.id}
+                    label={`${"· ".repeat(group.depth)}${group.folder.title}`}
+                  >
+                    {group.items.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                ),
+              )}
+            </NativeSelect>
+          </label>
+          <label>
+            Tag
+            <NativeSelect
+              value={taskTagFilter}
+              onChange={(event) =>
+                onTaskTagFilterChange(event.currentTarget.value)
+              }
+            >
+              <option value="">All tags</option>
+              {groupByFolder(tags, folders, "tag").map((group) =>
+                group.folder === null ? (
+                  group.items.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.displayName}
+                    </option>
+                  ))
+                ) : (
+                  <optgroup
+                    key={group.folder.id}
+                    label={`${"· ".repeat(group.depth)}${group.folder.title}`}
+                  >
+                    {group.items.map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.displayName}
+                      </option>
+                    ))}
+                  </optgroup>
+                ),
+              )}
+            </NativeSelect>
+          </label>
+        </CardContent>
+      </Card>
+      {organization !== undefined && (
+        <TaskViewControls
+          view={savedView.view}
+          online={organization.online}
+          tags={tags}
+          projects={projects}
+          message={savedView.message}
+          onSave={savedView.save}
+        />
+      )}
+      {organization !== undefined &&
+        viewContext.contextKind !== "all" &&
+        viewContext.contextKind !== "today" && (
+          <SectionsPanel
+            csrfToken={organization.csrfToken}
+            online={organization.online}
+            contextKind={viewContext.contextKind}
+            contextId={viewContext.contextId}
+            contextTitle={
+              viewContext.contextKind === "project"
+                ? viewLabels.project(viewContext.contextId)
+                : viewLabels.tag(viewContext.contextId)
+            }
+            tasks={tasks.filter(
+              (task) =>
+                task.deletedAt == null &&
+                (viewContext.contextKind === "project"
+                  ? task.projectId === viewContext.contextId
+                  : task.tagIds?.includes(viewContext.contextId) === true),
+            )}
+            busy={busy}
+          />
+        )}
+      {taskIdFilter !== "" && (
+        <Button type="button" onClick={onClearTaskIdFilter}>
+          Show all tasks
+        </Button>
+      )}
+      <SectionHeading as="h2" title="Captured tasks" />
+      {visibleTasks.length === 0 ||
+      viewGroups.every((group) => group.tasks.length === 0) ? (
+        <EmptyState title="No tasks match these filters." />
+      ) : (
+        viewGroups.map((group) => (
+          <div key={group.key} className="task-view-group">
+            {group.label !== "" && (
+              <SectionHeading
+                as="h3"
+                title={`${group.label} (${String(group.tasks.length)})`}
+              />
+            )}
+            <ul className="tasks">
+              {group.tasks.map((task) =>
+                renderTask(
+                  task,
+                  task.parentId == null
+                    ? []
+                    : (allChildren.get(task.parentId) ?? []),
+                ),
+              )}
+            </ul>
+          </div>
+        ))
+      )}
+      <Card className="recovery">
+        <CardHeader>
+          <SectionHeading
+            as="h2"
+            title={`Recently deleted tasks (${String(recovery.length)})`}
+          />
+        </CardHeader>
+        <CardContent>
+          {recovery.length === 0 ? (
+            <p className="muted">Nothing needs recovery.</p>
+          ) : (
+            <ul className="tasks">
+              {recovery.map((task) => (
+                <li key={task.id}>
+                  <strong>{task.title}</strong>
+                  {task.parentId != null && (
+                    <small>
+                      Child of{" "}
+                      {titleById.get(task.parentId) ?? "a deleted task"};
+                      restoring it alone makes it top-level if its parent is
+                      still deleted
+                    </small>
+                  )}
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onRecoverTask(task)}
+                  >
+                    Restore task
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 };

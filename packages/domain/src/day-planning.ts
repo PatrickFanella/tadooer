@@ -1,7 +1,16 @@
+import {
+  applyDayOrder,
+  defaultDayStartsAt,
+  planningDate,
+  planningDayWindow,
+} from "./day-order.ts";
+
 export interface CalmTask {
   readonly id: string;
   readonly status: "open" | "completed";
   readonly plannedStart?: string | null | undefined;
+  /** Owner-zone calendar date; ignored when plannedStart is set (ADR 0020). */
+  readonly plannedDay?: string | null | undefined;
   readonly deletedAt?: string | null | undefined;
 }
 export interface BusyInterval {
@@ -34,8 +43,11 @@ export interface CalmDayResult {
 }
 
 export interface TodayQueueResult {
+  /** Timed work already started and date-only work from earlier days. */
   readonly overdueTaskIds: readonly string[];
   readonly scheduledTodayTaskIds: readonly string[];
+  /** Date-only work planned for the owner's current calendar day. */
+  readonly plannedTodayTaskIds: readonly string[];
   readonly unscheduledTaskIds: readonly string[];
   readonly futureScheduledCount: number;
 }
@@ -138,12 +150,49 @@ export const buildTodayQueue = (input: {
   readonly at: string;
   readonly timeZone: string;
   readonly tasks: readonly CalmTask[];
+  /**
+   * ADR 0027: local time at which a new planning day starts. Before it, the
+   * previous date is still today. Absent or "00:00" means local midnight.
+   */
+  readonly dayStartsAt?: string | undefined;
+  /** ADR 0027: saved order of today's date-only tasks. */
+  readonly plannedTodayOrder?: readonly string[] | undefined;
 }): TodayQueueResult => {
   const now = Date.parse(input.at);
-  const dayEnd = Date.parse(zonedDayWindow(input.at, input.timeZone).to);
+  const dayStartsAt = input.dayStartsAt ?? defaultDayStartsAt;
+  const shifted = dayStartsAt !== defaultDayStartsAt;
+  const local = zonedParts(new Date(input.at), input.timeZone);
+  const today = shifted
+    ? planningDate(input.at, input.timeZone, dayStartsAt)
+    : [
+        String(local.year).padStart(4, "0"),
+        String(local.month).padStart(2, "0"),
+        String(local.day).padStart(2, "0"),
+      ].join("-");
+  const dayEnd = Date.parse(
+    shifted
+      ? planningDayWindow(today, input.timeZone, dayStartsAt).to
+      : zonedDayWindow(input.at, input.timeZone).to,
+  );
   const open = input.tasks.filter(
     ({ status, deletedAt }) => status === "open" && deletedAt == null,
   );
+  // A planned start takes precedence over a planned day.
+  const dated = open.filter(
+    (task): task is CalmTask & { readonly plannedDay: string } =>
+      task.plannedStart == null && task.plannedDay != null,
+  );
+  const dayStart = (day: string): number => {
+    const [year, month, date] = day.split("-").map(Number) as [
+      number,
+      number,
+      number,
+    ];
+    return instantForZonedLocal(
+      { year, month, day: date, hour: 0, minute: 0 },
+      input.timeZone,
+    ).getTime();
+  };
   const scheduled = open
     .filter(
       (task): task is CalmTask & { readonly plannedStart: string } =>
@@ -154,24 +203,42 @@ export const buildTodayQueue = (input: {
         Date.parse(left.plannedStart) - Date.parse(right.plannedStart) ||
         left.id.localeCompare(right.id),
     );
+  const overdue = [
+    ...scheduled
+      .filter(({ plannedStart }) => Date.parse(plannedStart) < now)
+      .map(({ id, plannedStart }) => ({ id, at: Date.parse(plannedStart) })),
+    ...dated
+      .filter(({ plannedDay }) => plannedDay < today)
+      .map(({ id, plannedDay }) => ({ id, at: dayStart(plannedDay) })),
+  ].toSorted(
+    (left, right) => left.at - right.at || left.id.localeCompare(right.id),
+  );
 
   return {
-    overdueTaskIds: scheduled
-      .filter(({ plannedStart }) => Date.parse(plannedStart) < now)
-      .map(({ id }) => id),
+    overdueTaskIds: overdue.map(({ id }) => id),
     scheduledTodayTaskIds: scheduled
       .filter(({ plannedStart }) => {
         const start = Date.parse(plannedStart);
         return start >= now && start < dayEnd;
       })
       .map(({ id }) => id),
+    plannedTodayTaskIds: applyDayOrder(
+      dated
+        .filter(({ plannedDay }) => plannedDay === today)
+        .map(({ id }) => id)
+        .toSorted((left, right) => left.localeCompare(right)),
+      input.plannedTodayOrder ?? [],
+    ),
     unscheduledTaskIds: open
-      .filter(({ plannedStart }) => plannedStart == null)
+      .filter(
+        ({ plannedStart, plannedDay }) =>
+          plannedStart == null && plannedDay == null,
+      )
       .map(({ id }) => id)
       .toSorted((left, right) => left.localeCompare(right)),
-    futureScheduledCount: scheduled.filter(
-      ({ plannedStart }) => Date.parse(plannedStart) >= dayEnd,
-    ).length,
+    futureScheduledCount:
+      scheduled.filter(({ plannedStart }) => Date.parse(plannedStart) >= dayEnd)
+        .length + dated.filter(({ plannedDay }) => plannedDay > today).length,
   };
 };
 const minute = (value: string): number =>

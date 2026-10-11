@@ -3,13 +3,30 @@ import type {
   ActiveSession,
   BaikalStatusResponse,
   DayPlanResponse,
+  Note,
   PlanningPreferences,
   PlannerResponse,
+  SavedDayOrder,
   Task,
 } from "@suite/contracts";
-import { FocusPanel, type FocusPanelCommand } from "../focus-panel.tsx";
+import {
+  FocusPanel,
+  type FocusPanelCommand,
+  type FocusPanelTimerProps,
+} from "../focus-panel.tsx";
 import { TodayQueue } from "../today-queue.tsx";
 import { TaskCaptureForm } from "../components/tasks/TaskCaptureForm.tsx";
+import { Badge } from "../components/ui/badge.tsx";
+import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import { Checkbox } from "../components/ui/checkbox.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
+import { PageHeader } from "../components/ui/page-header.tsx";
+import { SectionHeading } from "../components/ui/section-heading.tsx";
+import { addCalendarDays, planningDate } from "@suite/domain";
+import { useDayOrders, type DayOrderActions } from "../day-order.tsx";
+import { PlanTomorrowPanel } from "../plan-tomorrow.tsx";
+import { NoteMarkdown } from "../components/notes/NoteMarkdown.tsx";
+import { useApplicationPreferences } from "../application-preferences.tsx";
 
 export interface TodayPageProps {
   readonly dayPlan: DayPlanResponse | undefined;
@@ -37,6 +54,23 @@ export interface TodayPageProps {
   ) => Promise<void>;
   readonly onRemoveTimeBlock: (task: Task) => Promise<void>;
   readonly onViewTasks: () => void;
+  /** Enables online quick capture. */
+  readonly csrfToken?: string | undefined;
+  /** Called after tasks were captured so the task list can refresh. */
+  readonly onTasksPlanned?: (() => void) | undefined;
+  /**
+   * ADR 0050: saved day orders from the offline cache, and the writes that
+   * queue a reorder or a plan-for-tomorrow. Both work without a connection.
+   */
+  readonly dayOrders?: readonly SavedDayOrder[] | undefined;
+  readonly dayOrderActions?: DayOrderActions | undefined;
+  /** ADR 0029: server timer state and the preset control. */
+  readonly focus?: FocusPanelTimerProps | undefined;
+  /**
+   * ADR 0046: notes pinned to Today, read from the offline cache in the
+   * owner's order. They render without a connection.
+   */
+  readonly pinnedNotes?: readonly Note[] | undefined;
 }
 const calmStateLabel: Readonly<Record<DayPlanResponse["state"], string>> = {
   working: "Working",
@@ -57,6 +91,8 @@ export const updateHiddenCalendarIds = (
       : [...current, calendarId];
 
 export const TodayPage = (props: TodayPageProps) => {
+  // ADR 0030: the owner's daily summary note text.
+  const { dailySummaryNote } = useApplicationPreferences().snapshot.preferences;
   const {
     dayPlan,
     planningPreferences,
@@ -75,6 +111,12 @@ export const TodayPage = (props: TodayPageProps) => {
     onSubmitTimeBlock,
     onRemoveTimeBlock,
     onViewTasks,
+    csrfToken,
+    onTasksPlanned,
+    dayOrders: savedDayOrders,
+    dayOrderActions,
+    pinnedNotes = [],
+    focus,
   } = props;
   const [logicalAt, setLogicalAt] = useState(
     dayPlan?.at ?? new Date().toISOString(),
@@ -93,30 +135,87 @@ export const TodayPage = (props: TodayPageProps) => {
     return () => window.clearInterval(timer);
   }, []);
   const preferences = planningPreferences ?? dayPlan?.preferences;
+  // ADR 0027: today is the owner's planning date, which may start after
+  // local midnight.
+  const today = planningDate(
+    logicalAt,
+    preferences?.timeZone ?? "UTC",
+    preferences?.dayStartsAt,
+  );
+  const tomorrow = addCalendarDays(today, 1);
+  const dayOrders = useDayOrders({
+    tasks,
+    saved: savedDayOrders,
+    actions: preferences === undefined ? undefined : dayOrderActions,
+  });
   return (
-    <div className="today-page">
-      <header className="today-header">
-        <p className="step">Calm daily workspace</p>
-        <h1>Today</h1>
-        <p>
-          {dayPlan === undefined
-            ? "Choose the next useful task from your local workspace."
-            : calmStateLabel[dayPlan.state]}
-        </p>
+    <div className="today-page mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <PageHeader
+        eyebrow="Calm Day"
+        title="Today"
+        description={
+          dayPlan === undefined
+            ? "Here is the day."
+            : calmStateLabel[dayPlan.state]
+        }
+      >
         {dayPlan?.nextTask === null ? (
-          <p className="hint">No scheduled task is ready next.</p>
+          <p className="text-xs text-subtext-2">Nothing is scheduled next.</p>
         ) : dayPlan?.nextTask !== undefined ? (
-          <p className="hint">Next: {dayPlan.nextTask.title}</p>
+          <p className="text-xs text-subtext-2">
+            Next: {dayPlan.nextTask.title}
+          </p>
         ) : null}
-      </header>
-      <p className="today-capabilities" aria-live="polite">
+      </PageHeader>
+      <p
+        className="flex items-center gap-2 text-xs text-subtext-2"
+        aria-live="polite"
+      >
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
         {syncStatus === "offline"
-          ? "Offline. Tasks can be captured, completed, and reopened."
+          ? "Offline. You can still add, complete and reopen tasks. They sync later."
           : syncStatus === "syncing"
             ? "Syncing local tasks."
-            : "Task sync is available."}
+            : "Task sync is on."}
       </p>
-      <TaskCaptureForm busy={busy} onSubmit={onSubmitTask} />
+      {dailySummaryNote.trim() !== "" && (
+        <Card aria-labelledby="daily-summary-note-title">
+          <CardHeader>
+            <SectionHeading
+              as="h3"
+              id="daily-summary-note-title"
+              title="Daily note"
+            />
+          </CardHeader>
+          <CardContent>
+            <NoteMarkdown content={dailySummaryNote} />
+          </CardContent>
+        </Card>
+      )}
+      {pinnedNotes.length > 0 && (
+        <Card aria-labelledby="pinned-notes-title">
+          <CardHeader>
+            <SectionHeading
+              as="h3"
+              id="pinned-notes-title"
+              title="Pinned notes"
+            />
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {pinnedNotes.map((note) => (
+              <article key={note.id} aria-label="Pinned note">
+                <NoteMarkdown content={note.content} />
+              </article>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+      <TaskCaptureForm
+        busy={busy}
+        onSubmit={onSubmitTask}
+        csrfToken={syncStatus === "offline" ? undefined : csrfToken}
+        onTasksCreated={onTasksPlanned}
+      />
       <FocusPanel
         tasks={tasks}
         activeSession={activeSession}
@@ -125,6 +224,7 @@ export const TodayPage = (props: TodayPageProps) => {
         online={focusActionsAvailable}
         onCommand={onFocusCommand}
         showStartForm={false}
+        focus={focus}
       />
       <TodayQueue
         at={logicalAt}
@@ -142,76 +242,113 @@ export const TodayPage = (props: TodayPageProps) => {
         onSubmitTimeBlock={onSubmitTimeBlock}
         onRemoveTimeBlock={onRemoveTimeBlock}
         onViewTasks={onViewTasks}
+        plannedTodayOrder={dayOrders.orders.get(today)?.taskIds}
+        onMovePlanned={
+          dayOrders.enabled
+            ? (taskId, direction) =>
+                void dayOrders.move(today, taskId, direction)
+            : undefined
+        }
       />
-      <section className="week-plan" aria-labelledby="week-plan-title">
-        <div className="section-heading">
-          <div>
-            <p className="step">Real calendar context</p>
-            <h2 id="week-plan-title">Week plan</h2>
-          </div>
-          {planner !== null ? (
-            <span className={`freshness freshness--${planner.freshness.state}`}>
-              {planner.freshness.message}
-            </span>
-          ) : null}
-        </div>
-        {planner === null || planner.events.length === 0 ? (
-          <p className="muted">No supported events in this week.</p>
-        ) : (
-          <>
-            <fieldset className="calendar-filters">
-              <legend>Calendars</legend>
-              {Array.from(
-                new Map(
-                  planner.events.map((event) => [
-                    event.identity.calendarId,
-                    event.source,
-                  ]),
-                ),
-              ).map(([calendarId, source]) => (
-                <label key={calendarId}>
-                  <input
-                    type="checkbox"
-                    checked={!hiddenCalendarIds.includes(calendarId)}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked;
-                      setHiddenCalendarIds((current) =>
-                        updateHiddenCalendarIds(current, calendarId, checked),
-                      );
-                    }}
-                  />
-                  {source.providerDisplayLabel} · {source.calendarName}
-                </label>
-              ))}
-            </fieldset>
-            <ol className="timeline">
-              {planner.events
-                .filter(
-                  (event) =>
-                    !hiddenCalendarIds.includes(event.identity.calendarId),
-                )
-                .map((event) => (
-                  <li key={`${event.identity.calendarId}:${event.href}`}>
-                    <time dateTime={event.startsAt}>
-                      {preferences === undefined
-                        ? new Date(event.startsAt).toLocaleString()
-                        : new Intl.DateTimeFormat("en-US", {
-                            timeZone: preferences.timeZone,
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          }).format(new Date(event.startsAt))}
-                    </time>
-                    <strong>{event.summary || "Untitled event"}</strong>
-                    <span className="source-badge">
-                      {event.source.providerDisplayLabel} ·{" "}
-                      {event.source.calendarName}
-                    </span>
-                  </li>
+      {dayOrders.message !== null ? (
+        <p className="message" role="status">
+          {dayOrders.message}
+        </p>
+      ) : null}
+      {preferences === undefined ? null : (
+        <PlanTomorrowPanel
+          date={tomorrow}
+          today={today}
+          tasks={tasks}
+          order={dayOrders.orders.get(tomorrow)}
+          available={dayOrders.enabled}
+          busy={busy || dayOrders.pending}
+          onPlan={(selected) => dayOrders.plan(tomorrow, selected)}
+          onMove={(taskId, direction) =>
+            void dayOrders.move(tomorrow, taskId, direction)
+          }
+        />
+      )}
+      <Card className="week-plan" aria-labelledby="week-plan-title">
+        <CardHeader>
+          <SectionHeading
+            id="week-plan-title"
+            eyebrow="From your calendars"
+            title="Week plan"
+            actions={
+              planner !== null ? (
+                <Badge
+                  variant={
+                    planner.freshness.state === "fresh" ? "success" : "warning"
+                  }
+                >
+                  {planner.freshness.message}
+                </Badge>
+              ) : undefined
+            }
+          />
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {planner === null || planner.events.length === 0 ? (
+            <EmptyState title="No supported events in this week." />
+          ) : (
+            <>
+              <fieldset className="calendar-filters">
+                <legend>Calendars</legend>
+                {Array.from(
+                  new Map(
+                    planner.events.map((event) => [
+                      event.identity.calendarId,
+                      event.source,
+                    ]),
+                  ),
+                ).map(([calendarId, source]) => (
+                  <label key={calendarId}>
+                    <Checkbox
+                      checked={!hiddenCalendarIds.includes(calendarId)}
+                      onCheckedChange={(checked) => {
+                        setHiddenCalendarIds((current) =>
+                          updateHiddenCalendarIds(
+                            current,
+                            calendarId,
+                            checked === true,
+                          ),
+                        );
+                      }}
+                    />
+                    {source.providerDisplayLabel} · {source.calendarName}
+                  </label>
                 ))}
-            </ol>
-          </>
-        )}
-      </section>
+              </fieldset>
+              <ol className="timeline">
+                {planner.events
+                  .filter(
+                    (event) =>
+                      !hiddenCalendarIds.includes(event.identity.calendarId),
+                  )
+                  .map((event) => (
+                    <li key={`${event.identity.calendarId}:${event.href}`}>
+                      <time dateTime={event.startsAt}>
+                        {preferences === undefined
+                          ? new Date(event.startsAt).toLocaleString()
+                          : new Intl.DateTimeFormat("en-US", {
+                              timeZone: preferences.timeZone,
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }).format(new Date(event.startsAt))}
+                      </time>
+                      <strong>{event.summary || "Untitled event"}</strong>
+                      <span className="source-badge">
+                        {event.source.providerDisplayLabel} ·{" "}
+                        {event.source.calendarName}
+                      </span>
+                    </li>
+                  ))}
+              </ol>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

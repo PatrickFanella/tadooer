@@ -32,6 +32,22 @@ const phaseOneCalDav = () => {
           "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:seed-event\r\nDTSTART:20260806T120000Z\r\nDTEND:20260806T130000Z\r\nSUMMARY:Existing appointment\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
       },
     ],
+    [
+      "/dav.php/calendars/alice/work/all-day.ics",
+      {
+        etag: '"all-day-1"',
+        rawIcs:
+          "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:all-day-event\r\nDTSTART;VALUE=DATE:20260806\r\nDTEND;VALUE=DATE:20260807\r\nSUMMARY:All-day planning\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      },
+    ],
+    [
+      "/dav.php/calendars/alice/work/provider-only-same-title.ics",
+      {
+        etag: '"provider-only-1"',
+        rawIcs:
+          "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:provider-only-same-title\r\nDTSTART:20260806T090000Z\r\nDTEND:20260806T093000Z\r\nSUMMARY:Plan focused work\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      },
+    ],
   ]);
   let version = 1;
   let failNextPutAfterCommit = false;
@@ -169,15 +185,35 @@ describe("Suite HTTP server", () => {
         expect(readiness.checks).toEqual({
           database: "ok",
           migrations: "current",
+          // ADR 0043: no worker settings in this configuration.
+          calendarBridge: "disabled",
         });
-        expect(readiness.migrationCount).toBe(22);
+        expect(readiness.migrationCount).toBe(49);
 
         const build = await fetch(`${server.baseUrl}/api/build`);
         expect(build.status).toBe(200);
         buildResponseSchema.parse(await build.json());
 
         const shell = await fetch(server.baseUrl);
-        expect(await shell.text()).toContain("Suite shell");
+        const shellHtml = await shell.text();
+        expect(shellHtml).toContain("Suite shell");
+        const nonce = /name="style-nonce" content="([^"]+)"/.exec(
+          shellHtml,
+        )?.[1];
+        expect(nonce).toBeTruthy();
+        if (nonce === undefined) throw new Error("Missing style nonce");
+        expect(shell.headers.get("content-security-policy")).toContain(
+          `style-src 'self' 'nonce-${nonce}'`,
+        );
+        expect(shell.headers.get("content-security-policy")).not.toContain(
+          "unsafe-inline",
+        );
+        expect(shell.headers.get("cache-control")).toBe("no-store");
+        const secondShell = await fetch(`${server.baseUrl}/planner`);
+        expect(secondShell.headers.get("content-security-policy")).not.toBe(
+          shell.headers.get("content-security-policy"),
+        );
+        expect(await secondShell.text()).toContain("Suite shell");
 
         const missingApi = await fetch(`${server.baseUrl}/api/nope`);
         expect(missingApi.status).toBe(404);
@@ -639,9 +675,17 @@ describe("Suite HTTP server", () => {
           await plannerResponse.json(),
         );
         expect(planner.freshness.state).toBe("fresh");
-        expect(planner.events).toMatchObject([
-          { summary: "Existing appointment" },
-        ]);
+        expect(planner.events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ summary: "Existing appointment" }),
+            expect.objectContaining({
+              summary: "All-day planning",
+              startsAt: "2026-08-06T00:00:00.000Z",
+              endsAt: "2026-08-07T00:00:00.000Z",
+              allDay: true,
+            }),
+          ]),
+        );
 
         const blockResponse = await fetch(
           `${server.baseUrl}/api/tasks/${created.task.id}/time-block`,
@@ -676,6 +720,27 @@ describe("Suite HTTP server", () => {
             href.endsWith(block.mapping.href.split("/").at(-1) ?? ""),
           ),
         ).toHaveLength(1);
+
+        const linkedPlannerResponse = await fetch(
+          `${server.baseUrl}/api/planner?from=2026-08-06T00%3A00%3A00.000Z&to=2026-08-07T00%3A00%3A00.000Z`,
+          { headers: { Cookie: cookie } },
+        );
+        expect(linkedPlannerResponse.status).toBe(200);
+        const linkedPlanner = plannerResponseSchema.parse(
+          await linkedPlannerResponse.json(),
+        );
+        expect(
+          linkedPlanner.events.find(
+            (event) => event.href === block.mapping.href,
+          ),
+        ).toMatchObject({ linkedTaskId: created.task.id });
+        expect(
+          linkedPlanner.events.find(
+            (event) =>
+              event.href ===
+              "/dav.php/calendars/alice/work/provider-only-same-title.ics",
+          ),
+        ).not.toHaveProperty("linkedTaskId");
 
         const replayResponse = await fetch(
           `${server.baseUrl}/api/tasks/${created.task.id}/time-block`,
@@ -758,6 +823,16 @@ describe("Suite HTTP server", () => {
         expect(caldav.resources.get(block.mapping.href)?.rawIcs).toContain(
           "SUMMARY:External edit",
         );
+        const conflictedPlannerResponse = await fetch(
+          `${server.baseUrl}/api/planner?from=2026-08-06T00%3A00%3A00.000Z&to=2026-08-07T00%3A00%3A00.000Z`,
+          { headers: { Cookie: cookie } },
+        );
+        expect(conflictedPlannerResponse.status).toBe(200);
+        expect(
+          plannerResponseSchema
+            .parse(await conflictedPlannerResponse.json())
+            .events.find((event) => event.href === block.mapping.href),
+        ).not.toHaveProperty("linkedTaskId");
 
         const removableTaskResponse = await fetch(
           `${server.baseUrl}/api/tasks`,

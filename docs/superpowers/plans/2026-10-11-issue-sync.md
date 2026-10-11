@@ -5,7 +5,7 @@ manual import and refresh with optional close/reopen write-back. Each connection
 covers one repository; credentials and host configuration remain server-owned.
 
 The owner subsequently requested shared or repository-specific tokens. Each
-connection now selects its token scope. Migration `0022_issue_shared_tokens`
+connection now selects its token scope. Migration `0055_issue_shared_tokens`
 adds one encrypted shared grant per owner/provider/origin, while existing
 connections default to repository scope. Saving a shared replacement verifies
 repository access first. Removing it preserves repository overrides, tasks,
@@ -17,7 +17,7 @@ in-progress operations.
 ## Implementation units
 
 1. Add shared request/response schemas and additive SQLite migration
-   `0021_issue_connections`. Store encrypted grants and unique issue-to-task links.
+   `0054_issue_connections`. Store encrypted grants and unique issue-to-task links.
    Import task creation and link insertion in one transaction. **Implemented.**
 2. Add bounded GitHub/Gitea REST adapters and owner-authenticated routes. Detect
    text conflicts, preserve local planning data, record pending state writes, and
@@ -116,3 +116,25 @@ webhooks, remote issue creation, comment/attachment sync, or delegated MCP issue
 operations. The browser APIs are recorded as owner-only in the assistant
 capability inventory. Maintained behavior and limits are in
 `docs/operations/issue-sync.md`.
+
+### Integration for the pull request
+
+The original worktree was based on `3d99b47c`, before current main's schema and
+UI changes. The feature checkpoint is `5a6fd80`. The PR integrates current main,
+preserves its layout, startup, import, and authority changes, and appends the
+issue migrations as `0054_issue_connections` and `0055_issue_shared_tokens`
+(49 migrations total). The diff against main contains only the issue-sync slice.
+The development proxy Host fix is already present on main. Verification of the
+integrated version is recorded below separately from the earlier receipts.
+
+Integrated verification on current main: format checking, full ESLint, and all
+workspace type checks passed. The first targeted run had 110 passing tests and
+two timeout failures (migration upgrade and shared-token lifecycle). Both files
+passed on rerun. The five additional persistence families passed except for one
+calendar-subscription timeout, whose complete file passed on a final retry.
+Across these focused runs, all 135 distinct targeted tests passed in 14 files;
+the issue-sync file passed all ten tests. Runs used one worker and a 20-second
+harness timeout without changing application deadlines or shipped test limits.
+All four application builds passed. The current main date-parser file passed
+all 36 tests, superseding the old-base date assertion failure above. The complete
+repository suite and hosted CI are separate, still-unverified proof states.

@@ -50,13 +50,16 @@ it("prepares exact core fields without retaining integration secrets", () => {
 });
 it("blocks unsupported workflows without rounding estimates or inventing dates", () => {
   for (const extra of [
-    { timeEstimate: 1 },
-    { dueDay: "2026-09-20" },
+    // A legacy plannedAt that disagrees with dueWithTime.
+    { plannedAt: 1700000000000, dueWithTime: 1700000060000 },
+    // Reminders need an exact start; date-only plans have no reminder time.
+    { dueDay: "2026-09-20", remindAt: 1700000000000 },
     { isDone: true },
     { attachments: [{ path: "file" }] },
     { remindAt: 1700000000000 },
     { notes: "x".repeat(20001) },
-    { timeSpent: 60000 },
+    // One task-day never exceeds 24 hours (ADR 0024).
+    { timeSpentOnDay: { "2026-09-20": 86_400_001 } },
   ]) {
     const result = prepareSuperProductivityImport(
       JSON.stringify({
@@ -68,29 +71,194 @@ it("blocks unsupported workflows without rounding estimates or inventing dates",
   }
 });
 
-it("does not reinterpret virtual Today views, project backlogs, or completed projects", () => {
-  for (const extra of [
-    { tag: state({ TODAY: { id: "TODAY", title: "Today" } }) },
-    {
-      project: state({
-        p: { id: "p", title: "Project", backlogTaskIds: ["t"] },
+it("keeps Today and board system tags out of ordinary tags", () => {
+  const prepare = (extra: Record<string, unknown>, task = {}) =>
+    prepareSuperProductivityImport(
+      JSON.stringify({
+        task: state({ t: { id: "t", title: "Task", ...task } }),
+        ...extra,
       }),
-    },
-    {
-      project: state({
-        p: { id: "p", title: "Project", isDone: true, doneOn: 1700000000000 },
+    );
+  // An empty Today view and unused markers are skipped with a notice.
+  const skipped = prepare({
+    tag: state({
+      TODAY: { id: "TODAY", title: "Today", taskIds: [] },
+      EM_URGENT: { id: "EM_URGENT", title: "urgent" },
+    }),
+  });
+  expect(skipped.report.canApply).toBe(true);
+  expect(skipped.records.filter(({ kind }) => kind === "tag")).toEqual([]);
+  expect(skipped.report.issues.map(({ code }) => code)).toEqual([
+    "configuration_not_imported",
+    "configuration_not_imported",
+  ]);
+  // Today's order applies as a saved day order (ADR 0027); an entry that is
+  // not planned for that date is a notice, not a blocker.
+  const today = prepare({
+    tag: state({ TODAY: { id: "TODAY", title: "Today", taskIds: ["t"] } }),
+  });
+  expect(today.report.canApply).toBe(true);
+  expect(today.records.filter(({ kind }) => kind === "tag")).toEqual([]);
+  expect(
+    today.report.issues.filter(({ code }) => code === "day_order_notice"),
+  ).toHaveLength(2);
+  // Priority markers apply as board markers on the task (ADR 0028).
+  const urgent = prepare(
+    { tag: state({ EM_URGENT: { id: "EM_URGENT", title: "urgent" } }) },
+    { tagIds: ["EM_URGENT"] },
+  );
+  expect(urgent.report.canApply).toBe(true);
+  expect(urgent.records.filter(({ kind }) => kind === "tag")).toEqual([]);
+  expect(urgent.records.find(({ kind }) => kind === "task")?.tagIds).toEqual(
+    [],
+  );
+  expect(urgent.boards.taskMarkers).toEqual([
+    { sourceTaskId: "t", markers: ["urgent"] },
+  ]);
+});
+
+it("maps project lifecycle, appearance, backlog, menu order and notes", () => {
+  const { report, records } = prepareSuperProductivityImport(
+    JSON.stringify({
+      task: state({
+        t1: { id: "t1", title: "Active", projectId: "b" },
+        t2: { id: "t2", title: "Later", projectId: "b" },
       }),
-    },
-  ]) {
-    expect(
-      prepareSuperProductivityImport(
-        JSON.stringify({
-          task: state({ t: { id: "t", title: "Task" } }),
-          ...extra,
+      project: state({
+        a: {
+          id: "a",
+          title: "Done project",
+          isDone: true,
+          doneOn: 1700000000000,
+          isArchived: true,
+          icon: "work",
+          theme: { primary: "#AABBCC", backgroundImageDark: "x.png" },
+          noteIds: ["n2", "missing-note"],
+        },
+        b: {
+          id: "b",
+          title: "Backlog project",
+          isEnableBacklog: true,
+          backlogTaskIds: ["t2", "missing-task"],
+          isHiddenFromMenu: true,
+          noteIds: ["n1"],
+        },
+      }),
+      tag: state({
+        x: { id: "x", title: "X", color: "#abc", icon: "🏷️", isArchived: true },
+        y: { id: "y", title: "Y" },
+      }),
+      menuTree: {
+        projectTree: [
+          {
+            k: "f",
+            id: "folder",
+            name: "Work",
+            children: [{ k: "p", id: "b" }],
+          },
+          { k: "p", id: "a" },
+        ],
+        tagTree: [
+          { k: "t", id: "y" },
+          { k: "t", id: "x" },
+        ],
+      },
+      note: {
+        ...state({
+          n1: {
+            id: "n1",
+            projectId: "b",
+            content: "# Plan\n- [ ] item",
+            isPinnedToToday: true,
+            created: 1700000000000,
+            modified: 1700000000001,
+          },
+          n2: { id: "n2", projectId: "a", content: "Retro" },
+          n3: { id: "n3", projectId: null, content: "Loose" },
         }),
-      ).report.canApply,
-    ).toBe(false);
-  }
+        todayOrder: ["n1"],
+      },
+    }),
+  );
+  expect(report.canApply).toBe(true);
+  expect(
+    report.issues
+      .map(({ code }) => code)
+      .every((code) => code === "configuration_not_imported"),
+  ).toBe(true);
+  expect(report.issues.map(({ detail }) => detail).join("\n")).not.toMatch(
+    /folders are not imported/,
+  );
+  expect(records.map(({ kind, sourceId }) => `${kind}:${sourceId}`)).toEqual([
+    "project:b",
+    "project:a",
+    "tag:y",
+    "tag:x",
+    "task:t1",
+    "task:t2",
+    "note:n1",
+    "note:n2",
+    "note:n3",
+  ]);
+  expect(records[0]).toMatchObject({
+    backlogEnabled: true,
+    backlogTaskIds: ["t2"],
+    hiddenFromMenu: true,
+    archived: false,
+    completedAt: null,
+  });
+  expect(records[1]).toMatchObject({
+    completedAt: new Date(1700000000000).toISOString(),
+    archived: true,
+    icon: "work",
+    color: "#aabbcc",
+  });
+  expect(records[3]).toMatchObject({
+    color: "#aabbcc",
+    icon: "🏷️",
+    archived: true,
+  });
+  expect(records[6]).toMatchObject({
+    notes: "# Plan\n- [ ] item",
+    projectId: "b",
+    pinnedToToday: true,
+    createdAt: new Date(1700000000000).toISOString(),
+  });
+});
+
+it("blocks inconsistent organization data instead of guessing", () => {
+  const prepare = (extra: Record<string, unknown>) =>
+    prepareSuperProductivityImport(
+      JSON.stringify({
+        task: state({ t: { id: "t", title: "Task" } }),
+        ...extra,
+      }),
+    ).report.canApply;
+  for (const extra of [
+    // Backlog task outside the project, or a disabled backlog with tasks.
+    {
+      project: state({
+        p: {
+          id: "p",
+          title: "P",
+          isEnableBacklog: true,
+          backlogTaskIds: ["t"],
+        },
+      }),
+    },
+    { project: state({ p: { id: "p", title: "P", backlogTaskIds: ["t"] } }) },
+    // Completion without its time, invalid icon or colour.
+    { project: state({ p: { id: "p", title: "P", isDone: true } }) },
+    { project: state({ p: { id: "p", title: "P", icon: "<b>x</b>" } }) },
+    { tag: state({ x: { id: "x", title: "X", color: "red" } }) },
+    // Image notes, legacy notes text and dangling note projects.
+    { note: state({ n: { id: "n", content: "Pic", imgUrl: "file:///x" } }) },
+    { project: state({ p: { id: "p", title: "P", notes: "legacy" } }) },
+    { note: state({ n: { id: "n", content: "Note", projectId: "gone" } }) },
+    { note: state({ n: { id: "n", content: "Note", unknown: 1 } }) },
+    { menuTree: { projectTree: [{ k: "x", id: "p" }], tagTree: [] } },
+  ])
+    expect(prepare(extra), JSON.stringify(extra)).toBe(false);
 });
 
 it("reports every export section and blocks unreviewed or unsupported data", () => {
@@ -104,33 +272,53 @@ it("reports every export section and blocks unreviewed or unsupported data", () 
   const codes = (report: ReturnType<typeof prepare>) =>
     report.issues.map(({ code }) => code);
 
-  // Configuration is reported without blocking; default counters are setup.
+  // Boards (#63) and globalConfig (#67) apply per field; counters and
+  // metric days apply since #64 (ADR 0025). Nothing here blocks.
   const configured = prepare({
-    boards: { boardCfgs: [{ id: "kanban" }] },
+    globalConfig: { localization: { lng: "en" } },
+    boards: {
+      boardCfgs: [{ id: "kanban", title: "Kanban", cols: 1, panels: [] }],
+    },
     menuTree: { projectTree: [], tagTree: [] },
-    simpleCounter: state({ c: { id: "c", countOnDay: {} } }),
+    simpleCounter: state({
+      c: { id: "c", title: "C", type: "ClickCounter", countOnDay: {} },
+    }),
+    metric: state({ "2026-09-24": { id: "2026-09-24" } }),
     note: { ...state({}), todayOrder: [] },
     timeTracking: { project: {}, tag: {} },
   });
   expect(configured.canApply).toBe(true);
-  expect(codes(configured)).toEqual([
-    "configuration_not_imported",
-    "configuration_not_imported",
-    "configuration_not_imported",
+  expect(codes(configured).toSorted()).toEqual([
+    "config_applied",
+    "counter_reconciliation",
   ]);
 
-  for (const extra of [
-    { note: state({ n: { id: "n", content: "Note" } }) },
-    { metric: state({ "2026-09-24": { id: "2026-09-24" } }) },
-    { reminders: [{ id: "r" }] },
-    { pluginUserData: [{ id: "plugin", data: "{}" }] },
-    { timeTracking: { project: { p: { "2026-09-24": { s: 1 } } }, tag: {} } },
-    { simpleCounter: state({ c: { id: "c", countOnDay: { d: 2 } } }) },
-  ]) {
+  for (const extra of [{ reminders: [{ id: "r" }] }]) {
     const report = prepare(extra);
     expect(report.canApply).toBe(false);
     expect(codes(report)).toContain("unsupported_section");
   }
+  // Plugin data is kept as inert records since #66 (ADR 0026); only a
+  // malformed shape blocks.
+  expect(
+    codes(prepare({ pluginUserData: [{ id: "plugin", data: "{}" }] })),
+  ).toEqual(["plugin_data_preserved"]);
+  expect(codes(prepare({ pluginUserData: { plugin: "{}" } }))).toEqual([
+    "plugin_data_invalid",
+  ]);
+  // Work start/end records apply since #41; malformed ones block.
+  expect(
+    prepare({
+      timeTracking: { project: { p: { "2026-09-24": { s: 1 } } }, tag: {} },
+    }).canApply,
+  ).toBe(true);
+  expect(
+    codes(
+      prepare({
+        timeTracking: { project: { p: { "2026-09-24": { s: -1 } } } },
+      }),
+    ),
+  ).toContain("invalid_time_tracking");
   expect(codes(prepare({ futureSection: {} }))).toContain("unknown_section");
   expect(codes(prepare({}, { futureField: 1 }))).toContain(
     "unknown_task_field",
@@ -138,9 +326,17 @@ it("reports every export section and blocks unreviewed or unsupported data", () 
   for (const task of [
     { deadlineRemindAt: 1700000000000 },
     { issueProviderId: "provider" },
-    { plannedAt: 1700000000000 },
   ])
     expect(prepare({}, task).canApply).toBe(false);
+  // A legacy plannedAt is read as dueWithTime, as the source does on load.
+  const migrated = prepare({}, { plannedAt: 1700000000000 });
+  expect(migrated.canApply).toBe(true);
+  expect(codes(migrated)).toContain("schedule_migrated");
+  expect(migrated.tasks[0]?.scheduledAt).toBe("2023-11-14T22:13:20.000Z");
+  expect(
+    prepare({}, { plannedAt: 1700000000000, dueWithTime: 1700000000000 })
+      .canApply,
+  ).toBe(true);
   expect(
     prepare({ tag: state({ x: { id: "x", title: "X", isDone: true } }) })
       .canApply,
@@ -151,7 +347,7 @@ it("reports every export section and blocks unreviewed or unsupported data", () 
   ).toBe(true);
 });
 
-it("retains reviewed presentation fields in provenance without applying them", () => {
+it("applies tag colour while retaining reviewed fields in provenance", () => {
   const { records } = prepareSuperProductivityImport(
     JSON.stringify({
       task: state({ t: { id: "t", title: "Task", tagIds: ["x"] } }),
@@ -162,5 +358,145 @@ it("retains reviewed presentation fields in provenance without applying them", (
     id: "x",
     title: "X",
     color: "#abcdef",
+  });
+  expect(records[0]).toMatchObject({ color: "#abcdef", icon: null });
+});
+
+it("leaves an out-of-bound estimate empty and flags the live task for review", () => {
+  for (const timeEstimate of [1, 721 * 60000]) {
+    const { report, records } = prepareSuperProductivityImport(
+      JSON.stringify({
+        task: state({ t: { id: "t", title: "Task", timeEstimate } }),
+      }),
+    );
+    expect(report.canApply).toBe(true);
+    expect(report.issues.map(({ code }) => code)).toContain("estimate_review");
+    expect(report.issues.map(({ code }) => code)).not.toContain(
+      "history_review",
+    );
+    expect(records[0]?.estimateMinutes).toBeNull();
+    expect(records[0]?.review).toEqual(["estimate_unrepresentable"]);
+    expect(records[0]?.sourceJson).toContain(
+      `"timeEstimate":${String(timeEstimate)}`,
+    );
+  }
+});
+
+it("imports source children as ordered full tasks and keeps derived parent estimates in provenance", () => {
+  const { report, records } = prepareSuperProductivityImport(
+    JSON.stringify({
+      task: state({
+        second: {
+          id: "second",
+          title: "Second",
+          parentId: "parent",
+          notes: "Second notes",
+          timeEstimate: 900000,
+          deadlineDay: "2026-10-02",
+        },
+        parent: {
+          id: "parent",
+          title: "Parent",
+          subTaskIds: ["first", "second"],
+          // Derived by Super Productivity from open children, not whole minutes.
+          timeEstimate: 900001,
+        },
+        first: {
+          id: "first",
+          title: "First",
+          parentId: "parent",
+          isDone: true,
+          doneOn: 1700000060000,
+          timeEstimate: 600000,
+        },
+      }),
+    }),
+  );
+  expect(report.issues).toEqual([]);
+  expect(report.canApply).toBe(true);
+  const byId = new Map(records.map((record) => [record.sourceId, record]));
+  expect(byId.get("parent")).toMatchObject({
+    parentSourceId: null,
+    estimateMinutes: null,
+  });
+  expect(JSON.parse(byId.get("parent")?.sourceJson ?? "{}")).toMatchObject({
+    timeEstimate: 900001,
+    subTaskIds: ["first", "second"],
+  });
+  expect(byId.get("first")).toMatchObject({
+    parentSourceId: "parent",
+    childIndex: 0,
+    completedAt: new Date(1700000060000).toISOString(),
+    estimateMinutes: 10,
+  });
+  expect(byId.get("second")).toMatchObject({
+    parentSourceId: "parent",
+    childIndex: 1,
+    notes: "Second notes",
+    deadlineDate: "2026-10-02",
+    estimateMinutes: 15,
+  });
+});
+
+it("blocks hierarchies deeper than two levels instead of flattening them", () => {
+  const { report } = prepareSuperProductivityImport(
+    JSON.stringify({
+      task: state({
+        root: { id: "root", title: "Root", subTaskIds: ["mid"] },
+        mid: {
+          id: "mid",
+          title: "Mid",
+          parentId: "root",
+          subTaskIds: ["leaf"],
+        },
+        leaf: { id: "leaf", title: "Leaf", parentId: "mid" },
+      }),
+    }),
+  );
+  expect(report.canApply).toBe(false);
+  expect(report.issues.map(({ code }) => code)).toContain(
+    "hierarchy_depth_unsupported",
+  );
+});
+
+it("keeps stale issue sync metadata without blocking, but not an unresolved identity", () => {
+  const prepareTask = (task: Record<string, unknown>) =>
+    prepareSuperProductivityImport(
+      JSON.stringify({
+        task: state({ t: { id: "t", title: "Task", ...task } }),
+      }),
+    );
+  const stale = prepareTask({
+    issueLastSyncedValues: { title: "Old" },
+    issueWasUpdated: false,
+    issueAttachmentNr: 2,
+  });
+  expect(stale.report.canApply).toBe(true);
+  expect(stale.report.issues.map(({ code }) => code)).toContain(
+    "issue_metadata_orphaned",
+  );
+  expect(JSON.parse(stale.records[0]?.sourceJson ?? "{}")).toMatchObject({
+    issueLastSyncedValues: { title: "Old" },
+  });
+  for (const identity of [{ issueProviderId: "p" }, { issueType: "GITEA" }])
+    expect(prepareTask(identity).report.canApply).toBe(false);
+});
+
+it("uses the first position of a repeated child ID without blocking", () => {
+  const { report, records } = prepareSuperProductivityImport(
+    JSON.stringify({
+      task: state({
+        parent: { id: "parent", title: "Parent", subTaskIds: ["c", "c"] },
+        c: { id: "c", title: "Child", parentId: "parent" },
+      }),
+    }),
+  );
+  expect(report.canApply).toBe(true);
+  expect(report.issues.map(({ code }) => code)).toContain(
+    "duplicate_child_reference",
+  );
+  expect(records.find(({ sourceId }) => sourceId === "c")).toMatchObject({
+    parentSourceId: "parent",
+    childIndex: 0,
   });
 });

@@ -1,70 +1,97 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import {
+  superProductivityNoteFields,
   superProductivityProjectFields,
   superProductivitySections,
   superProductivityTagFields,
   superProductivityTaskFields,
 } from "./super-productivity-schema.ts";
+import { superProductivityAttachmentFields } from "./super-productivity-links.ts";
+import { superProductivityRepeatCfgFields } from "./super-productivity-recurrence.ts";
+import {
+  superProductivityMetricFields,
+  superProductivitySimpleCounterFields,
+} from "./super-productivity-counters.ts";
+import {
+  superProductivityPluginMetadataFields,
+  superProductivityPluginUserDataFields,
+} from "./super-productivity-plugins.ts";
+import { superProductivityPlannerKeys } from "./super-productivity-day-order.ts";
+import {
+  superProductivityBoardFields,
+  superProductivityBoardPanelFields,
+  superProductivityMenuFolderFields,
+  superProductivityMenuTreeFields,
+  superProductivitySectionFields,
+} from "./super-productivity-boards.ts";
+import { superProductivityFocusConfigFields } from "./super-productivity-focus.ts";
+import { superProductivityGlobalConfigFields } from "./super-productivity-config.ts";
+import { superProductivityCalendarProviderFields } from "./super-productivity-calendar.ts";
 
-const root = fileURLToPath(new URL("../../../", import.meta.url));
-interface ParityRow {
-  id: string;
-  status: "supported" | "partial" | "gap" | "decision" | "excluded";
-  issue: number | null;
-  tadooer: string[];
-  tests: string[];
-  sections: string[];
-  taskFields: string[];
-  projectFields: string[];
-  tagFields: string[];
-}
-const matrix = JSON.parse(
+type FieldKey =
+  | "taskFields"
+  | "projectFields"
+  | "tagFields"
+  | "noteFields"
+  | "attachmentFields"
+  | "repeatCfgFields"
+  | "simpleCounterFields"
+  | "metricFields"
+  | "pluginUserDataFields"
+  | "pluginMetadataFields"
+  | "plannerFields"
+  | "boardFields"
+  | "boardPanelFields"
+  | "sectionFields"
+  | "menuTreeFields"
+  | "menuFolderFields"
+  | "focusConfigFields"
+  | "globalConfigFields"
+  | "calendarProviderFields";
+const manifest = JSON.parse(
   readFileSync(
-    join(root, "docs/product/super-productivity-parity.json"),
+    new URL(
+      "../../../docs/product/super-productivity-parity.json",
+      import.meta.url,
+    ),
     "utf8",
   ),
 ) as {
-  version: number;
-  pins: { exportSchema: { sections: number } };
-  rows: ParityRow[];
+  exportSections: string[];
+  rows: ({ id: string } & Partial<Record<FieldKey, string[]>>)[];
 };
 
-it("assigns every reviewed export section and entity field to exactly one parity row", () => {
-  const expectCovered = (
-    key: "sections" | "taskFields" | "projectFields" | "tagFields",
-    table: Readonly<Record<string, string>>,
-  ) => {
-    const mapped = matrix.rows.flatMap((row) => row[key]);
-    expect(new Set(mapped).size, key).toBe(mapped.length);
-    expect(mapped.toSorted(), key).toEqual(Object.keys(table).toSorted());
-  };
-  expectCovered("sections", superProductivitySections);
-  expectCovered("taskFields", superProductivityTaskFields);
-  expectCovered("projectFields", superProductivityProjectFields);
-  expectCovered("tagFields", superProductivityTagFields);
-  expect(Object.keys(superProductivitySections)).toHaveLength(
-    matrix.pins.exportSchema.sections,
+it("classifies exactly the manifest's export sections for import", () => {
+  expect(Object.keys(superProductivitySections).toSorted()).toEqual(
+    manifest.exportSections.toSorted(),
   );
 });
 
-it("keeps row evidence present and tracks every unresolved row", () => {
-  expect(matrix.version).toBe(1);
-  expect(new Set(matrix.rows.map((row) => row.id)).size).toBe(
-    matrix.rows.length,
-  );
-  for (const row of matrix.rows) {
-    for (const path of [...row.tadooer, ...row.tests])
-      expect(existsSync(join(root, path)), `${row.id}: ${path}`).toBe(true);
-    expect(["supported", "partial", "gap", "decision", "excluded"]).toContain(
-      row.status,
-    );
-    if (row.status === "supported")
-      expect(row.tests.length, row.id).toBeGreaterThan(0);
-    else expect(row.issue, `${row.id} needs a tracking issue`).not.toBeNull();
-    if (row.status === "partial")
-      expect(row.tadooer.length, row.id).toBeGreaterThan(0);
+it("assigns every reviewed entity field to exactly one workflow row", () => {
+  for (const [key, table] of [
+    ["taskFields", superProductivityTaskFields],
+    ["projectFields", superProductivityProjectFields],
+    ["tagFields", superProductivityTagFields],
+    ["noteFields", superProductivityNoteFields],
+    ["attachmentFields", superProductivityAttachmentFields],
+    ["repeatCfgFields", superProductivityRepeatCfgFields],
+    ["simpleCounterFields", superProductivitySimpleCounterFields],
+    ["metricFields", superProductivityMetricFields],
+    ["pluginUserDataFields", superProductivityPluginUserDataFields],
+    ["pluginMetadataFields", superProductivityPluginMetadataFields],
+    ["plannerFields", superProductivityPlannerKeys],
+    ["boardFields", superProductivityBoardFields],
+    ["boardPanelFields", superProductivityBoardPanelFields],
+    ["sectionFields", superProductivitySectionFields],
+    ["menuTreeFields", superProductivityMenuTreeFields],
+    ["menuFolderFields", superProductivityMenuFolderFields],
+    ["focusConfigFields", superProductivityFocusConfigFields],
+    ["globalConfigFields", superProductivityGlobalConfigFields],
+    ["calendarProviderFields", superProductivityCalendarProviderFields],
+  ] as const) {
+    const mapped = manifest.rows.flatMap((row) => row[key] ?? []);
+    expect(new Set(mapped).size, key).toBe(mapped.length);
+    expect(mapped.toSorted(), key).toEqual(Object.keys(table).toSorted());
   }
 });

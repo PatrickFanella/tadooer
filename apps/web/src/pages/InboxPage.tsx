@@ -3,9 +3,14 @@ import type {
   BaikalStatusResponse,
   Task,
 } from "@suite/contracts";
-import type { SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { TaskCaptureForm } from "../components/tasks/TaskCaptureForm.tsx";
 import { TaskListItem } from "../components/tasks/TaskListItem.tsx";
+import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
+import { Button } from "../components/ui/button.tsx";
+import { PageHeader } from "../components/ui/page-header.tsx";
+import { SectionHeading } from "../components/ui/section-heading.tsx";
 
 interface InboxPageProps {
   readonly tasks: readonly Task[];
@@ -42,6 +47,8 @@ export const InboxPage = ({
   onSubmitTimeBlock,
   onRemoveTimeBlock,
 }: InboxPageProps) => {
+  // The first dozen unplanned tasks; the owner opens the rest.
+  const [showAll, setShowAll] = useState(false);
   const inboxTasks = tasks.filter(
     (task) =>
       task.status === "open" &&
@@ -50,46 +57,67 @@ export const InboxPage = ({
   );
 
   return (
-    <div className="today-page">
-      <header className="today-header">
-        <p className="step">Capture and clarify</p>
-        <h1>Inbox</h1>
-        <p>Unscheduled tasks waiting for a decision.</p>
-      </header>
+    <div className="today-page mx-auto flex w-full max-w-5xl flex-col gap-6">
+      <PageHeader
+        eyebrow="Not planned yet"
+        title="Inbox"
+        description="Open tasks with no planned time."
+      />
       <TaskCaptureForm busy={busy} onSubmit={onSubmitTask} />
       {inboxTasks.length === 0 ? (
-        <p className="muted">
-          Inbox zero. Capture the next thing when it arrives.
-        </p>
+        <EmptyState
+          title="The inbox is empty."
+          description="New tasks wait here until you give them a time."
+        />
       ) : (
-        <section
+        <Card
           className="today-section today-planning"
           aria-labelledby="inbox-list-title"
         >
-          <h2 id="inbox-list-title">To clarify</h2>
-          <ul>
-            {inboxTasks.map((task) => (
-              <TaskListItem
-                key={task.id}
-                task={task}
-                state="planning"
-                at={new Date().toISOString()}
-                timeZone="UTC"
-                activeSession={activeSession}
-                calendars={calendars}
-                busy={busy}
-                calendarActionsAvailable={calendarActionsAvailable}
-                focusActionsAvailable={focusActionsAvailable}
-                onStartFocus={onStartFocus}
-                onChangeTaskStatus={async (taskToChange, action) => {
-                  await onChangeTaskStatus(taskToChange, action);
-                }}
-                onSubmitTimeBlock={onSubmitTimeBlock}
-                onRemoveTimeBlock={onRemoveTimeBlock}
-              />
-            ))}
-          </ul>
-        </section>
+          <CardHeader>
+            <SectionHeading
+              id="inbox-list-title"
+              title={`To plan (${String(inboxTasks.length)})`}
+            />
+          </CardHeader>
+          <CardContent>
+            <ul>
+              {(showAll ? inboxTasks : inboxTasks.slice(0, 12)).map((task) => (
+                <TaskListItem
+                  key={task.id}
+                  task={task}
+                  state="planning"
+                  at={new Date().toISOString()}
+                  timeZone="UTC"
+                  activeSession={activeSession}
+                  calendars={calendars}
+                  busy={busy}
+                  calendarActionsAvailable={calendarActionsAvailable}
+                  focusActionsAvailable={focusActionsAvailable}
+                  onStartFocus={onStartFocus}
+                  onChangeTaskStatus={async (taskToChange, action) => {
+                    await onChangeTaskStatus(taskToChange, action);
+                  }}
+                  onSubmitTimeBlock={onSubmitTimeBlock}
+                  onRemoveTimeBlock={onRemoveTimeBlock}
+                />
+              ))}
+            </ul>
+            {inboxTasks.length > 12 ? (
+              <p className="today-section__more">
+                <Button
+                  variant="link"
+                  type="button"
+                  onClick={() => setShowAll((current) => !current)}
+                >
+                  {showAll
+                    ? "Show fewer"
+                    : `Show ${String(inboxTasks.length - 12)} more`}
+                </Button>
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

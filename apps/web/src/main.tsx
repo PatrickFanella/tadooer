@@ -1,7 +1,19 @@
+import "./styles.css";
+import { setNonce } from "get-nonce";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.tsx";
-import "./styles.css";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/atkinson-hyperlegible-mono";
+import { applyTheme, readStoredTheme } from "./theme.ts";
+
+// ADR 0030: the stored theme paints before the preference record loads.
+applyTheme(readStoredTheme());
+
+const styleNonce = document.querySelector<HTMLMetaElement>(
+  'meta[name="style-nonce"]',
+)?.content;
+if (styleNonce) setNonce(styleNonce);
 
 const root = document.querySelector("#root");
 if (root === null) {

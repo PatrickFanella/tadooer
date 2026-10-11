@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   automationTokenScopeSchema,
   type AutomationToken,
+  type AutomationTokenConfirmationPolicy,
   type AutomationTokenScope,
 } from "@suite/contracts";
 import {
@@ -9,6 +10,14 @@ import {
   listAutomationTokens,
   revokeAutomationToken,
 } from "../api.ts";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { useLiveRefetch } from "../live-sync/views.ts";
 
 const permissionLabel = (scope: AutomationTokenScope): string => {
   const [area, action] = scope.split(":");
@@ -17,9 +26,38 @@ const permissionLabel = (scope: AutomationTokenScope): string => {
       ? "focus sessions"
       : area === "pools"
         ? "choice pools"
-        : area;
-  return `${action === "read" ? "Read" : "Manage"} ${subject ?? ""}`;
+        : area === "plugin_data"
+          ? "imported plugin data (names and sizes only)"
+          : area === "connectors"
+            ? "calendar connectors (status; never a credential)"
+            : area === "imports"
+              ? "owner-previewed calendar imports"
+              : area === "publication"
+                ? "read-only calendar feeds (never the address)"
+                : area === "calendar_bridge"
+                  ? action === "review"
+                    ? "calendar bridge deletions and conflicts"
+                    : "calendar bridge status"
+                  : area;
+  return `${
+    action === "read"
+      ? "Read"
+      : action === "recover"
+        ? "Retry"
+        : action === "review"
+          ? "Decide"
+          : "Manage"
+  } ${subject ?? ""}`;
 };
+
+// ADR 0035: consequential actions (deletion, bulk, replacement, takeover,
+// test messages) always need a separate confirmation whatever this says.
+const confirmationPolicyLabel = (
+  policy: AutomationTokenConfirmationPolicy,
+): string =>
+  policy === "execute_ordinary"
+    ? "ordinary edits apply after preview; consequential actions still need confirmation"
+    : "every change needs a separate confirmation";
 
 export const AssistantAccess = ({
   csrfToken,
@@ -30,6 +68,8 @@ export const AssistantAccess = ({
   const [label, setLabel] = useState("");
   const [days, setDays] = useState(30);
   const [scopes, setScopes] = useState<AutomationTokenScope[]>(["tasks:read"]);
+  const [confirmationPolicy, setConfirmationPolicy] =
+    useState<AutomationTokenConfirmationPolicy>("confirm_all");
   const [secret, setSecret] = useState<string | null>(null);
   const [pendingRevoke, setPendingRevoke] = useState<AutomationToken | null>(
     null,
@@ -52,6 +92,8 @@ export const AssistantAccess = ({
       setBusy(false);
     }
   };
+  // ADR 0045: once listed, the tokens follow changes from other devices.
+  useLiveRefetch("automationTokens", refresh, tokens !== null);
   const create = async () => {
     setBusy(true);
     setError(null);
@@ -61,6 +103,7 @@ export const AssistantAccess = ({
         {
           label,
           scopes,
+          confirmationPolicy,
           expiresAt: new Date(Date.now() + days * 86400000).toISOString(),
         },
         csrfToken,
@@ -108,7 +151,11 @@ export const AssistantAccess = ({
       className="assistant-access"
       aria-labelledby="assistant-access-title"
     >
-      <h3 id="assistant-access-title">Assistant access</h3>
+      <SectionHeading
+        as="h3"
+        id="assistant-access-title"
+        title="Assistant access"
+      />
       <p>
         Create a separate token for each assistant. Select only the permissions
         it needs. The Tadooer plugin previews changes and asks for your approval
@@ -122,9 +169,10 @@ export const AssistantAccess = ({
         }}
       >
         <div className="form-grid-2">
-          <label className="field">
-            Access label{" "}
-            <input
+          <Field className="field">
+            <FieldLabel htmlFor="assistant-label">Access label</FieldLabel>
+            <Input
+              id="assistant-label"
               type="text"
               required
               maxLength={100}
@@ -132,10 +180,11 @@ export const AssistantAccess = ({
               disabled={busy}
               onChange={(event) => setLabel(event.currentTarget.value)}
             />
-          </label>
-          <label className="field">
-            Expires after{" "}
-            <select
+          </Field>
+          <Field className="field">
+            <FieldLabel htmlFor="assistant-expiry">Expires after</FieldLabel>
+            <NativeSelect
+              id="assistant-expiry"
               value={days}
               disabled={busy}
               onChange={(event) => setDays(Number(event.currentTarget.value))}
@@ -143,18 +192,47 @@ export const AssistantAccess = ({
               <option value={7}>7 days</option>
               <option value={30}>30 days</option>
               <option value={90}>90 days</option>
-            </select>
-          </label>
+            </NativeSelect>
+          </Field>
+          <Field className="field">
+            <FieldLabel htmlFor="assistant-confirmation-policy">
+              Confirmation policy
+            </FieldLabel>
+            <NativeSelect
+              id="assistant-confirmation-policy"
+              value={confirmationPolicy}
+              disabled={busy}
+              onChange={(event) =>
+                setConfirmationPolicy(
+                  event.currentTarget.value === "execute_ordinary"
+                    ? "execute_ordinary"
+                    : "confirm_all",
+                )
+              }
+            >
+              <option value="confirm_all">Confirm every change</option>
+              <option value="execute_ordinary">
+                Apply ordinary edits after preview
+              </option>
+            </NativeSelect>
+            <p className="text-muted-foreground text-sm">
+              Deletions, bulk actions, tag replacement, focus takeover and test
+              messages always need a separate confirmation. The policy cannot be
+              changed later; revoke and create new access instead.
+            </p>
+          </Field>
         </div>
         <fieldset disabled={busy} className="form-grid-2">
           <legend>Assistant permissions</legend>
           {automationTokenScopeSchema.options.map((scope) => (
-            <label key={scope} className="assistant-permission">
-              <input
-                type="checkbox"
+            <Field
+              key={scope}
+              className="assistant-permission flex-row items-center gap-2"
+            >
+              <Checkbox
+                id={`assistant-scope-${scope}`}
                 checked={scopes.includes(scope)}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked;
+                onCheckedChange={(checked) => {
                   setScopes((current) =>
                     checked
                       ? [...current, scope]
@@ -162,11 +240,13 @@ export const AssistantAccess = ({
                   );
                 }}
               />
-              {permissionLabel(scope)}
-            </label>
+              <FieldLabel htmlFor={`assistant-scope-${scope}`}>
+                {permissionLabel(scope)}
+              </FieldLabel>
+            </Field>
           ))}
         </fieldset>
-        <button
+        <Button
           disabled={
             busy ||
             secret !== null ||
@@ -176,20 +256,28 @@ export const AssistantAccess = ({
           type="submit"
         >
           Create assistant access
-        </button>
+        </Button>
       </form>
       {secret !== null && (
         <div>
-          <label>
-            New assistant token{" "}
-            <input type="password" readOnly value={secret} autoComplete="off" />
-          </label>
+          <Field>
+            <FieldLabel htmlFor="assistant-token">
+              New assistant token
+            </FieldLabel>
+            <Input
+              id="assistant-token"
+              type="password"
+              readOnly
+              value={secret}
+              autoComplete="off"
+            />
+          </Field>
           <p>
             Save this in a private file owned by you with mode 0600, then point
             the plugin’s tokenFile setting to it. Keep it out of chat and shared
             configuration.
           </p>
-          <button
+          <Button
             type="button"
             onClick={() => {
               void (async () => {
@@ -208,15 +296,20 @@ export const AssistantAccess = ({
             }}
           >
             Copy token
-          </button>
-          <button type="button" onClick={() => setSecret(null)}>
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setSecret(null)}>
             I saved the token — dismiss
-          </button>
+          </Button>
         </div>
       )}
-      <button type="button" disabled={busy} onClick={() => void refresh()}>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={busy}
+        onClick={() => void refresh()}
+      >
         Reload assistant access
-      </button>
+      </Button>
       {tokens !== null &&
         (tokens.length === 0 ? (
           <p>No assistant tokens created.</p>
@@ -232,39 +325,53 @@ export const AssistantAccess = ({
                     : "active"}
                 ; expires {token.expiresAt}
                 <p>{token.scopes.map(permissionLabel).join(", ")}</p>
+                <p>{confirmationPolicyLabel(token.confirmationPolicy)}</p>
                 {token.revokedAt === null && (
-                  <button
+                  <Button
                     type="button"
                     disabled={busy}
                     onClick={() => setPendingRevoke(token)}
                   >
                     Revoke {token.label}
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}
           </ul>
         ))}
       {pendingRevoke !== null && (
-        <div role="group" aria-label="Confirm assistant revocation">
+        <Alert
+          variant="warning"
+          role="group"
+          aria-label="Confirm assistant revocation"
+        >
           <p>
             Revoke “{pendingRevoke.label}”? This assistant will lose access
             immediately.
           </p>
-          <button type="button" disabled={busy} onClick={() => void revoke()}>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            onClick={() => void revoke()}
+          >
             Confirm revocation
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             disabled={busy}
             onClick={() => setPendingRevoke(null)}
           >
             Keep access
-          </button>
-        </div>
+          </Button>
+        </Alert>
       )}
       {message !== null && <p role="status">{message}</p>}
-      {error !== null && <p role="alert">{error}</p>}
+      {error !== null && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
     </section>
   );
 };

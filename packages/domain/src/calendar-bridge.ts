@@ -17,7 +17,11 @@ export interface CalendarBridgeInput {
   readonly google: BridgeObservation;
   readonly writable: { readonly baikal: boolean; readonly google: boolean };
   readonly unsupportedFields: readonly string[];
-  readonly invitationEffect: boolean;
+  /**
+   * Sides whose event carries attendees or a foreign organizer (ADR 0042).
+   * The bridge mirrors such an event read-only and never writes that side.
+   */
+  readonly invitation: { readonly baikal: boolean; readonly google: boolean };
   readonly deletionApproved: boolean;
 }
 export type CalendarBridgeDecision =
@@ -64,7 +68,6 @@ export const decideCalendarBridgeChange = (
     return { kind: "blocked", reason: "unavailable" };
   if (input.unsupportedFields.length > 0)
     return { kind: "blocked", reason: "unsupported" };
-  if (input.invitationEffect) return { kind: "blocked", reason: "invitation" };
   const b = state(input.baikal);
   const g = state(input.google);
   // A retained tombstone may never be silently revived, even on both sides.
@@ -79,6 +82,8 @@ export const decideCalendarBridgeChange = (
   const target = same(b, input.baseline) ? "baikal" : "google";
   const observed = input[target];
   const desired = target === "baikal" ? g : b;
+  if (input.invitation[target])
+    return { kind: "blocked", reason: "invitation" };
   if (!input.writable[target]) return { kind: "blocked", reason: "permission" };
   if (desired.kind === "deleted" && !input.deletionApproved)
     return { kind: "blocked", reason: "deletion-approval" };
@@ -91,4 +96,56 @@ export const decideCalendarBridgeChange = (
     expectedRevision: observed.revision,
     desired,
   };
+};
+
+export type CalendarBridgeSide = "google" | "baikal";
+export type CalendarBridgeDirection =
+  "two_way" | "google_to_baikal" | "baikal_to_google";
+
+/** Sides a mapping direction may write to (ADR 0041). */
+export const calendarBridgeWritableSides = (
+  direction: CalendarBridgeDirection,
+): { readonly baikal: boolean; readonly google: boolean } => ({
+  baikal: direction !== "baikal_to_google",
+  google: direction !== "google_to_baikal",
+});
+
+export interface CalendarBridgeNewEventInput {
+  readonly enabled: boolean;
+  readonly direction: CalendarBridgeDirection;
+  readonly source: CalendarBridgeSide;
+  /** First pass of a mapping created with `new_only`. */
+  readonly initialExclusion: boolean;
+  readonly unsupportedFields: readonly string[];
+  /** Same UID unlinked on the other side, or identity already linked elsewhere. */
+  readonly identityCollision: boolean;
+}
+
+export type CalendarBridgeNewEventDecision =
+  | { readonly kind: "create"; readonly target: CalendarBridgeSide }
+  | { readonly kind: "exclude"; readonly reason: "initial" | "direction" }
+  | {
+      readonly kind: "blocked";
+      readonly reason: "disabled" | "unsupported" | "identity-collision";
+    };
+
+/**
+ * Pure policy for an event observed on one side with no event link. It never
+ * matches by title or time and never adopts an existing UID (ADR 0017/0041).
+ * An invitation event is copied without organizer or attendees and stays
+ * read-only on its own side (ADR 0042), so it is not a reason to block.
+ */
+export const decideCalendarBridgeNewEvent = (
+  input: CalendarBridgeNewEventInput,
+): CalendarBridgeNewEventDecision => {
+  if (!input.enabled) return { kind: "blocked", reason: "disabled" };
+  if (input.initialExclusion) return { kind: "exclude", reason: "initial" };
+  const target = input.source === "google" ? "baikal" : "google";
+  if (!calendarBridgeWritableSides(input.direction)[target])
+    return { kind: "exclude", reason: "direction" };
+  if (input.identityCollision)
+    return { kind: "blocked", reason: "identity-collision" };
+  if (input.unsupportedFields.length > 0)
+    return { kind: "blocked", reason: "unsupported" };
+  return { kind: "create", target };
 };

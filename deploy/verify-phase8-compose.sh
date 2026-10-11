@@ -16,10 +16,16 @@ build="$(curl --fail --silent "$base_url/api/build")"
 test "$(node -e 'console.log(JSON.parse(process.argv[1]).version)' "$build")" = "$version"
 test "$(node -e 'console.log(JSON.parse(process.argv[1]).revision)' "$build")" = "$revision"
 ready="$(curl --fail --silent "$base_url/api/ready")"
-test "$(node -e 'console.log(JSON.parse(process.argv[1]).migrationCount)' "$ready")" = "19"
+# Readiness compares applied to expected migrations itself; the gate requires
+# that agreement and that metrics report the same applied count, instead of a
+# literal that goes stale with every additive migration.
+test "$(node -e 'console.log(JSON.parse(process.argv[1]).status)' "$ready")" = "ok"
+test "$(node -e 'console.log(JSON.parse(process.argv[1]).checks.migrations)' "$ready")" = "current"
+migration_count="$(node -e 'console.log(JSON.parse(process.argv[1]).migrationCount)' "$ready")"
+test "$migration_count" -ge "${SUITE_MINIMUM_MIGRATIONS:-19}"
 metrics="$(curl --fail --silent "$base_url/api/metrics")"
 printf '%s\n' "$metrics" | grep -q '^suite_uptime_seconds '
-printf '%s\n' "$metrics" | grep -q '^suite_database_migrations 19$'
+printf '%s\n' "$metrics" | grep -q "^suite_database_migrations ${migration_count}\$"
 task_state="$(node deploy/phase0-task-smoke.mjs create "$base_url")"
 compose restart suite >/dev/null
 compose up -d --wait suite >/dev/null
@@ -32,7 +38,7 @@ printf '%s' "$task_state" | node deploy/phase0-task-smoke.mjs verify "$base_url"
 image_id="$(compose images --quiet suite | xargs docker image inspect --format '{{.Id}}')"
 case "$image_id" in sha256:????????????????????????????????????????????????????????????????) ;; *) echo "Invalid image digest" >&2; exit 1;; esac
 candidate="$work_directory/candidate.json"
-node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({schemaVersion:1,version:process.argv[2],revision:process.argv[3],imageDigest:process.argv[4],desktopArtifact:"Productivity Suite-linux-x64",qualifiedAt:new Date().toISOString()}))' "$candidate" "$version" "$revision" "$image_id"
+node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({schemaVersion:1,version:process.argv[2],revision:process.argv[3],imageDigest:process.argv[4],desktopArtifact:process.argv[5],qualifiedAt:new Date().toISOString()}))' "$candidate" "$version" "$revision" "$image_id" "${SUITE_DESKTOP_ARTIFACT:-Tadooer-linux-x64}"
 node deploy/release-channel.mjs promote "$candidate" "$work_directory/channels" >/dev/null
 test "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1])).imageDigest)' "$work_directory/channels/stable.json")" = "$image_id"
 echo "Phase 8 versioned production image, metrics, restart, restore, and candidate promotion verified"

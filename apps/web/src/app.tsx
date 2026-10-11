@@ -1,16 +1,22 @@
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { usePlannerLoader } from "./use-planner-loader.ts";
 import { googleProjectionFreshness } from "@suite/domain";
-import { createTask } from "./api.ts";
+import { archiveTask, createTask } from "./api.ts";
 import { SessionRecovery } from "./components/SessionRecovery.tsx";
-import {
-  subscribeSessionFailure,
-  type SessionFailure,
-} from "./session-recovery.ts";
+import { PasswordConfirmation } from "./components/PasswordConfirmation.tsx";
+import { useSessionRecovery } from "./use-session-recovery.ts";
+import { useAppBootstrap } from "./use-app-bootstrap.ts";
 import {
   type HabitListResponse,
   type HabitCommand,
   isHabitSyncOperation,
 } from "@suite/contracts";
 import { HabitsPage } from "./pages/HabitsPage.tsx";
+import { HistoryPage } from "./pages/HistoryPage.tsx";
+import { WorklogPage } from "./pages/WorklogPage.tsx";
+import { CountersPage } from "./pages/CountersPage.tsx";
+import { BoardsPage } from "./pages/BoardsPage.tsx";
 import { deadlineFromForm } from "./components/tasks/DeadlineFields.tsx";
 import {
   useCallback,
@@ -21,41 +27,43 @@ import {
 } from "react";
 import type {
   ActiveSession,
+  BaikalProbeResponse,
   BaikalStatusResponse,
   ChoicePool,
   ChoicePoolHistoryEvent,
   ChoicePoolItem,
   ChoicePoolSuggestionResponse,
   DayPlanResponse,
+  FocusPreferencesResponse,
   GoogleConnectorStatusResponse,
   NotificationPreferences,
   NotificationStatusResponse,
   PlanningPlaceholder,
   PlanningPreferences,
   PlannerResponse,
+  Note,
+  SavedDayOrder,
+  TimeEntry,
   Project,
   SessionResponse,
   Subtask,
   Tag,
   Task,
+  TaskPatchRequest,
   TemplatePoolSlot,
 } from "@suite/contracts";
-import { ApiRequestError } from "@suite/contracts";
+import { ApiRequestError, trustedDeviceSessionDays } from "@suite/contracts";
 import {
   commandActiveSession,
   connectBaikal,
-  createProject,
-  createSubtask,
-  deleteSubtask,
+  probeBaikal,
   createSyncTransport,
-  createTag,
-  assignTaskProject,
-  assignTaskTags,
   getBaikalStatus,
   getGoogleStatus,
   beginGoogleAuthorization,
   synchronizeGoogle,
   disconnectGoogle,
+  withdrawGoogleWriteConsent,
   getPlanningPreferences,
   updatePlanningPreferences,
   getDayPlan,
@@ -64,12 +72,11 @@ import {
   updateNotificationPreferences,
   sendTestNotification,
   getActiveSession,
-  getSetupStatus,
   getTasks,
   getPlanner,
   getProjects,
   getRecoveryTasks,
-  getSubtasks,
+  getAllSubtasks,
   getTags,
   getTemplateLibrary,
   getTemplateSets,
@@ -88,19 +95,51 @@ import {
   patchChoicePool,
   createTemplatePoolSlot,
   recordChoicePoolCompletion,
-  patchSubtask,
-  reorderSubtasks,
   login,
   logout,
   putTaskTimeBlock,
+  patchTask,
   removeTaskTimeBlock,
   resumeSession,
   setupOwner,
+  noteBackgroundReads,
 } from "./api.ts";
-import { LocalStore, type LocalClientIdentity } from "./local-store.ts";
-import { SyncEngine, installOnlineSync } from "./sync-engine.ts";
+import {
+  LocalStore,
+  type LocalClientIdentity,
+  type TaskConflictReview,
+  type ResolveTaskConflictInput,
+} from "./local-store.ts";
+import { SyncConflictReview } from "./components/SyncConflictReview.tsx";
+import type { DayOrderActions } from "./day-order.tsx";
+import type { TimeEntryQueue } from "./pages/worklog-controller.ts";
+import { liveViewRegistry } from "./live-sync/views.ts";
+import type {
+  NoteQueue,
+  OrganizationQueue,
+} from "./components/organization/OrganizationPanel.tsx";
+import {
+  SyncEngine,
+  installOnlineSync,
+  type SyncRoundTrigger,
+} from "./sync-engine.ts";
+import { LiveSyncController } from "./live-sync/controller.ts";
+import { useLiveSync } from "./live-sync/use-live-sync.ts";
+import {
+  captureFieldValue,
+  desktopFocusReport,
+  desktopShellBridge,
+  useDesktopShell,
+} from "./desktop-shell.ts";
+import {
+  useAppLiveViews,
+  type LiveAppPatch,
+} from "./live-sync/use-app-live-views.ts";
 import { Field } from "./field.tsx";
 import type { FocusPanelCommand } from "./focus-panel.tsx";
+import { useFocusController } from "./focus-controller.ts";
+import { FocusReminders } from "./focus-reminders.tsx";
+import { IdleReturnDialog } from "./idle-return-dialog.tsx";
 import type {
   TemplateBlueprintView,
   TemplateSetView,
@@ -108,12 +147,12 @@ import type {
 } from "./template-library.tsx";
 import { TodayPage } from "./pages/TodayPage.tsx";
 import { TasksPage } from "./pages/TasksPage.tsx";
+import { createTaskHierarchyActions } from "./components/tasks/task-hierarchy-actions.ts";
 import { ReusePage } from "./pages/ReusePage.tsx";
 import { ConnectionsPage } from "./pages/ConnectionsPage.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { InboxPage } from "./pages/InboxPage.tsx";
 import { PlannerPage } from "./pages/PlannerPage.tsx";
-import { moveChecklistItem } from "./checklist-order.ts";
 import {
   routeFromPath,
   workspaceRoutes,
@@ -121,6 +160,12 @@ import {
 } from "./app/routes.ts";
 import { AppShell } from "./components/shell/AppShell.tsx";
 import { CommandBar } from "./components/command-bar/CommandBar.tsx";
+import {
+  ApplicationPreferencesProvider,
+  useApplicationPreferencesController,
+} from "./application-preferences.tsx";
+import { ShortcutHelpDialog } from "./components/shortcuts/ShortcutHelpDialog.tsx";
+import { shortcutActionFor } from "./shortcuts.ts";
 
 export type AppState =
   | { readonly kind: "loading" }
@@ -146,12 +191,14 @@ export type AppState =
       readonly activeSession?: ActiveSession | null;
       readonly syncStatus?: "online" | "offline" | "syncing";
       readonly conflictCount?: number;
+      readonly conflictReviews?: readonly TaskConflictReview[];
     }
   | {
       readonly kind: "offline";
       readonly tasks: readonly Task[];
       readonly recovery: readonly Task[];
       readonly conflictCount: number;
+      readonly conflictReviews?: readonly TaskConflictReview[];
       readonly message: string;
       readonly planningPreferences?: PlanningPreferences;
     }
@@ -166,6 +213,32 @@ const messageFor = (error: unknown): string =>
   error instanceof ApiRequestError || error instanceof Error
     ? error.message
     : "An unexpected error occurred";
+
+const endpointHost = (endpoint: string): string => {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return "Configured endpoint";
+  }
+};
+
+const calendarAccessLabel = (
+  calendar: BaikalProbeResponse["calendars"][number],
+): string => {
+  const kinds = [
+    ...(calendar.supportsEvents ? ["events"] : []),
+    ...(calendar.supportsTodos ? ["tasks"] : []),
+  ];
+  const access =
+    calendar.canWrite === true
+      ? "read and write"
+      : calendar.canRead === true
+        ? "read only"
+        : calendar.canRead === false
+          ? "no access"
+          : "permissions not reported";
+  return `${kinds.length === 0 ? "no supported items" : kinds.join(" and ")}, ${access}`;
+};
 
 const formValue = (data: FormData, name: string): string => {
   const value = data.get(name);
@@ -184,51 +257,79 @@ const localInputToIso = (value: string): string | undefined => {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
 };
 
+/** Reports the outcome of the explicit Google write consent step (ADR 0040). */
+const googleCallbackMessage = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const outcome = new URLSearchParams(window.location.search).get("google");
+  if (outcome === "write-granted")
+    return "Google allowed event changes. Writable calendars are marked on Connections.";
+  if (outcome === "write-not-granted")
+    return "Google did not grant event changes. Your read-only connection is unchanged.";
+  return null;
+};
+
 export const App = ({ initialState, initialPath }: AppProps) => {
   const [state, setState] = useState<AppState>(
     initialState ?? { kind: "loading" },
   );
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [freshnessNow, setFreshnessNow] = useState(() => new Date());
   useEffect(() => {
     const timer = window.setInterval(() => setFreshnessNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const [sessionFailure, setSessionFailure] = useState<SessionFailure | null>(
+  const applyRecoveredSession = useCallback(
+    (session: SessionResponse): void => {
+      setState((current) =>
+        current.kind === "authenticated" ? { ...current, session } : current,
+      );
+      setFormError(null);
+    },
+    [],
+  );
+  const sessionRecovery = useSessionRecovery(
+    state.kind === "authenticated" ? state.session : null,
+    applyRecoveredSession,
+  );
+  const sessionFailure = sessionRecovery.failure;
+  const recovery =
+    state.kind === "authenticated" ? (
+      <>
+        {/* ADR 0048: the recent-password prompt of a trusted device. */}
+        <PasswordConfirmation csrfToken={state.session.csrfToken} />
+        {sessionFailure !== null && (
+          <SessionRecovery
+            failure={sessionFailure}
+            username={state.session.owner.username}
+            onRecovered={sessionRecovery.recover}
+          />
+        )}
+      </>
+    ) : null;
+  const [baikalProbe, setBaikalProbe] = useState<BaikalProbeResponse | null>(
     null,
   );
-  useEffect(
-    () =>
-      subscribeSessionFailure((failure) => {
-        if (state.kind === "authenticated") setSessionFailure(failure);
-      }),
-    [state.kind],
+  const [calendarMessage, setCalendarMessage] = useState<string | null>(
+    googleCallbackMessage,
   );
-  const recovery =
-    state.kind === "authenticated" && sessionFailure !== null ? (
-      <SessionRecovery
-        failure={sessionFailure}
-        username={state.session.owner.username}
-        onRecovered={(session) => {
-          setState((current) =>
-            current.kind === "authenticated"
-              ? { ...current, session }
-              : current,
-          );
-          setSessionFailure(null);
-          setFormError(null);
-        }}
-      />
-    ) : null;
-  const [formError, setFormError] = useState<string | null>(null);
-  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
-  const plannerRequest = useRef(0);
-  const [plannerLoading, setPlannerLoading] = useState(false);
-  const [plannerError, setPlannerError] = useState<string | null>(null);
   const [localStore] = useState(() => new LocalStore());
+  const [liveSync] = useState(() => new LiveSyncController());
   const [projects, setProjects] = useState<readonly Project[]>([]);
   const [tags, setTags] = useState<readonly Tag[]>([]);
+  // ADR 0046: notes are read from the offline cache.
+  const [notes, setNotes] = useState<readonly Note[]>([]);
+  // ADR 0050: saved day orders are read from the offline cache.
+  const [dayOrders, setDayOrders] = useState<readonly SavedDayOrder[]>([]);
+  // ADR 0050: stored time entries of the rolling window, from the cache.
+  const [timeEntries, setTimeEntries] = useState<readonly TimeEntry[]>([]);
+  // Issue #114: focus preferences are a read-only offline feed singleton.
+  const [cachedFocusPreferences, setCachedFocusPreferences] = useState<
+    FocusPreferencesResponse | undefined
+  >();
+  const timeEntryFeedMark = useRef<string | null | undefined>(undefined);
+  const pinnedNotes = notes.filter(({ pinnedToToday }) => pinnedToToday);
   const [subtasks, setSubtasks] = useState<
     Readonly<Record<string, readonly Subtask[]>>
   >({});
@@ -307,26 +408,34 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     setTaskIdFilter("");
   };
 
-  const loadPlanner = useCallback(
-    async ({ from, to }: { readonly from: string; readonly to: string }) => {
-      if (state.kind !== "authenticated") return;
-      const request = ++plannerRequest.current;
-      setPlannerLoading(true);
-      setPlannerError(null);
-      try {
-        const planner = await getPlanner(from, to);
-        if (request !== plannerRequest.current) return;
-        setState((current) =>
-          current.kind === "authenticated" ? { ...current, planner } : current,
-        );
-      } catch (error: unknown) {
-        if (request === plannerRequest.current)
-          setPlannerError(messageFor(error));
-      } finally {
-        if (request === plannerRequest.current) setPlannerLoading(false);
-      }
-    },
-    [state.kind],
+  // ADR 0030: application preferences, theme and shortcuts for this session.
+  const appPreferences = useApplicationPreferencesController(
+    state.kind === "authenticated" ? state.session.csrfToken : undefined,
+  );
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [startPageApplied, setStartPageApplied] = useState(false);
+  const defaultStartPage = appPreferences.snapshot.preferences.defaultStartPage;
+  useEffect(() => {
+    if (!appPreferences.loaded || startPageApplied) return;
+    setStartPageApplied(true);
+    const path =
+      initialPath ??
+      (typeof window === "undefined" ? "/" : window.location.pathname);
+    if (path === "/" || path === "") navigate(defaultStartPage);
+    // navigate is a stable closure over setRoute; the effect runs once per load.
+  }, [appPreferences.loaded, startPageApplied, defaultStartPage, initialPath]);
+
+  const publishPlanner = useCallback((planner: PlannerResponse) => {
+    setState((current) =>
+      current.kind === "authenticated" ? { ...current, planner } : current,
+    );
+  }, []);
+  const { loadPlanner, plannerLoading, plannerError } = usePlannerLoader(
+    state.kind === "authenticated" && sessionFailure === null
+      ? `${state.session.owner.id}:${state.session.csrfToken}`
+      : null,
+    publishPlanner,
+    messageFor,
   );
 
   const visibleTasks =
@@ -357,38 +466,123 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         .map(({ task }) => task)
         .filter((task) => task.deletedAt != null),
       conflictCount: (await localStore.loadConflicts()).length,
+      conflictReviews: await localStore.loadConflictReviews(),
     };
   }, [localStore]);
 
-  const synchronize = useCallback(
-    async (session: SessionResponse) => {
-      const transport = createSyncTransport(session.csrfToken);
-      const engine = new SyncEngine(localStore, transport);
-      const client = await engine.ensureClient();
-      if ((await localStore.loadCachedEntities()).length === 0) {
-        await localStore.replaceFromSnapshot(await transport.snapshot(client));
-      }
-      let round = await engine.sync();
-      while (round.hasMore) round = await engine.sync();
-      setHabitLibrary(await localStore.loadCachedHabits());
-      setHabitPending(
-        (await localStore.loadOutbox()).some(
-          ({ operation, state }) =>
-            isHabitSyncOperation(operation) &&
-            (state === "queued" || state === "sending"),
-        ),
+  // ADR 0033, ADR 0046: projects, tags, checklists and notes are read from
+  // the local cache so offline-created records are usable before they have
+  // synced.
+  const refreshCachedOrganization = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      const [
+        cachedProjects,
+        cachedTags,
+        cachedSubtasks,
+        cachedNotes,
+        cachedDayOrders,
+        cachedTimeEntries,
+        focusPreferences,
+        feedMark,
+      ] = await Promise.all([
+        localStore.loadCachedProjects(),
+        localStore.loadCachedTags(),
+        localStore.loadCachedSubtasks(),
+        localStore.loadCachedNotes(),
+        localStore.loadCachedDayOrders(),
+        localStore.loadCachedTimeEntries(),
+        localStore.loadCachedFocusPreferences(),
+        localStore.loadTimeEntryFeedMark(),
+      ]);
+      if (!isCurrent()) return;
+      setProjects(cachedProjects);
+      setTags(cachedTags);
+      setNotes(cachedNotes);
+      setDayOrders(cachedDayOrders);
+      setTimeEntries(cachedTimeEntries);
+      setCachedFocusPreferences(focusPreferences);
+      // ADR 0050: a round delivered a stored time entry, by this tab or by
+      // the leader tab. The views that read the server's time report reload;
+      // the entry's routes no longer send a `resources` hint.
+      if (
+        timeEntryFeedMark.current !== undefined &&
+        timeEntryFeedMark.current !== feedMark
+      )
+        liveViewRegistry.refetchViews(["worklog", "timeSpent"]);
+      timeEntryFeedMark.current = feedMark;
+      setSubtasks(
+        cachedSubtasks.reduce<Record<string, Subtask[]>>((grouped, subtask) => {
+          (grouped[subtask.taskId] ??= []).push(subtask);
+          return grouped;
+        }, {}),
       );
+    },
+    [localStore],
+  );
+
+  // What a tab shows after sync rounds were applied, by itself or (ADR 0045)
+  // by another tab of this browser profile.
+  const readLocalState = useCallback(
+    async (
+      client: LocalClientIdentity,
+      isCurrent: () => boolean = () => true,
+    ) => {
+      await refreshCachedOrganization(isCurrent);
+      const habits = await localStore.loadCachedHabits();
+      const outbox = await localStore.loadOutbox();
+      if (isCurrent()) {
+        setHabitLibrary(habits);
+        setHabitPending(
+          outbox.some(
+            ({ operation, state }) =>
+              isHabitSyncOperation(operation) &&
+              (state === "queued" || state === "sending"),
+          ),
+        );
+      }
       return {
         ...(await cachedTaskState()),
         client,
         activeSession: await getActiveSession(client),
       };
     },
-    [cachedTaskState, localStore],
+    [cachedTaskState, localStore, refreshCachedOrganization],
+  );
+
+  const runSync = useCallback(
+    async (
+      session: SessionResponse,
+      trigger?: SyncRoundTrigger,
+      isCurrent: () => boolean = () => true,
+    ) => {
+      const transport = createSyncTransport(session.csrfToken);
+      const engine = new SyncEngine(localStore, transport);
+      const client = await engine.ensureClient();
+      if ((await localStore.loadCachedEntities()).length === 0) {
+        await localStore.replaceFromSnapshot(await transport.snapshot(client));
+      }
+      let round = await engine.sync(undefined, trigger);
+      while (round.hasMore) round = await engine.sync(undefined, trigger);
+      // The reads that follow a hint-triggered round are not owner activity.
+      if (trigger === "push") noteBackgroundReads();
+      return readLocalState(client, isCurrent);
+    },
+    [localStore, readLocalState],
+  );
+
+  // Rounds the owner or the app's own lifecycle started. Other tabs reload
+  // from IndexedDB afterwards.
+  const synchronize = useCallback(
+    async (session: SessionResponse, isCurrent: () => boolean = () => true) => {
+      const local = await runSync(session, undefined, isCurrent);
+      liveSync.announceRound();
+      return local;
+    },
+    [liveSync, runSync],
   );
 
   const loadAuthenticated = useCallback(
-    async (session: SessionResponse) => {
+    async (session: SessionResponse, isCurrent: () => boolean = () => true) => {
       const [
         baikal,
         google,
@@ -418,6 +612,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         getTemplateSets(),
         getChoicePools(),
       ]);
+      if (!isCurrent()) return;
       setProjects(projectList);
       setTags(tagList);
       setTemplates(library.templates);
@@ -449,27 +644,36 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         baikal.connected || google.connected
           ? await getPlanner(window.from, window.to)
           : null;
+      if (!isCurrent()) return;
       let local: Awaited<ReturnType<typeof synchronize>> | undefined;
       try {
-        local = await synchronize(session);
+        local = await synchronize(session, isCurrent);
       } catch {
         // Direct authenticated reads remain a safe first-run fallback. Existing
         // browser profiles retain their IndexedDB cache for offline use.
+        // ADR 0046: notes have no direct read; show what the cache holds.
+        const cachedNotes = await localStore.loadCachedNotes().catch(() => []);
+        if (!isCurrent()) return;
+        setNotes(cachedNotes);
       }
+      if (!isCurrent()) return;
       const visibleTasks = local?.tasks ?? taskList.tasks;
       try {
         await localStore.savePlanningPreferences(planningPreferences);
       } catch {
+        if (!isCurrent()) return;
         setFormError(
           "Planning preferences are current, but they could not be cached for offline use.",
         );
       }
-      const subtaskEntries = await Promise.all(
-        visibleTasks.map(
-          async (task) => [task.id, await getSubtasks(task.id)] as const,
+      if (!isCurrent()) return;
+      const allSubtasks = await getAllSubtasks();
+      if (!isCurrent()) return;
+      setSubtasks(
+        Object.fromEntries(
+          visibleTasks.map((task) => [task.id, allSubtasks[task.id] ?? []]),
         ),
       );
-      setSubtasks(Object.fromEntries(subtaskEntries));
       setState({
         kind: "authenticated",
         session,
@@ -495,59 +699,38 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     [localStore, synchronize],
   );
 
-  useEffect(() => {
-    if (initialState !== undefined) return;
-    const lifecycle = { cancelled: false };
-    const cancelled = (): boolean => lifecycle.cancelled;
-    void getSetupStatus()
-      .then(async ({ setupRequired }) => {
-        if (cancelled()) return;
-        if (setupRequired) {
-          setState({ kind: "setup" });
-          return;
-        }
-        try {
-          const session = await resumeSession();
-          if (!cancelled()) await loadAuthenticated(session);
-        } catch (error: unknown) {
-          if (cancelled()) return;
-          if (error instanceof ApiRequestError && error.status === 401) {
-            setState({ kind: "login" });
-          } else {
-            setState({ kind: "error", message: messageFor(error) });
-          }
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled())
-          void Promise.all([
-            cachedTaskState(),
-            localStore.loadPlanningPreferences(),
-            localStore.clientIdentity(),
-          ])
-            .then(([cached, planningPreferences, identity]) => {
-              if (!cancelled() && identity !== undefined)
-                setState({
-                  kind: "offline",
-                  ...cached,
-                  ...(planningPreferences === undefined
-                    ? {}
-                    : { planningPreferences }),
-                  message:
-                    "Working from this browser\u2019s durable task cache.",
-                });
-              else if (!cancelled())
-                setState({ kind: "error", message: messageFor(error) });
-            })
-            .catch(() => {
-              if (!cancelled())
-                setState({ kind: "error", message: messageFor(error) });
-            });
-      });
-    return () => {
-      lifecycle.cancelled = true;
+  const readOfflineBootstrap = useCallback(async () => {
+    const [cached, planningPreferences, identity, cachedNotes] =
+      await Promise.all([
+        cachedTaskState(),
+        localStore.loadPlanningPreferences(),
+        localStore.clientIdentity(),
+        localStore.loadCachedNotes(),
+      ]);
+    if (identity === undefined) return null;
+    return {
+      kind: "offline" as const,
+      ...cached,
+      cachedNotes,
+      ...(planningPreferences === undefined ? {} : { planningPreferences }),
+      message:
+        "Tadooer cannot reach the server. These are the tasks saved in this browser. Task changes are queued and sync when it is back.",
     };
-  }, [cachedTaskState, initialState, loadAuthenticated, localStore]);
+  }, [cachedTaskState, localStore]);
+  const publishBootstrap = useCallback(
+    (next: AppState, cachedNotes?: readonly Note[]): void => {
+      if (cachedNotes !== undefined) setNotes(cachedNotes);
+      setState(next);
+    },
+    [],
+  );
+  useAppBootstrap({
+    enabled: initialState === undefined,
+    loadAuthenticated,
+    readOffline: readOfflineBootstrap,
+    publish: publishBootstrap,
+    messageFor,
+  });
 
   useEffect(() => {
     if (state.kind !== "authenticated") return;
@@ -620,6 +803,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       const session = await login({
         username: formValue(data, "username"),
         password: formValue(data, "password"),
+        // ADR 0048: an unticked box is an ordinary browser session.
+        trustDevice: data.get("trustDevice") === "on",
       });
       await loadAuthenticated(session);
     } catch (error: unknown) {
@@ -655,6 +840,29 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  const checkBaikal = async (form: HTMLFormElement | null): Promise<void> => {
+    if (state.kind !== "authenticated" || form === null) return;
+    const data = new FormData(form);
+    setBusy(true);
+    setFormError(null);
+    setBaikalProbe(null);
+    try {
+      setBaikalProbe(
+        await probeBaikal(
+          {
+            username: formValue(data, "username"),
+            password: formValue(data, "password"),
+          },
+          state.session.csrfToken,
+        ),
+      );
+    } catch (error: unknown) {
+      setFormError(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const calendarError = (error: unknown): void => {
     setCalendarMessage(null);
     if (
@@ -663,7 +871,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       error.code === "AUTH_REQUIRED"
     ) {
       setFormError(null);
-      setSessionFailure("expired");
+      sessionRecovery.reportFailure("expired");
     } else {
       setFormError(messageFor(error));
     }
@@ -677,13 +885,18 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     return session;
   };
 
-  const authorizeGoogle = async (): Promise<string> => {
+  const authorizeGoogle = async (
+    access: "read" | "write" = "read",
+  ): Promise<string> => {
     if (state.kind !== "authenticated") throw new Error("Sign in required");
     setBusy(true);
     setFormError(null);
     try {
       const session = await calendarSession();
-      const authorization = await beginGoogleAuthorization(session.csrfToken);
+      const authorization = await beginGoogleAuthorization(
+        session.csrfToken,
+        access,
+      );
       return authorization.authorizationUrl;
     } catch (error: unknown) {
       calendarError(error);
@@ -732,16 +945,34 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         );
       } else if (result.status.state !== "connected") {
         setCalendarMessage(
-          "Google Calendar could not finish syncing. The last saved projection has been kept. You can retry without disconnecting.",
+          "Google Calendar did not finish syncing. The events saved last time are kept. Retry without disconnecting.",
         );
       } else {
         setCalendarMessage(
-          full
-            ? "Google Calendar resynced successfully."
-            : "Google Calendar synced successfully.",
+          full ? "Google Calendar resynced." : "Google Calendar synced.",
         );
       }
       await refreshGooglePlanning();
+    } catch (error: unknown) {
+      calendarError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const withdrawGoogleWrite = async (): Promise<void> => {
+    if (state.kind !== "authenticated") return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      const session = await calendarSession();
+      const google = await withdrawGoogleWriteConsent(session.csrfToken);
+      setState((current) =>
+        current.kind === "authenticated" ? { ...current, google } : current,
+      );
+      setCalendarMessage(
+        "Tadooer will no longer change Google events. Google keeps the permission until you disconnect or remove access in your Google account.",
+      );
     } catch (error: unknown) {
       calendarError(error);
     } finally {
@@ -771,6 +1002,12 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 grantedScopes: [],
                 calendars: [],
                 freshness: [],
+                write: {
+                  consent: "none",
+                  consentedAt: null,
+                  scopeGranted: false,
+                },
+                capabilities: [],
               },
             }
           : current,
@@ -862,6 +1099,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
 
   const publishLocalState = async (): Promise<void> => {
     const cached = await cachedTaskState();
+    if (state.kind === "authenticated") await refreshCachedOrganization();
     setState((current) =>
       current.kind === "authenticated"
         ? {
@@ -891,7 +1129,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       );
       if (local.conflictCount > 0)
         setFormError(
-          "A task field changed on another client. Review the visible sync conflict before retrying.",
+          "A record changed on another device. Review the sync conflict shown here before retrying.",
         );
     } catch (error: unknown) {
       setState((current) =>
@@ -900,6 +1138,22 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           : current,
       );
       setFormError(`${savedMessage}. ${messageFor(error)}`);
+    }
+  };
+
+  const resolveConflict = async (
+    input: ResolveTaskConflictInput,
+  ): Promise<void> => {
+    setBusy(true);
+    setFormError(null);
+    try {
+      await localStore.resolveTaskConflict(input);
+      await syncAfterLocalMutation("Conflict resolution saved locally");
+    } catch (error: unknown) {
+      setFormError(messageFor(error));
+      await publishLocalState();
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -931,7 +1185,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       );
       if (local.conflictCount > 0)
         setFormError(
-          "A task field changed on another client. Review the visible sync conflict before retrying.",
+          "A record changed on another device. Review the sync conflict shown here before retrying.",
         );
     } catch (error: unknown) {
       setState((current) =>
@@ -985,6 +1239,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           title: formValue(data, "title"),
           notes: formValue(data, "notes"),
           structured: true,
+          createTags: data.get("createTags") === "on",
           estimateMinutes:
             Number.isInteger(estimate) && estimate > 0 ? estimate : null,
         };
@@ -1074,6 +1329,35 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     setFormError(messageFor(error));
   };
 
+  // ADR 0022: archiving is online-only; the sync feed then drops the family.
+  const archiveTaskToHistory = async (task: Task): Promise<void> => {
+    if (state.kind !== "authenticated") return;
+    setFormError(null);
+    try {
+      await archiveTask(task.id, task.revision, state.session.csrfToken);
+      await syncNow();
+    } catch (error: unknown) {
+      handleTaskError(error);
+    }
+  };
+
+  const taskHierarchyActions = createTaskHierarchyActions(
+    localStore,
+    async (queue) => {
+      if (state.kind !== "authenticated" && state.kind !== "offline") return;
+      setBusy(true);
+      setFormError(null);
+      try {
+        await queue();
+        await syncAfterLocalMutation();
+      } catch (error: unknown) {
+        handleTaskError(error);
+      } finally {
+        setBusy(false);
+      }
+    },
+  );
+
   const submitTaskEdit = async (
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
     task: Task,
@@ -1122,6 +1406,15 @@ export const App = ({ initialState, initialPath }: AppProps) => {
 
   const removeTask = async (task: Task): Promise<void> => {
     if (state.kind !== "authenticated" && state.kind !== "offline") return;
+    // ADR 0030 confirmBeforeDelete; deleted tasks stay recoverable.
+    if (
+      appPreferences.snapshot.preferences.confirmBeforeDelete &&
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Delete “${task.title}”? It can be recovered from Deleted tasks.`,
+      )
+    )
+      return;
     setBusy(true);
     setFormError(null);
     try {
@@ -1178,6 +1471,33 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  // ADR 0029: focus presets, idle disposition and break reminders.
+  const focus = useFocusController({
+    authenticated: state.kind === "authenticated",
+    client: state.kind === "authenticated" ? state.client : undefined,
+    csrfToken:
+      state.kind === "authenticated" ? state.session.csrfToken : undefined,
+    activeSession:
+      state.kind === "authenticated" ? state.activeSession : undefined,
+    online: networkOnline,
+    cachedPreferences: cachedFocusPreferences,
+    tasks: state.kind === "authenticated" ? state.tasks : [],
+    onSessionChanged: (session) =>
+      setState((current) =>
+        current.kind === "authenticated"
+          ? { ...current, activeSession: session }
+          : current,
+      ),
+    onSessionCommand: (command, session) =>
+      void handleFocusCommand({
+        command,
+        sessionId: session.id,
+        expectedRevision: session.revision,
+      }),
+    onNavigateToday: () => navigate("today"),
+    onError: (message) => setFormError(message),
+  });
+
   const submitOrganization = async (
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
     kind: "project" | "tag",
@@ -1185,16 +1505,15 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     event.preventDefault();
     if (state.kind !== "authenticated") return;
     const form = event.currentTarget;
-    const title = formValue(new FormData(form), "title");
+    const title = formValue(new FormData(form), "title").trim();
+    if (title === "") return;
     setBusy(true);
+    setFormError(null);
     try {
-      if (kind === "project")
-        setProjects([
-          ...projects,
-          await createProject(title, state.session.csrfToken),
-        ]);
-      else setTags([...tags, await createTag(title, state.session.csrfToken)]);
+      // ADR 0033: creation queues offline; the server assigns nothing.
+      await localStore.queueOrganizationCreate(kind, title);
       form.reset();
+      await syncAfterLocalMutation();
     } catch (error: unknown) {
       setFormError(messageFor(error));
     } finally {
@@ -1202,32 +1521,98 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  const organizationQueue: OrganizationQueue = {
+    patchProject: async (project, fields) => {
+      await localStore.queueOrganizationPatch("project", project.id, fields);
+      await syncAfterLocalMutation();
+    },
+    patchTag: async (tag, fields) => {
+      await localStore.queueOrganizationPatch("tag", tag.id, fields);
+      await syncAfterLocalMutation();
+    },
+  };
+
+  // ADR 0046: note writes queue offline with one record revision each.
+  // Moving a note swaps two positions with two revisioned patches, as the
+  // checklist does; the complete-membership reorder stays an online route.
+  const noteQueue: NoteQueue = {
+    create: async (input) => {
+      await localStore.queueNoteCreate(input);
+      await syncAfterLocalMutation();
+    },
+    patch: async (note, fields) => {
+      await localStore.queueNotePatch(note.id, fields);
+      await syncAfterLocalMutation();
+    },
+    remove: async (note) => {
+      await localStore.queueNoteDelete(note.id);
+      await syncAfterLocalMutation();
+    },
+    swap: async (note, neighbour) => {
+      const [mine, theirs] =
+        note.position === neighbour.position
+          ? [notes.indexOf(neighbour), notes.indexOf(note)]
+          : [neighbour.position, note.position];
+      if (mine < 0 || theirs < 0) return;
+      await localStore.queueNotePatch(note.id, { position: mine });
+      await localStore.queueNotePatch(neighbour.id, { position: theirs });
+      await syncAfterLocalMutation();
+    },
+  };
+
+  // ADR 0050: a day-order reorder queues offline with the saved revision of
+  // its date. Planning tasks for a date queues one planned-day patch per
+  // task and then the order that places them after the date's members.
+  const dayOrderActions: DayOrderActions = {
+    reorder: async (date, taskIds) => {
+      await localStore.queueDayOrderReorder(date, taskIds);
+      await syncAfterLocalMutation();
+    },
+    plan: async (date, planned, order) => {
+      for (const task of planned)
+        await localStore.queueTaskPatch(task.id, { plannedDay: date });
+      await localStore.queueDayOrderReorder(date, order);
+      await syncAfterLocalMutation();
+    },
+  };
+
+  // ADR 0050: time entry writes without a connection queue one operation
+  // each. With a connection the Worklog uses the conditional HTTP routes.
+  const timeEntryQueue: TimeEntryQueue = {
+    create: async (entry) => {
+      await localStore.queueTimeEntryCreate({
+        ...entry,
+        note: entry.note ?? "",
+      });
+      await syncAfterLocalMutation();
+    },
+    patch: async (entry, patch) => {
+      await localStore.queueTimeEntryPatch(entry.id, patch);
+      await syncAfterLocalMutation();
+    },
+    remove: async (entry) => {
+      await localStore.queueTimeEntryDelete(entry.id);
+      await syncAfterLocalMutation();
+    },
+  };
+
   const submitTaskOrganization = async (
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
     task: Task,
   ): Promise<void> => {
     event.preventDefault();
-    if (state.kind !== "authenticated") return;
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
     const data = new FormData(event.currentTarget);
     const projectId = formValue(data, "projectId") || null;
     const tagIds = data
       .getAll("tagIds")
       .filter((value): value is string => typeof value === "string");
     setBusy(true);
+    setFormError(null);
     try {
-      const assignedProject = await assignTaskProject(
-        task.id,
-        task.revision,
-        projectId,
-        state.session.csrfToken,
-      );
-      const assignedTags = await assignTaskTags(
-        task.id,
-        assignedProject.task.revision,
-        tagIds,
-        state.session.csrfToken,
-      );
-      replaceTask(assignedTags.task);
+      // ADR 0033: assignment uses the projectId and tagIds field versions.
+      await localStore.queueTaskPatch(task.id, { projectId, tagIds });
+      await syncAfterLocalMutation();
     } catch (error: unknown) {
       handleTaskError(error);
     } finally {
@@ -1240,21 +1625,20 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     task: Task,
   ): Promise<void> => {
     event.preventDefault();
-    if (state.kind !== "authenticated") return;
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
     const form = event.currentTarget;
-    const title = formValue(new FormData(form), "title");
+    const title = formValue(new FormData(form), "title").trim();
+    if (title === "") return;
     setBusy(true);
+    setFormError(null);
     try {
-      const subtask = await createSubtask(
+      await localStore.queueSubtaskCreate(
         task.id,
-        { title, position: subtasks[task.id]?.length ?? 0 },
-        state.session.csrfToken,
+        title,
+        subtasks[task.id]?.length ?? 0,
       );
-      setSubtasks((current) => ({
-        ...current,
-        [task.id]: [...(current[task.id] ?? []), subtask],
-      }));
       form.reset();
+      await syncAfterLocalMutation();
     } catch (error: unknown) {
       setFormError(messageFor(error));
     } finally {
@@ -1262,57 +1646,37 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  // ADR 0033: checklist edits queue offline. Moving an item swaps two
+  // positions with two revisioned patches; the complete reorder stays online.
   const changeSubtask = async (
     subtask: Subtask,
     action: "toggle" | "up" | "down" | "delete",
   ): Promise<void> => {
-    if (state.kind !== "authenticated") return;
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
     setBusy(true);
+    setFormError(null);
     try {
-      if (action === "delete") {
-        await deleteSubtask(
-          subtask.id,
-          subtask.revision,
-          state.session.csrfToken,
-        );
-        setSubtasks((current) => ({
-          ...current,
-          [subtask.taskId]: (current[subtask.taskId] ?? []).filter(
-            ({ id }) => id !== subtask.id,
-          ),
-        }));
-      } else {
-        if (action === "toggle") {
-          const updated = await patchSubtask(
-            subtask.id,
-            subtask.revision,
-            { completed: !subtask.completed },
-            state.session.csrfToken,
-          );
-          setSubtasks((current) => ({
-            ...current,
-            [subtask.taskId]: (current[subtask.taskId] ?? []).map((item) =>
-              item.id === updated.id ? updated : item,
-            ),
-          }));
-        } else {
-          const reordered = moveChecklistItem(
-            subtasks[subtask.taskId] ?? [],
-            subtask.id,
-            action,
-          );
-          if (reordered === undefined) return;
-          const updated = await reorderSubtasks(
-            subtask.taskId,
-            reordered.map(({ id, revision }) => ({ id, revision })),
-            state.session.csrfToken,
-          );
-          setSubtasks((current) => ({
-            ...current,
-            [subtask.taskId]: updated,
-          }));
-        }
+      if (action === "delete") await localStore.queueSubtaskDelete(subtask.id);
+      else if (action === "toggle")
+        await localStore.queueSubtaskPatch(subtask.id, {
+          completed: !subtask.completed,
+        });
+      else {
+        const items = subtasks[subtask.taskId] ?? [];
+        const index = items.findIndex(({ id }) => id === subtask.id);
+        const other = items[action === "up" ? index - 1 : index + 1];
+        if (index < 0 || other === undefined) return;
+        const positions = [subtask.position, other.position];
+        const [mine, theirs] =
+          positions[0] === positions[1]
+            ? action === "up"
+              ? [index - 1, index]
+              : [index + 1, index]
+            : [other.position, subtask.position];
+        await localStore.queueSubtaskPatch(subtask.id, { position: mine });
+        await localStore.queueSubtaskPatch(other.id, { position: theirs });
       }
+      await syncAfterLocalMutation();
     } catch (error: unknown) {
       setFormError(messageFor(error));
     } finally {
@@ -1388,6 +1752,52 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  // Reminders are online-only (ADR 0020). Without a connection the planned
+  // day or time queues through the outbox instead (ADR 0033).
+  const submitTaskPlanning = async (
+    task: Task,
+    patch: TaskPatchRequest,
+  ): Promise<void> => {
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
+    setBusy(true);
+    setFormError(null);
+    if (state.kind === "offline" || !navigator.onLine) {
+      try {
+        await localStore.queueTaskPatch(task.id, {
+          plannedDay: patch.plannedDay ?? null,
+          plannedStart: patch.plannedStart ?? null,
+        });
+        await syncAfterLocalMutation();
+        if (
+          patch.startReminder !== undefined ||
+          patch.deadlineReminder !== undefined
+        )
+          setFormError(
+            "Planned day or time saved locally. Reminder settings were not changed; connect to update them.",
+          );
+      } catch (error: unknown) {
+        handleTaskError(error);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    try {
+      const result = await patchTask(
+        task.id,
+        task.revision,
+        patch,
+        state.session.csrfToken,
+      );
+      replaceTask(result.task);
+      await syncAfterLocalMutation();
+    } catch (error: unknown) {
+      handleTaskError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const removeTimeBlock = async (task: Task): Promise<void> => {
     if (state.kind !== "authenticated") return;
     setBusy(true);
@@ -1417,6 +1827,118 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  // The Sheet needs an action outcome to retain its draft and show its own
+  // error. Existing page forms retain their Promise<void> callbacks.
+  const submitPlannerTaskEdit = async (
+    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
+    task: Task,
+  ): Promise<boolean> => {
+    event.preventDefault();
+    if (state.kind !== "authenticated" && state.kind !== "offline")
+      return false;
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    setFormError(null);
+    try {
+      const estimate = Number(formValue(data, "estimateMinutes"));
+      await localStore.queueTaskPatch(task.id, {
+        title: formValue(data, "title"),
+        notes: formValue(data, "notes"),
+        deadline: deadlineFromForm(data),
+        estimateMinutes:
+          Number.isInteger(estimate) && estimate > 0 ? estimate : null,
+      });
+      await syncAfterLocalMutation();
+      return true;
+    } catch (error: unknown) {
+      handleTaskError(error);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitPlannerTimeBlock = async (
+    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
+    task: Task,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<boolean> => {
+    event.preventDefault();
+    if (state.kind !== "authenticated") return false;
+    const data = new FormData(event.currentTarget);
+    const startsAt = localInputToIso(formValue(data, "startsAt"));
+    const durationMinutes = Number(formValue(data, "durationMinutes"));
+    if (startsAt === undefined) {
+      setFormError("Choose a valid start time.");
+      return false;
+    }
+    setBusy(true);
+    setFormError(null);
+    try {
+      const result = await putTaskTimeBlock(
+        task.id,
+        task.revision,
+        {
+          calendarId: formValue(data, "calendarId"),
+          startsAt,
+          durationMinutes,
+        },
+        state.session.csrfToken,
+        crypto.randomUUID(),
+      );
+      replaceTask(result.task);
+      const [planner, dayPlan] = await Promise.all([
+        getPlanner(window.from, window.to),
+        getDayPlan(),
+        syncAfterLocalMutation(),
+      ]);
+      setState((current) =>
+        current.kind === "authenticated"
+          ? { ...current, planner, dayPlan }
+          : current,
+      );
+      return true;
+    } catch (error: unknown) {
+      handleTaskError(error);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removePlannerTimeBlock = async (
+    task: Task,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<boolean> => {
+    if (state.kind !== "authenticated") return false;
+    setBusy(true);
+    setFormError(null);
+    try {
+      const result = await removeTaskTimeBlock(
+        task.id,
+        task.revision,
+        state.session.csrfToken,
+      );
+      replaceTask(result.task);
+      const [planner, dayPlan] = await Promise.all([
+        getPlanner(window.from, window.to),
+        getDayPlan(),
+        syncAfterLocalMutation(),
+      ]);
+      setState((current) =>
+        current.kind === "authenticated"
+          ? { ...current, planner, dayPlan }
+          : current,
+      );
+      return true;
+    } catch (error: unknown) {
+      handleTaskError(error);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const signOut = async (): Promise<void> => {
     if (state.kind !== "authenticated") return;
     setBusy(true);
@@ -1429,6 +1951,81 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       setBusy(false);
     }
   };
+
+  // ADR 0030 keyboard shortcuts. Bindings come from the preferences record;
+  // the command bar handles its own binding.
+  const shortcutOverrides = appPreferences.snapshot.preferences.shortcuts;
+  useEffect(() => {
+    if (state.kind !== "authenticated" || typeof window === "undefined") return;
+    const selectedTask = (): Task | undefined => {
+      const row =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement.closest<HTMLElement>("[data-task-id]")
+          : null;
+      const id = row?.dataset.taskId ?? state.activeSession?.taskId;
+      return state.tasks.find((task) => task.id === id);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return;
+      const action = shortcutActionFor(event, shortcutOverrides);
+      if (action === undefined || action === "command_bar.open") return;
+      event.preventDefault();
+      if (action.startsWith("navigate.")) {
+        const target = workspaceRoutes.find(
+          (candidate) => `navigate.${candidate}` === action,
+        );
+        if (target !== undefined) navigate(target);
+        return;
+      }
+      switch (action) {
+        case "help.shortcuts":
+          setShortcutHelpOpen((open) => !open);
+          return;
+        case "sync.now":
+          void syncNow();
+          return;
+        case "task.add": {
+          if (route !== "today" && route !== "inbox") navigate("today");
+          window.setTimeout(() => {
+            document
+              .querySelector<HTMLInputElement>('form input[name="title"]')
+              ?.focus();
+          }, 0);
+          return;
+        }
+        case "task.toggle_done": {
+          const task = selectedTask();
+          if (task !== undefined)
+            void changeTaskStatus(
+              task,
+              task.status === "completed" ? "reopen" : "complete",
+            );
+          return;
+        }
+        case "focus.toggle": {
+          const session = state.activeSession;
+          if (
+            session != null &&
+            session.state !== "completed" &&
+            session.state !== "expired"
+          ) {
+            void handleFocusCommand({
+              command: "complete",
+              sessionId: session.id,
+              expectedRevision: session.revision,
+            });
+            return;
+          }
+          const task = selectedTask();
+          if (task?.status === "open")
+            void handleFocusCommand({ command: "start", taskId: task.id });
+          return;
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   const refreshTemplateLibrary = async (query = ""): Promise<void> => {
     const [library, sets] = await Promise.all([
@@ -1821,6 +2418,104 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     URL.revokeObjectURL(url);
   };
 
+  // ADR 0045 live sync. The stream, tab leader election and fallback
+  // triggers live in ./live-sync; the shell supplies its sync and reload.
+  const liveSession =
+    state.kind === "authenticated" && sessionFailure === null
+      ? state.session
+      : null;
+  const liveStatus = useLiveSync(liveSync, liveSession?.csrfToken ?? null, {
+    identity: () => localStore.clientIdentity(),
+    sync: async (trigger) => {
+      if (liveSession === null) return;
+      const local = await runSync(liveSession, trigger);
+      setState((current) =>
+        current.kind === "authenticated"
+          ? {
+              ...current,
+              ...local,
+              syncStatus:
+                current.syncStatus === "syncing" ? "syncing" : "online",
+            }
+          : current,
+      );
+    },
+    reloadLocal: async () => {
+      const client = await localStore.clientIdentity();
+      if (client === undefined) return;
+      const local = await readLocalState(client);
+      setState((current) =>
+        current.kind === "authenticated" ? { ...current, ...local } : current,
+      );
+    },
+  });
+  // ADR 0047 and ADR 0049: inside the desktop shell the tray shows this state
+  // and can ask for quick capture or a sync; the Android shell passes on text
+  // shared from another app. In a browser this does nothing.
+  useDesktopShell({
+    status: {
+      sync:
+        state.kind === "authenticated"
+          ? (state.syncStatus ?? "online")
+          : state.kind === "offline"
+            ? "offline"
+            : "signed-out",
+      live: liveStatus,
+      conflicts:
+        state.kind === "authenticated" || state.kind === "offline"
+          ? (state.conflictCount ?? 0)
+          : 0,
+    },
+    focus: desktopFocusReport(
+      state.kind === "authenticated" ? state.activeSession : null,
+      state.kind === "authenticated" ? state.tasks : [],
+    ),
+    captureReady: state.kind === "authenticated",
+    onQuickCapture: (sharedText) => {
+      if (state.kind !== "authenticated") return;
+      if (route !== "today" && route !== "inbox") navigate("today");
+      // The capture form may not be mounted yet, right after sign-in or a
+      // route change. Shared text waits for it for up to a second; a plain
+      // request to focus the field is tried once, as before.
+      let attempts = sharedText === undefined ? 1 : 20;
+      const place = (): void => {
+        const title = document.querySelector<HTMLInputElement>(
+          'form input[name="title"]',
+        );
+        attempts -= 1;
+        if (title === null) {
+          if (attempts > 0) window.setTimeout(place, 50);
+          return;
+        }
+        // ADR 0049: text shared to the Android app is placed in the field
+        // for the owner to review. Nothing submits it.
+        if (sharedText !== undefined)
+          title.value = captureFieldValue(title.value, sharedText);
+        title.focus();
+      };
+      window.setTimeout(place, 0);
+    },
+    onSyncNow: () => void syncNow(),
+  });
+  const patchAuthenticated = useCallback((patch: LiveAppPatch) => {
+    setState((current) =>
+      current.kind === "authenticated" ? { ...current, ...patch } : current,
+    );
+  }, []);
+  useAppLiveViews({
+    enabled: liveSession !== null && networkOnline,
+    calendarConnected:
+      state.kind === "authenticated" &&
+      (state.baikal.connected || state.google?.connected === true),
+    plannerPageOpen: route === "planner",
+    plannerWindow,
+    patch: patchAuthenticated,
+    cachePlanningPreferences: (preferences) =>
+      localStore.savePlanningPreferences(preferences),
+    refreshTemplates: () => refreshTemplateLibrary(),
+    refreshChoicePools: () => refreshChoicePools(),
+  });
+
   /* ── Render ─────────────────────────────────────────────────── */
   const offlineState = state.kind === "offline" ? state : undefined;
   const shouldRenderOffline = (): boolean => offlineState !== undefined;
@@ -1836,6 +2531,11 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     const renderedOfflineState = offlineForRender();
     return (
       <main className="main">
+        <SyncConflictReview
+          reviews={renderedOfflineState.conflictReviews ?? []}
+          busy={busy}
+          onResolve={resolveConflict}
+        />
         <TodayPage
           dayPlan={undefined}
           planningPreferences={renderedOfflineState.planningPreferences}
@@ -1854,27 +2554,28 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           onSubmitTimeBlock={submitTimeBlock}
           onRemoveTimeBlock={removeTimeBlock}
           onViewTasks={() => navigate("tasks")}
+          pinnedNotes={pinnedNotes}
         />
         <section aria-label="Offline sync status">
           <p>Visible sync conflicts: {renderedOfflineState.conflictCount}</p>
           {formError !== null ? (
             <p className="message message-error">{formError}</p>
           ) : null}
-          <button
-            className="btn-ghost"
+          <Button
+            variant="ghost"
             type="button"
             disabled={busy}
             onClick={() => void syncNow()}
           >
             Sync now
-          </button>
-          <button
-            className="btn-ghost"
+          </Button>
+          <Button
+            variant="ghost"
             type="button"
             onClick={() => void exportDiagnostics()}
           >
             Export redacted sync diagnostics
-          </button>
+          </Button>
         </section>
       </main>
     );
@@ -1894,55 +2595,26 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         <div className="auth-card">
           {recovery}
           {state.kind === "loading" && (
-            <div style={{ textAlign: "center" }}>
-              <div
-                className="status-dot online"
-                style={{ width: 8, height: 8, margin: "0 auto 0.75rem" }}
-              />
-              <p className="muted">Opening your suite...</p>
+            <div className="auth-loading">
+              <div className="status-dot online" />
+              <p className="muted">Opening the planner...</p>
             </div>
           )}
           {state.kind === "error" && (
             <div>
               <p className="step">Connection problem</p>
-              <h2
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 600,
-                  marginBottom: "0.5rem",
-                }}
-              >
-                Unable to reach the Suite
-              </h2>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--color-text-secondary)",
-                  marginBottom: "1rem",
-                }}
-              >
-                {state.message}
-              </p>
-              <button className="btn-primary" onClick={() => location.reload()}>
-                Retry
-              </button>
+              <h2>Unable to reach Tadooer</h2>
+              <p className="muted">{state.message}</p>
+              <Button onClick={() => location.reload()}>Retry</Button>
             </div>
           )}
           {state.kind === "setup" && (
             <form onSubmit={(event) => void submitSetup(event)}>
               <p className="step">Step 1 of 2</p>
-              <h2
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 600,
-                  marginBottom: "1rem",
-                }}
-              >
-                Create the owner account
-              </h2>
-              <p className="muted" style={{ marginBottom: "1rem" }}>
-                This first release supports one owner. The identity remains
-                explicit so future data is always ownership-scoped.
+              <h2>Create the owner account</h2>
+              <p className="muted">
+                This planner has one owner. Everything in it belongs to this
+                account.
               </p>
               <Field
                 label="Display name"
@@ -1962,45 +2634,23 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 autoComplete="new-password"
                 minLength={14}
               />
-              <p className="hint" style={{ marginBottom: "0.75rem" }}>
+              <p className="hint">
                 Use at least 14 characters. A memorable passphrase works well.
               </p>
               {formError !== null && (
-                <p
-                  className="message message-error"
-                  style={{ marginBottom: "0.75rem" }}
-                >
-                  {formError}
-                </p>
+                <p className="message message-error">{formError}</p>
               )}
-              <button
-                className="btn-primary"
-                disabled={busy}
-                style={{ width: "100%" }}
-              >
+              <Button className="w-full" disabled={busy}>
                 {busy ? "Creating..." : "Create owner"}
-              </button>
+              </Button>
             </form>
           )}
           {state.kind === "login" && (
             <form onSubmit={(event) => void submitLogin(event)}>
-              <p className="step">Welcome back</p>
-              <h2
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 600,
-                  marginBottom: "1rem",
-                }}
-              >
-                Sign in
-              </h2>
+              <p className="step">Private planner</p>
+              <h2>Sign in</h2>
               {state.message !== undefined && (
-                <p
-                  className="message message-success"
-                  style={{ marginBottom: "0.75rem" }}
-                >
-                  {state.message}
-                </p>
+                <p className="message message-success">{state.message}</p>
               )}
               <Field
                 label="Username"
@@ -2016,60 +2666,41 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 type="password"
                 autoComplete="current-password"
               />
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="trustDevice"
+                  defaultChecked={desktopShellBridge() !== undefined}
+                />
+                Keep me signed in on this device for{" "}
+                {String(trustedDeviceSessionDays)} days
+              </label>
+              <p className="hint">
+                Only choose this on a device that you alone use. You can sign a
+                device out from Settings.
+              </p>
               {state.username !== undefined && (
-                <p
-                  className="message message-error"
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  Session expired. Please sign in again.
+                <p className="message message-error">
+                  The session expired. Sign in again.
                 </p>
               )}
               {formError !== null && (
-                <p
-                  className="message message-error"
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  {formError}
-                </p>
+                <p className="message message-error">{formError}</p>
               )}
-              <button
-                className="btn-primary"
-                disabled={busy}
-                style={{ width: "100%", marginTop: "0.75rem" }}
-              >
+              <Button className="w-full" disabled={busy}>
                 {busy ? "Signing in..." : "Sign in"}
-              </button>
+              </Button>
             </form>
           )}
           {state.kind === "offline" && (
             <div>
               <p className="step">Offline</p>
-              <h2
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 600,
-                  marginBottom: "0.5rem",
-                }}
-              >
-                Limited workspace
-              </h2>
+              <h2>Limited workspace</h2>
               <p className="muted">{state.message}</p>
               {formError !== null && (
-                <p
-                  className="message message-error"
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  {formError}
-                </p>
+                <p className="message message-error">{formError}</p>
               )}
-              <nav
-                style={{
-                  display: "flex",
-                  gap: "0.25rem",
-                  marginTop: "1rem",
-                  marginBottom: "1rem",
-                }}
-              >
+              <nav className="offline-nav" aria-label="Offline views">
                 {workspaceRoutes.map((item) => (
                   <a
                     key={item}
@@ -2078,20 +2709,6 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                     onClick={(event) => {
                       event.preventDefault();
                       navigate(item);
-                    }}
-                    style={{
-                      padding: "0.25rem 0.5rem",
-                      borderRadius: "var(--radius-sm)",
-                      fontSize: "var(--text-xs)",
-                      color:
-                        route === item
-                          ? "var(--color-accent)"
-                          : "var(--color-text-secondary)",
-                      background:
-                        route === item
-                          ? "var(--color-accent-muted)"
-                          : "transparent",
-                      textDecoration: "none",
                     }}
                   >
                     {item === "reuse"
@@ -2102,29 +2719,25 @@ export const App = ({ initialState, initialPath }: AppProps) => {
               </nav>
               <div>
                 <form
-                  style={{
-                    display: "flex",
-                    gap: "0.5rem",
-                    marginBottom: "0.75rem",
-                  }}
+                  className="offline-capture"
                   onSubmit={(event) => void submitTask(event)}
                 >
-                  <input
+                  <Input
                     type="text"
                     name="title"
                     required
                     placeholder="Capture a task..."
                     aria-label="Task title"
                   />
-                  <input
+                  <Input
                     type="text"
                     name="notes"
                     placeholder="Notes (optional)"
                     aria-label="Task notes"
                   />
-                  <button className="btn-primary" type="submit" disabled={busy}>
+                  <Button type="submit" disabled={busy}>
                     Add
-                  </button>
+                  </Button>
                 </form>
                 <ul className="tasks" role="list">
                   {state.tasks.map((task) => (
@@ -2142,8 +2755,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                       </div>
                       {task.notes !== "" && <p>{task.notes}</p>}
                       <div className="task-actions">
-                        <button
-                          className="btn-ghost"
+                        <Button
+                          variant="ghost"
                           type="button"
                           onClick={() =>
                             void changeTaskStatus(
@@ -2155,75 +2768,62 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                           }
                         >
                           {task.status === "completed" ? "Reopen" : "Complete"}
-                        </button>
-                        <button
-                          className="btn-danger"
+                        </Button>
+                        <Button
+                          variant="destructive"
                           type="button"
                           onClick={() => void removeTask(task)}
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
                     </li>
                   ))}
                 </ul>
-                <details className="recovery" style={{ marginTop: "0.5rem" }}>
+                <details className="recovery">
                   <summary>Deleted tasks ({state.recovery.length})</summary>
                   {state.recovery.map((task) => (
-                    <button
+                    <Button
                       key={task.id}
                       type="button"
                       onClick={() => void recoverTask(task)}
                     >
                       Restore {task.title}
-                    </button>
+                    </Button>
                   ))}
                 </details>
-                <p className="hint" style={{ marginTop: "0.5rem" }}>
+                <p className="hint">
                   Visible sync conflicts: {state.conflictCount}
                 </p>
-                <button
-                  className="btn-ghost"
+                <Button
+                  variant="ghost"
                   type="button"
                   disabled={busy}
                   onClick={() => void syncNow()}
                 >
                   Sync now
-                </button>
-                <button
-                  className="btn-ghost"
+                </Button>
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => void exportDiagnostics()}
                 >
                   Export redacted sync diagnostics
-                </button>
+                </Button>
               </div>
             </div>
           )}
           {state.kind === "authenticated" && !state.baikal.connected && (
             <form onSubmit={(event) => void submitBaikal(event)}>
               <p className="step">Step 2 of 2</p>
-              <h2
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 600,
-                  marginBottom: "1rem",
-                }}
-              >
-                Connect Baikal
-              </h2>
-              <p className="muted" style={{ marginBottom: "0.75rem" }}>
-                Enter the Baikal user you created. The Suite verifies it through
-                CalDAV before storing an encrypted credential.
+              <h2>Connect Baikal</h2>
+              <p className="muted">
+                Enter the Baikal user you created. Tadooer checks it against the
+                calendar server, then stores the password encrypted.
               </p>
-              <p
-                className="hint"
-                style={{
-                  marginBottom: "0.75rem",
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                Bundled Baikal \u00b7 server-managed CalDAV
+              <p className="hint mono">
+                {endpointHost(state.baikal.endpoint)} {"\u00b7"} server-managed
+                CalDAV
               </p>
               <Field
                 label="Baikal username"
@@ -2237,20 +2837,36 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 autoComplete="current-password"
               />
               {formError !== null && (
-                <p
-                  className="message message-error"
-                  style={{ marginTop: "0.5rem" }}
-                >
-                  {formError}
-                </p>
+                <p className="message message-error">{formError}</p>
               )}
-              <button
-                className="btn-primary"
+              {baikalProbe !== null && (
+                <div aria-live="polite">
+                  <p className="muted">
+                    CalDAV answered. {baikalProbe.writableEventCalendars} of{" "}
+                    {baikalProbe.calendars.length} calendars accept Tadooer
+                    events.
+                  </p>
+                  <ul>
+                    {baikalProbe.calendars.map((calendar) => (
+                      <li key={calendar.href}>
+                        {calendar.displayName}: {calendarAccessLabel(calendar)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                type="button"
+                className="w-full"
                 disabled={busy}
-                style={{ width: "100%", marginTop: "0.75rem" }}
+                onClick={(event) => void checkBaikal(event.currentTarget.form)}
               >
+                Check connection
+              </Button>
+              <Button className="w-full" disabled={busy}>
                 {busy ? "Verifying..." : "Verify and connect"}
-              </button>
+              </Button>
             </form>
           )}
         </div>
@@ -2298,189 +2914,288 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       : state.dayPlan;
 
   return (
-    <AppShell
-      route={route}
-      onNavigate={navigate}
-      syncStatus={state.syncStatus}
-      conflictCount={state.conflictCount}
-      baikalConnected={state.baikal.connected}
-      formError={formError}
-      onSignOut={() => void signOut()}
-      commandTrigger={
-        <CommandBar
-          onNavigate={navigate}
-          onSyncNow={() => void syncNow()}
-          syncAvailable={networkOnline && state.client !== undefined}
+    <ApplicationPreferencesProvider value={appPreferences}>
+      <AppShell
+        route={route}
+        onNavigate={navigate}
+        syncStatus={state.syncStatus}
+        liveStatus={liveStatus}
+        conflictCount={state.conflictCount}
+        baikalConnected={state.baikal.connected}
+        formError={formError}
+        onSignOut={() => void signOut()}
+        commandTrigger={
+          <CommandBar
+            onNavigate={navigate}
+            onSyncNow={() => void syncNow()}
+            syncAvailable={networkOnline && state.client !== undefined}
+            onShowShortcuts={() => setShortcutHelpOpen(true)}
+          />
+        }
+      >
+        <ShortcutHelpDialog
+          open={shortcutHelpOpen}
+          overrides={shortcutOverrides}
+          onOpenChange={setShortcutHelpOpen}
         />
-      }
-    >
-      {recovery}
-      {route === "today" && (
-        <TodayPage
-          dayPlan={dayPlanView}
-          planningPreferences={state.planningPreferences}
-          tasks={state.tasks}
-          activeSession={state.activeSession ?? null}
-          clientId={state.client?.clientId ?? null}
-          syncStatus={state.syncStatus}
-          planner={plannerView}
-          baikalCalendars={state.baikal.calendars}
-          calendarActionsAvailable={networkOnline}
-          focusActionsAvailable={networkOnline && state.client !== undefined}
+        {recovery}
+        <SyncConflictReview
+          reviews={state.conflictReviews ?? []}
           busy={busy}
-          onFocusCommand={(command) => void handleFocusCommand(command)}
-          onSubmitTask={submitTask}
-          onChangeTaskStatus={changeTaskStatus}
-          onSubmitTimeBlock={submitTimeBlock}
-          onRemoveTimeBlock={removeTimeBlock}
-          onViewTasks={() => navigate("tasks")}
+          onResolve={resolveConflict}
         />
-      )}
-      {route === "inbox" && (
-        <InboxPage
-          tasks={state.tasks}
-          activeSession={state.activeSession ?? null}
-          calendars={state.baikal.calendars}
-          busy={busy}
-          calendarActionsAvailable={networkOnline}
-          focusActionsAvailable={networkOnline && state.client !== undefined}
-          onSubmitTask={submitTask}
-          onStartFocus={(task) =>
-            void handleFocusCommand({ command: "start", taskId: task.id })
-          }
-          onChangeTaskStatus={changeTaskStatus}
-          onSubmitTimeBlock={submitTimeBlock}
-          onRemoveTimeBlock={removeTimeBlock}
+        <FocusReminders
+          {...focus.reminders}
+          busy={busy || focus.busy}
+          online={networkOnline && state.client !== undefined}
         />
-      )}
-      {route === "planner" && (
-        <PlannerPage
-          planner={plannerView}
-          timeZone={state.planningPreferences?.timeZone ?? "UTC"}
-          busy={busy}
-          onLoadPlanner={loadPlanner}
-          loading={plannerLoading}
-          error={plannerError}
-        />
-      )}
-      {route === "tasks" && (
-        <TasksPage
-          taskIdFilter={taskIdFilter}
-          onClearTaskIdFilter={() => {
-            setTaskIdFilter("");
-            history.replaceState({}, "", "/tasks");
-          }}
-          tasks={state.tasks}
-          visibleTasks={visibleTasks}
-          recovery={state.recovery}
-          projects={projects}
-          tags={tags}
-          subtasks={subtasks}
-          provenance={templateProvenance}
-          baikalCalendars={state.baikal.calendars}
-          taskQuery={taskQuery}
-          taskStatusFilter={taskStatusFilter}
-          taskProjectFilter={taskProjectFilter}
-          taskTagFilter={taskTagFilter}
-          busy={busy}
-          calendarActionsAvailable={networkOnline}
-          onTaskQueryChange={setTaskQuery}
-          onTaskStatusFilterChange={setTaskStatusFilter}
-          onTaskProjectFilterChange={setTaskProjectFilter}
-          onTaskTagFilterChange={setTaskTagFilter}
-          onSubmitOrganization={submitOrganization}
-          onSubmitTaskEdit={submitTaskEdit}
-          onSubmitTimeBlock={submitTimeBlock}
-          onRemoveTimeBlock={removeTimeBlock}
-          onSubmitTaskOrganization={submitTaskOrganization}
-          onSubmitSubtask={submitSubtask}
-          onChangeSubtask={changeSubtask}
-          onSaveTaskAsTemplate={saveTaskAsTemplate}
-          onChangeTaskStatus={changeTaskStatus}
-          onRemoveTask={removeTask}
-          onRecoverTask={recoverTask}
-        />
-      )}
-      {route === "habits" && (
-        <HabitsPage
-          library={habitLibrary}
-          timeZone={state.planningPreferences?.timeZone ?? "UTC"}
-          online={networkOnline}
-          pending={habitPending}
-          onCommand={submitHabit}
-        />
-      )}
-      {route === "reuse" && (
-        <ReusePage
-          templates={templates}
-          templateBlueprints={templateBlueprints}
-          templateSets={templateSets}
-          choicePools={choicePools}
-          choicePoolItems={choicePoolItems}
-          choicePoolHistory={choicePoolHistory}
-          planningPlaceholders={planningPlaceholders}
-          templatePoolSlots={templatePoolSlots}
-          tasks={state.tasks}
-          projects={projects
-            .filter((project) => project.archivedAt === null)
-            .map(({ id, title }) => ({ id, title }))}
-          tags={tags
-            .filter((tag) => tag.archivedAt === null)
-            .map(({ id, displayName }) => ({ id, displayName }))}
-          busy={busy}
-          onCreateTemplate={submitTemplateCreate}
-          onSearchTemplates={(query) => void refreshTemplateLibrary(query)}
-          onArchiveTemplate={archiveTemplate}
-          onEditTemplate={editTemplate}
-          onCreateTemplateSet={submitTemplateSetCreate}
-          onInstantiateTemplate={submitTemplateInstantiation}
-          onInstantiateTemplateSet={submitTemplateSetInstantiation}
-          onCreateChoicePool={submitChoicePool}
-          onCreatePlanningPlaceholder={submitPlanningPlaceholder}
-          onEditChoicePool={editChoicePool}
-          onAddTemplatePoolSlot={addTemplatePoolSlot}
-          onRecordChoicePoolCompletion={completeChoicePoolItem}
-          onSuggestPlaceholder={previewPlanningPlaceholder}
-          onResolvePlaceholder={submitPlaceholderResolution}
-        />
-      )}
-      {route === "connections" && (
-        <ConnectionsPage
-          onTaskImport={syncNow}
-          calendarMessage={calendarMessage}
-          baikal={state.baikal}
-          google={googleView}
-          planningPreferences={state.planningPreferences}
-          dayPlan={dayPlanView}
-          csrfToken={state.session.csrfToken}
-          busy={busy}
-          onAuthorizeGoogle={authorizeGoogle}
-          onSyncGoogle={syncGoogleCalendar}
-          onDisconnectGoogle={removeGoogleCalendar}
-          onSavePlanningPreferences={savePlanningPreferences}
-        />
-      )}
-      {route === "settings" && (
-        <SettingsPage
-          google={googleView}
-          planningPreferences={state.planningPreferences}
-          dayPlan={dayPlanView}
-          notificationPreferences={state.notificationPreferences}
-          notificationStatus={state.notificationStatus}
-          syncStatus={state.syncStatus}
-          clientId={state.client?.clientId ?? null}
-          plannerFreshness={state.planner?.freshness.state}
-          busy={busy}
-          onAuthorizeGoogle={authorizeGoogle}
-          onSyncGoogle={syncGoogleCalendar}
-          onDisconnectGoogle={removeGoogleCalendar}
-          onSavePlanningPreferences={savePlanningPreferences}
-          onSaveNotificationPreferences={saveNotificationPreferences}
-          onTestNotification={testNotification}
-          onSyncNow={syncNow}
-          onExportDiagnostics={exportDiagnostics}
-        />
-      )}
-    </AppShell>
+        <IdleReturnDialog {...focus.idleDialog} busy={focus.busy} />
+        {route === "today" && (
+          <TodayPage
+            dayPlan={dayPlanView}
+            planningPreferences={state.planningPreferences}
+            tasks={state.tasks}
+            activeSession={state.activeSession ?? null}
+            clientId={state.client?.clientId ?? null}
+            syncStatus={state.syncStatus}
+            planner={plannerView}
+            baikalCalendars={state.baikal.calendars}
+            calendarActionsAvailable={networkOnline}
+            focusActionsAvailable={networkOnline && state.client !== undefined}
+            busy={busy}
+            onFocusCommand={(command) => void handleFocusCommand(command)}
+            focus={focus.panel}
+            onSubmitTask={submitTask}
+            onChangeTaskStatus={changeTaskStatus}
+            onSubmitTimeBlock={submitTimeBlock}
+            onRemoveTimeBlock={removeTimeBlock}
+            onViewTasks={() => navigate("tasks")}
+            csrfToken={state.session.csrfToken}
+            onTasksPlanned={() => void syncNow()}
+            dayOrders={dayOrders}
+            dayOrderActions={
+              state.client === undefined ? undefined : dayOrderActions
+            }
+            pinnedNotes={pinnedNotes}
+          />
+        )}
+        {route === "inbox" && (
+          <InboxPage
+            tasks={state.tasks}
+            activeSession={state.activeSession ?? null}
+            calendars={state.baikal.calendars}
+            busy={busy}
+            calendarActionsAvailable={networkOnline}
+            focusActionsAvailable={networkOnline && state.client !== undefined}
+            onSubmitTask={submitTask}
+            onStartFocus={(task) =>
+              void handleFocusCommand({ command: "start", taskId: task.id })
+            }
+            onChangeTaskStatus={changeTaskStatus}
+            onSubmitTimeBlock={submitTimeBlock}
+            onRemoveTimeBlock={removeTimeBlock}
+          />
+        )}
+        {route === "planner" && (
+          <PlannerPage
+            planner={plannerView}
+            timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+            workdayStart={state.planningPreferences?.workdayStart}
+            busy={busy}
+            onLoadPlanner={loadPlanner}
+            loading={plannerLoading}
+            error={plannerError}
+            tasks={state.tasks}
+            onChangeTaskStatus={changeTaskStatus}
+            onSubmitTaskEdit={submitPlannerTaskEdit}
+            calendars={state.baikal.calendars}
+            onSubmitTimeBlock={submitPlannerTimeBlock}
+            onRemoveTimeBlock={removePlannerTimeBlock}
+            dayOrders={dayOrders}
+            dayOrderActions={
+              state.client === undefined ? undefined : dayOrderActions
+            }
+          />
+        )}
+        {route === "tasks" && (
+          <TasksPage
+            taskIdFilter={taskIdFilter}
+            onClearTaskIdFilter={() => {
+              setTaskIdFilter("");
+              history.replaceState({}, "", "/tasks");
+            }}
+            tasks={state.tasks}
+            visibleTasks={visibleTasks}
+            recovery={state.recovery}
+            projects={projects}
+            tags={tags}
+            subtasks={subtasks}
+            provenance={templateProvenance}
+            baikalCalendars={state.baikal.calendars}
+            taskQuery={taskQuery}
+            taskStatusFilter={taskStatusFilter}
+            taskProjectFilter={taskProjectFilter}
+            taskTagFilter={taskTagFilter}
+            busy={busy}
+            calendarActionsAvailable={networkOnline}
+            onTaskQueryChange={setTaskQuery}
+            onTaskStatusFilterChange={setTaskStatusFilter}
+            onTaskProjectFilterChange={setTaskProjectFilter}
+            onTaskTagFilterChange={setTaskTagFilter}
+            onSubmitOrganization={submitOrganization}
+            onSubmitTaskEdit={submitTaskEdit}
+            onSubmitTimeBlock={submitTimeBlock}
+            onRemoveTimeBlock={removeTimeBlock}
+            onSubmitTaskOrganization={submitTaskOrganization}
+            onSubmitSubtask={submitSubtask}
+            onChangeSubtask={changeSubtask}
+            onSaveTaskAsTemplate={saveTaskAsTemplate}
+            onChangeTaskStatus={changeTaskStatus}
+            onRemoveTask={removeTask}
+            onRecoverTask={recoverTask}
+            onArchiveTask={archiveTaskToHistory}
+            organization={{
+              csrfToken: state.session.csrfToken,
+              online: networkOnline,
+              onProjectsChange: setProjects,
+              onTagsChange: setTags,
+              queue: organizationQueue,
+              notes,
+              noteQueue,
+            }}
+            timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+            onSubmitTaskPlanning={submitTaskPlanning}
+            {...taskHierarchyActions}
+          />
+        )}
+        {route === "history" && (
+          <HistoryPage
+            csrfToken={state.session.csrfToken}
+            online={networkOnline}
+            timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+            projects={projects}
+            onRestored={syncNow}
+          />
+        )}
+        {route === "worklog" && (
+          <WorklogPage
+            csrfToken={state.session.csrfToken}
+            online={networkOnline}
+            timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+            tasks={state.tasks.filter((task) => task.deletedAt === null)}
+            projects={projects}
+            cachedEntries={timeEntries}
+            queue={state.client === undefined ? undefined : timeEntryQueue}
+            onEntriesChanged={() => void syncAfterLocalMutation()}
+          />
+        )}
+        {route === "boards" && (
+          <BoardsPage
+            csrfToken={state.session.csrfToken}
+            online={networkOnline}
+            tasks={state.tasks.filter((task) => task.deletedAt === null)}
+            projects={projects}
+            tags={tags}
+          />
+        )}
+        {route === "counters" && (
+          <CountersPage
+            csrfToken={state.session.csrfToken}
+            online={networkOnline}
+            timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+          />
+        )}
+        {route === "habits" && (
+          <HabitsPage
+            library={habitLibrary}
+            timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+            online={networkOnline}
+            pending={habitPending}
+            onCommand={submitHabit}
+          />
+        )}
+        {route === "reuse" && (
+          <ReusePage
+            templates={templates}
+            templateBlueprints={templateBlueprints}
+            templateSets={templateSets}
+            choicePools={choicePools}
+            choicePoolItems={choicePoolItems}
+            choicePoolHistory={choicePoolHistory}
+            planningPlaceholders={planningPlaceholders}
+            templatePoolSlots={templatePoolSlots}
+            tasks={state.tasks}
+            projects={projects
+              .filter((project) => project.archivedAt === null)
+              .map(({ id, title }) => ({ id, title }))}
+            tags={tags
+              .filter((tag) => tag.archivedAt === null)
+              .map(({ id, displayName }) => ({ id, displayName }))}
+            busy={busy}
+            onCreateTemplate={submitTemplateCreate}
+            onSearchTemplates={(query) => void refreshTemplateLibrary(query)}
+            onArchiveTemplate={archiveTemplate}
+            onEditTemplate={editTemplate}
+            onCreateTemplateSet={submitTemplateSetCreate}
+            onInstantiateTemplate={submitTemplateInstantiation}
+            onInstantiateTemplateSet={submitTemplateSetInstantiation}
+            onCreateChoicePool={submitChoicePool}
+            onCreatePlanningPlaceholder={submitPlanningPlaceholder}
+            onEditChoicePool={editChoicePool}
+            onAddTemplatePoolSlot={addTemplatePoolSlot}
+            onRecordChoicePoolCompletion={completeChoicePoolItem}
+            onSuggestPlaceholder={previewPlanningPlaceholder}
+            onResolvePlaceholder={submitPlaceholderResolution}
+          />
+        )}
+        {route === "connections" && (
+          <ConnectionsPage
+            onTaskImport={syncNow}
+            calendarMessage={calendarMessage}
+            baikal={state.baikal}
+            google={googleView}
+            planningPreferences={state.planningPreferences}
+            dayPlan={dayPlanView}
+            csrfToken={state.session.csrfToken}
+            busy={busy}
+            onAuthorizeGoogle={authorizeGoogle}
+            onSyncGoogle={syncGoogleCalendar}
+            onDisconnectGoogle={removeGoogleCalendar}
+            onAuthorizeGoogleWrite={() => authorizeGoogle("write")}
+            onWithdrawGoogleWrite={withdrawGoogleWrite}
+            onSavePlanningPreferences={savePlanningPreferences}
+          />
+        )}
+        {route === "settings" && (
+          <SettingsPage
+            google={googleView}
+            planningPreferences={state.planningPreferences}
+            dayPlan={dayPlanView}
+            notificationPreferences={state.notificationPreferences}
+            notificationStatus={state.notificationStatus}
+            syncStatus={state.syncStatus}
+            liveStatus={liveStatus}
+            clientId={state.client?.clientId ?? null}
+            plannerFreshness={state.planner?.freshness.state}
+            busy={busy}
+            onAuthorizeGoogle={authorizeGoogle}
+            onSyncGoogle={syncGoogleCalendar}
+            onDisconnectGoogle={removeGoogleCalendar}
+            onSavePlanningPreferences={savePlanningPreferences}
+            onSaveNotificationPreferences={saveNotificationPreferences}
+            onTestNotification={testNotification}
+            onSyncNow={syncNow}
+            onExportDiagnostics={exportDiagnostics}
+            focus={focus.settings}
+            focusBusy={focus.busy}
+            applicationPreferences={appPreferences}
+            projects={projects}
+            csrfToken={state.session.csrfToken}
+            onRestored={syncNow}
+            onSignOut={signOut}
+          />
+        )}
+      </AppShell>
+    </ApplicationPreferencesProvider>
   );
 };

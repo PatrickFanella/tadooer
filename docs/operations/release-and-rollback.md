@@ -5,8 +5,13 @@
    image against health, readiness, metrics, restart, backup, and restore.
 2. Record the exact semantic version, full Git revision, registry OCI digest,
    desktop artifact name/checksum, and qualification timestamp in a manifest
-   matching `release/manifest.schema.json`. A local Docker image ID from the
-   disposable gate is not a substitute for the registry digest in production.
+   matching `release/manifest.schema.json`. For `desktopArtifact`, use the
+   string that `pnpm desktop:artifact` prints under the same name: one
+   archive as `<file>@sha256:<checksum>`, or, when macOS packages are released
+   as well, the checksum index that lists them all (see
+   [desktop.md](desktop.md)). A local
+   Docker image ID from the disposable gate is not a substitute for the
+   registry digest in production.
 3. Promote the candidate with `node deploy/release-channel.mjs promote ...`.
    Deploy that immutable digest, never a mutable tag. Confirm `/api/build`,
    `/api/ready`, `/api/metrics`, login, task read/write, and the configured
@@ -19,8 +24,8 @@
    `deploy/restore-stack.sh` and the matching backup after maintenance-mode
    coordination. Never point older code at an unreviewed newer schema.
 
-Alert when readiness is non-200, `suite_database_migrations` differs from the
-release expectation, restarts recur, backup qualification fails, or HTTP 5xx
+Alert when readiness is non-200, `suite_database_migrations` differs from
+`suite_database_migrations_expected`, restarts recur, backup qualification fails, or HTTP 5xx
 counters increase. Metrics contain status counts and process/database state,
 not task content, owner identity, credentials, capability URLs, or request
 bodies.

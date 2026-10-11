@@ -1,14 +1,307 @@
+import {
+  planningPreferencesSchema,
+  notificationPreferencesSchema,
+  checklistCommandSchema,
+  organizationIconPattern,
+  syncTimeEntryWindowStart,
+  type ApplicationPreferences,
+  type ChecklistCommand,
+  type FocusPreferenceProvenance,
+  type FocusPreferences,
+} from "@suite/contracts";
 import { StructuredCaptureError } from "@suite/domain";
 import { SqliteHabitStore } from "./habit-store.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { SqliteCalendarProjectionStore } from "./calendar-projection-store.js";
-import { SqliteCredentialStore } from "./credential-store.js";
 import { SqliteIssueStore } from "./issue-store.js";
 export type { IssueConnectionRecord, IssueLinkRecord } from "./issue-store.js";
+import {
+  hostedOAuthMigration,
+  SqliteHostedOAuthStore,
+} from "./hosted-oauth-store.ts";
+export {
+  hostedOAuthMigration,
+  SqliteHostedOAuthStore,
+  type HostedOAuthAuditRecord,
+  type HostedOAuthCodeRecord,
+  type HostedOAuthGrantRecord,
+  type HostedOAuthRequestRecord,
+  type HostedOAuthTokenRecord,
+} from "./hosted-oauth-store.ts";
+import { SqliteCalendarProjectionStore } from "./calendar-projection-store.js";
+import {
+  SqliteCredentialStore,
+  googleWriteConsentMigration,
+} from "./credential-store.js";
 import { SqlitePlanningPreferencesStore } from "./planning-preferences-store.js";
+import { SqliteNoteStore } from "./note-store.ts";
+import {
+  SqliteDeviceSessionStore,
+  type SessionAddressFamily,
+  type SessionDeviceInput,
+  type SessionRecord,
+  type SessionRevocationReason,
+  type StoredSession,
+} from "./device-session-store.ts";
+export {
+  SqliteDeviceSessionStore,
+  type RetiredSessionToken,
+  type SessionAddressFamily,
+  type SessionDeviceInput,
+  type SessionRecord,
+  type SessionRevocationReason,
+  type StoredSession,
+} from "./device-session-store.ts";
+import type { NoteCreateInput, NotePatch, NoteRecord } from "./note-store.ts";
+import { captureMigration, SqliteCaptureStore } from "./capture-store.ts";
+import {
+  DataRestoreError,
+  SqliteDataExportStore,
+  dataExportExcludedTables,
+  dataExportInventory,
+  type DataExportSource,
+  type DataRestoreOutcome,
+  type DataRestorePreviewRecord,
+} from "./data-export-store.ts";
+export {
+  DataRestoreError,
+  SqliteDataExportStore,
+  dataExportExcludedTables,
+  dataExportInventory,
+  type DataExportSource,
+  type DataRestoreOutcome,
+  type DataRestorePreviewRecord,
+};
+export type {
+  CapturePreferencesRecord,
+  CaptureUrlBehavior,
+} from "./capture-store.ts";
+export type {
+  NoteCreateInput,
+  NoteMutationResult,
+  NotePatch,
+  NoteRecord,
+} from "./note-store.ts";
+import {
+  SqliteTaskLinkStore,
+  taskLinksMigration,
+  type ImportedAttachment,
+  type ImportedIssueLink,
+} from "./task-link-store.ts";
+export type {
+  ImportedAttachment,
+  ImportedIssueLink,
+  TaskAttachmentRecord,
+  TaskIssueLinkRecord,
+  TaskLinkMutationResult,
+  TaskLinksRecord,
+} from "./task-link-store.ts";
+import {
+  dateOnlyPlanningMigration,
+  readTaskPlanning,
+  writeTaskPlanning,
+  type StoredStartReminder,
+} from "./task-planning-columns.ts";
+import {
+  scheduledReminders,
+  zonedCalendarDate,
+  type HistoricalReference,
+  type TaskArchiveReviewReason,
+} from "@suite/domain";
+import { SqliteTaskHierarchyStore } from "./task-hierarchy-store.ts";
+import {
+  SqliteTimeEntryStore,
+  timeHistoryMigration,
+  type ImportedTimeEntry,
+  type ImportedWorkContextDay,
+  type TimeEntryRecord,
+} from "./time-entry-store.ts";
+export {
+  SqliteTimeEntryStore,
+  type FocusEntryRecord,
+  type ImportedTimeEntry,
+  type ImportedWorkContextDay,
+  type TimeEntryImportProvenance,
+  type TimeEntryRecord,
+  type TimeEntryWriteResult,
+  type TimeReportRecord,
+  type TimeReportTaskRecord,
+} from "./time-entry-store.ts";
+import {
+  SqliteCounterStore,
+  countersMigration,
+  type ImportedCounter,
+  type ImportedEvaluation,
+} from "./counter-store.ts";
+export {
+  SqliteCounterStore,
+  type CounterDayValueRecord,
+  type CounterDefinitionInput,
+  type CounterImportOutcome,
+  type CounterPatch,
+  type CounterRecord,
+  type CounterViolation,
+  type CounterWriteResult,
+  type DailyEvaluationRecord,
+  type EvaluationPatch,
+  type EvaluationWriteResult,
+  type ImportedCounter,
+  type ImportedEvaluation,
+} from "./counter-store.ts";
+import {
+  SqliteTaskArchiveStore,
+  taskArchiveMigration,
+} from "./task-archive-store.ts";
+export {
+  SqliteTaskArchiveStore,
+  TaskHistoryCursorError,
+  type ArchivedTaskRecord,
+  type TaskArchiveProvenanceRecord,
+  type TaskArchiveResult,
+  type TaskHistoryEntryRecord,
+  type TaskHistoryPage,
+} from "./task-archive-store.ts";
+import {
+  SqliteRecurrenceStore,
+  recurrenceMigration,
+  type ImportedOccurrenceLink,
+  type ImportedRecurringSeries,
+} from "./recurrence-store.ts";
+export {
+  SqliteRecurrenceStore,
+  recurrenceGenerationBatch,
+  type ImportedOccurrenceLink,
+  type ImportedRecurringSeries,
+  type RecurrenceChildTemplate,
+  type RecurrenceExceptionRecord,
+  type RecurrenceMutationResult,
+  type RecurrenceViolation,
+  type RecurringSeriesFields,
+  type RecurringSeriesRecord,
+} from "./recurrence-store.ts";
+import {
+  SqlitePluginDataStore,
+  pluginDataMigration,
+  type ImportedPluginDataEntry,
+  type ImportedPluginMetadata,
+} from "./plugin-data-store.ts";
+export {
+  SqlitePluginDataStore,
+  type ImportedPluginDataEntry,
+  type ImportedPluginMetadata,
+  type PluginDataDeleteResult,
+  type PluginDataEntryRecord,
+  type PluginMetadataRecord,
+} from "./plugin-data-store.ts";
+import {
+  SqliteCalendarSubscriptionStore,
+  calendarSubscriptionMigration,
+} from "./calendar-subscription-store.ts";
+export {
+  SqliteCalendarSubscriptionStore,
+  calendarSubscriptionHiddenEventLimit,
+  calendarSubscriptionLimit,
+  type CalendarSubscriptionDeleteResult,
+  type CalendarSubscriptionEventInput,
+  type CalendarSubscriptionEventRecord,
+  type CalendarSubscriptionFetchOutcome,
+  type CalendarSubscriptionRecord,
+  type CalendarSubscriptionSettings,
+  type CalendarSubscriptionUrlCipher,
+  type CalendarSubscriptionWriteResult,
+} from "./calendar-subscription-store.ts";
+import {
+  SqliteCalendarBridgeStore,
+  calendarBridgeMigration,
+} from "./calendar-bridge-store.ts";
+export {
+  SqliteCalendarBridgeStore,
+  type CalendarBridgeConflictRecord,
+  type CalendarBridgeConflictResolveResult,
+  type CalendarBridgeConflictSide,
+  type CalendarBridgeDirectionName,
+  type CalendarBridgeInitialSync,
+  type CalendarBridgeLinkRecord,
+  type CalendarBridgeLinkStatus,
+  type CalendarBridgeMappingCreateResult,
+  type CalendarBridgeMappingRecord,
+  type CalendarBridgeMappingRemoveResult,
+  type CalendarBridgeMappingUpdateResult,
+  type CalendarBridgeNewLink,
+  type CalendarBridgeOperationInput,
+  type CalendarBridgeOperationRecord,
+  type CalendarBridgeOperationState,
+  type CalendarBridgeReceipt,
+  type CalendarBridgeSideName,
+  type CalendarBridgeSideState,
+} from "./calendar-bridge-store.ts";
+import {
+  SqliteCalendarBridgeWorkerStore,
+  calendarBridgeWorkerMigration,
+} from "./calendar-bridge-worker-store.ts";
+export {
+  SqliteCalendarBridgeWorkerStore,
+  calendarBridgeStuckAttempts,
+  type CalendarBridgeHealthSnapshot,
+  type CalendarBridgeJobKind,
+  type CalendarBridgeJobRecord,
+  type CalendarBridgeJobTarget,
+} from "./calendar-bridge-worker-store.ts";
+import {
+  SqliteDayOrderStore,
+  dayOrderMigration,
+  type SavedDayOrderRecord,
+} from "./day-order-store.ts";
+import {
+  SqliteBoardStore,
+  boardsMigration,
+  type ImportedBoardData,
+} from "./board-store.ts";
+export {
+  SqliteBoardStore,
+  type BoardConfigInput,
+  type BoardMoveResult,
+  type BoardMutationResult,
+  type BoardPanelInput,
+  type ImportedBoard,
+  type ImportedBoardData,
+  type ImportedMenuFolder,
+  type ImportedSection,
+  type MenuFolderMutationResult,
+  type SectionMutationResult,
+  type TaskViewSetResult,
+} from "./board-store.ts";
+import { SqliteFocusStore, focusMigration } from "./focus-store.ts";
+export {
+  SqliteFocusStore,
+  type FocusPreferencesRecord,
+  type IdleDispositionRecord,
+  type OwnerIntervalRecord,
+} from "./focus-store.ts";
+import {
+  SqliteApplicationPreferencesStore,
+  applicationPreferencesMigration,
+} from "./application-preferences-store.ts";
+export {
+  SqliteApplicationPreferencesStore,
+  type ApplicationPreferencesMutationResult,
+  type ApplicationPreferencesRecord,
+} from "./application-preferences-store.ts";
+export {
+  SqliteDayOrderStore,
+  type DayOrderPlanResult,
+  type DayOrderRecord,
+  type DayOrderReorderResult,
+  type SavedDayOrderRecord,
+} from "./day-order-store.ts";
+export {
+  SqliteTaskHierarchyStore,
+  TaskHierarchyError,
+  type TaskHierarchyMoveResult,
+  type TaskHierarchyReorderResult,
+} from "./task-hierarchy-store.ts";
 
 interface Migration {
   readonly id: string;
@@ -29,6 +322,27 @@ export interface TaskDeadline {
   readonly kind: "date" | "instant";
   readonly value: string;
 }
+
+/** Every field version a task carries (ADR 0010, 0017, 0033). */
+export type SyncedTaskField =
+  | "title"
+  | "notes"
+  | "status"
+  | "estimateMinutes"
+  | "projectId"
+  | "tagIds"
+  | "deadline"
+  | "plannedStart";
+const syncedTaskFields: readonly SyncedTaskField[] = [
+  "title",
+  "notes",
+  "status",
+  "estimateMinutes",
+  "projectId",
+  "tagIds",
+  "deadline",
+  "plannedStart",
+];
 
 const deadlineColumns = (deadline: TaskDeadline | null) => ({
   deadlineDate: deadline?.kind === "date" ? deadline.value : null,
@@ -71,15 +385,6 @@ export interface OwnerRecord {
   readonly createdAt: string;
 }
 
-export interface SessionRecord {
-  readonly tokenHash: string;
-  readonly ownerId: string;
-  readonly csrfHash: string;
-  readonly idleExpiresAt: string;
-  readonly absoluteExpiresAt: string;
-  readonly revokedAt: string | null;
-}
-
 export interface BaikalConnectorRecord {
   readonly id: string;
   readonly ownerId: string;
@@ -95,7 +400,8 @@ export interface BaikalConnectorRecord {
 export interface CalendarProviderRecord {
   readonly id: string;
   readonly ownerId: string;
-  readonly kind: "baikal" | "caldav" | "google";
+  /** `ical` marks a read-only subscription (ADR 0032); it has no connector. */
+  readonly kind: "baikal" | "caldav" | "google" | "ical";
   readonly connectorId: string;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -127,6 +433,21 @@ export interface TaskRecord {
   readonly deadlineAt?: string | null;
   readonly projectId?: string | null;
   readonly tagIds?: readonly string[];
+  /** Owner-zone calendar date; exclusive with plannedStart (ADR 0020). */
+  readonly plannedDay?: string | null;
+  readonly startReminder?: StoredStartReminder;
+  readonly deadlineReminderMinutes?: number | null;
+  /** Top-level parent; null for a top-level task (ADR 0018). */
+  readonly parentId?: string | null;
+  /** Sparse sibling order key; null for a top-level task. */
+  readonly childPosition?: number | null;
+  /** Set while the task is archived history (ADR 0022). */
+  readonly archivedAt?: string | null;
+  /** Series link of a recurring instance (ADR 0023). */
+  readonly recurrence?: {
+    readonly seriesId: string;
+    readonly occurrenceDate: string;
+  } | null;
 }
 
 export interface TaskPatch {
@@ -136,6 +457,9 @@ export interface TaskPatch {
   readonly estimateMinutes?: number | null;
   readonly deadlineDate?: string | null;
   readonly deadlineAt?: string | null;
+  readonly plannedDay?: string | null;
+  readonly startReminder?: StoredStartReminder;
+  readonly deadlineReminderMinutes?: number | null;
 }
 
 export interface HabitRecord {
@@ -202,6 +526,13 @@ export interface TaskCalendarBlockRecord {
   readonly updatedAt: string;
 }
 
+export interface ActiveTaskCalendarEventLink {
+  readonly providerId: string;
+  readonly calendarId: string;
+  readonly eventHref: string;
+  readonly taskId: string;
+}
+
 export interface CalendarWriteOperationRecord {
   readonly ownerId: string;
   readonly idempotencyKey: string;
@@ -258,6 +589,8 @@ export interface AutomationTokenRecord {
   readonly label: string;
   readonly secretHash: string;
   readonly scopes: readonly string[];
+  /** ADR 0035: `confirm_all` or `execute_ordinary`; immutable like scopes. */
+  readonly confirmationPolicy: string;
   readonly createdAt: string;
   readonly lastUsedAt: string | null;
   readonly expiresAt: string | null;
@@ -304,7 +637,7 @@ export interface AutomationAuditRecord {
   readonly createdAt: string;
 }
 
-export interface ProjectRecord {
+interface OrganizationRecordBase {
   readonly id: string;
   readonly ownerId: string;
   readonly title: string;
@@ -312,10 +645,43 @@ export interface ProjectRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: string | null;
+  readonly color: string | null;
+  readonly icon: string | null;
+  readonly position: number;
 }
-export interface TagRecord extends ProjectRecord {
+export interface ProjectRecord extends OrganizationRecordBase {
+  readonly hiddenFromMenu: boolean;
+  /** Completion archives the project; reopen and restore clear both. */
+  readonly completedAt: string | null;
+  readonly backlogEnabled: boolean;
+  /** Active, non-deleted tasks of this project held in its backlog, in order. */
+  readonly backlogTaskIds: readonly string[];
+}
+export interface TagRecord extends OrganizationRecordBase {
   readonly normalizedName: string;
 }
+type OptionalOrganizationFields = "color" | "icon" | "position";
+type OptionalProjectFields =
+  | OptionalOrganizationFields
+  | "hiddenFromMenu"
+  | "completedAt"
+  | "backlogEnabled"
+  | "backlogTaskIds";
+export type ProjectCreateRecord = Omit<ProjectRecord, OptionalProjectFields> &
+  Partial<Omit<Pick<ProjectRecord, OptionalProjectFields>, "backlogTaskIds">>;
+export type TagCreateRecord = Omit<TagRecord, OptionalOrganizationFields> &
+  Partial<Pick<TagRecord, OptionalOrganizationFields>>;
+/** Editable organization fields shared by browser and assistant writes. */
+export interface OrganizationFields {
+  readonly title?: string | undefined;
+  readonly archived?: boolean | undefined;
+  readonly completed?: boolean | undefined;
+  readonly color?: string | null | undefined;
+  readonly icon?: string | null | undefined;
+  readonly hiddenFromMenu?: boolean | undefined;
+  readonly backlogEnabled?: boolean | undefined;
+}
+const colorPattern = /^#[0-9a-f]{6}$/;
 export interface SubtaskRecord {
   readonly id: string;
   readonly ownerId: string;
@@ -492,6 +858,15 @@ export interface GoogleConnectorRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly revokedAt: string | null;
+  /** ADR 0040: owner write consent bound to this grant; absent means none. */
+  readonly writeConsentAt?: string | null;
+}
+/** ADR 0040: last observed Google `accessRole` of a discovered calendar. */
+export interface GoogleCalendarCapabilityRecord {
+  readonly calendarId: string;
+  readonly ownerId: string;
+  readonly accessRole: "freeBusyReader" | "reader" | "writer" | "owner";
+  readonly observedAt: string;
 }
 export interface GoogleCalendarSyncRecord {
   readonly calendarId: string;
@@ -510,6 +885,8 @@ export interface PlanningPreferencesRecord {
   readonly breakStart: string | null;
   readonly breakEnd: string | null;
   readonly timeZone: string;
+  /** ADR 0027: local start of a planning day; stored default "00:00". */
+  readonly dayStartsAt?: string | undefined;
 }
 export interface NotificationPreferencesRecord {
   readonly enabled: boolean;
@@ -522,7 +899,15 @@ export interface NotificationDeliveryRecord {
   readonly ownerId: string;
   readonly taskId: string | null;
   readonly occurrenceStart: string;
-  readonly kind: "lead" | "at_start" | "test";
+  readonly kind:
+    | "lead"
+    | "at_start"
+    | "deadline"
+    | "test"
+    | "focus_countdown"
+    | "focus_break_end"
+    | "focus_break_reminder"
+    | "focus_tracking_reminder";
   readonly taskRevision: number | null;
   readonly state:
     | "pending"
@@ -1221,7 +1606,248 @@ const migrations: readonly Migration[] = [
     ) STRICT;`,
   },
   {
-    id: "0021_issue_connections",
+    id: "0021_preference_revisions",
+    sql: `
+      CREATE TABLE owner_preference_revisions (
+        owner_id TEXT NOT NULL REFERENCES owner_accounts(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK(kind IN ('planning','notifications')),
+        revision INTEGER NOT NULL CHECK(revision > 0),
+        PRIMARY KEY(owner_id,kind)
+      ) STRICT;
+      INSERT INTO owner_preference_revisions SELECT owner_id,'planning',1 FROM owner_planning_preferences;
+      INSERT INTO owner_preference_revisions SELECT owner_id,'notifications',1 FROM owner_notification_preferences;
+      CREATE TRIGGER planning_preference_insert AFTER INSERT ON owner_planning_preferences BEGIN
+        INSERT INTO owner_preference_revisions VALUES (NEW.owner_id,'planning',1)
+        ON CONFLICT(owner_id,kind) DO UPDATE SET revision=revision+1;
+      END;
+      CREATE TRIGGER planning_preference_update AFTER UPDATE ON owner_planning_preferences BEGIN
+        INSERT INTO owner_preference_revisions VALUES (NEW.owner_id,'planning',1)
+        ON CONFLICT(owner_id,kind) DO UPDATE SET revision=revision+1;
+      END;
+      CREATE TRIGGER notification_preference_insert AFTER INSERT ON owner_notification_preferences BEGIN
+        INSERT INTO owner_preference_revisions VALUES (NEW.owner_id,'notifications',1)
+        ON CONFLICT(owner_id,kind) DO UPDATE SET revision=revision+1;
+      END;
+      CREATE TRIGGER notification_preference_update AFTER UPDATE ON owner_notification_preferences BEGIN
+        INSERT INTO owner_preference_revisions VALUES (NEW.owner_id,'notifications',1)
+        ON CONFLICT(owner_id,kind) DO UPDATE SET revision=revision+1;
+      END;
+    `,
+  },
+  {
+    id: "0022_organization_parity",
+    sql: `
+      ALTER TABLE projects ADD COLUMN color TEXT;
+      ALTER TABLE projects ADD COLUMN icon TEXT;
+      ALTER TABLE projects ADD COLUMN position INTEGER NOT NULL DEFAULT 0 CHECK(position >= 0);
+      ALTER TABLE projects ADD COLUMN hidden_from_menu INTEGER NOT NULL DEFAULT 0 CHECK(hidden_from_menu IN (0,1));
+      ALTER TABLE projects ADD COLUMN completed_at TEXT;
+      ALTER TABLE projects ADD COLUMN backlog_enabled INTEGER NOT NULL DEFAULT 0 CHECK(backlog_enabled IN (0,1));
+      ALTER TABLE tags ADD COLUMN color TEXT;
+      ALTER TABLE tags ADD COLUMN icon TEXT;
+      ALTER TABLE tags ADD COLUMN position INTEGER NOT NULL DEFAULT 0 CHECK(position >= 0);
+      UPDATE projects SET position = (
+        SELECT count(*) FROM projects AS earlier
+        WHERE earlier.owner_id = projects.owner_id
+          AND (earlier.title < projects.title COLLATE NOCASE
+            OR (earlier.title = projects.title COLLATE NOCASE AND earlier.id < projects.id))
+      );
+      UPDATE tags SET position = (
+        SELECT count(*) FROM tags AS earlier
+        WHERE earlier.owner_id = tags.owner_id
+          AND (earlier.display_name < tags.display_name COLLATE NOCASE
+            OR (earlier.display_name = tags.display_name COLLATE NOCASE AND earlier.id < tags.id))
+      );
+      CREATE TABLE project_backlog_tasks (
+        owner_id TEXT NOT NULL REFERENCES owner_accounts(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL CHECK(position >= 0)
+      ) STRICT;
+      CREATE INDEX project_backlog_by_project ON project_backlog_tasks(owner_id, project_id, position, task_id);
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owner_accounts(id) ON DELETE CASCADE,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        tag_id TEXT REFERENCES tags(id) ON DELETE SET NULL,
+        content TEXT NOT NULL CHECK(length(content) <= 20000),
+        pinned_to_today INTEGER NOT NULL CHECK(pinned_to_today IN (0,1)),
+        position INTEGER NOT NULL CHECK(position >= 0),
+        revision INTEGER NOT NULL CHECK(revision > 0),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        CHECK(project_id IS NULL OR tag_id IS NULL)
+      ) STRICT;
+      CREATE INDEX notes_by_owner ON notes(owner_id, position, id);
+    `,
+  },
+  dateOnlyPlanningMigration,
+  {
+    // ADR 0018: two-level task hierarchy. Triggers keep the graph acyclic,
+    // owner-scoped and at most two levels deep even if application checks fail.
+    id: "0024_task_hierarchy",
+    sql: `
+      ALTER TABLE tasks ADD COLUMN parent_id TEXT REFERENCES tasks(id) ON DELETE CASCADE;
+      ALTER TABLE tasks ADD COLUMN child_position INTEGER;
+      ALTER TABLE tasks ADD COLUMN hierarchy_version INTEGER NOT NULL DEFAULT 1
+        CHECK (hierarchy_version > 0);
+      UPDATE tasks SET hierarchy_version = revision;
+      CREATE INDEX tasks_by_parent ON tasks(owner_id, parent_id, child_position, id)
+        WHERE parent_id IS NOT NULL;
+      CREATE TRIGGER tasks_hierarchy_insert_valid
+      BEFORE INSERT ON tasks
+      WHEN NEW.parent_id IS NOT NULL OR NEW.child_position IS NOT NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'task hierarchy is invalid')
+        WHERE NEW.parent_id IS NULL OR NEW.child_position IS NULL
+          OR NEW.parent_id = NEW.id
+          OR NOT EXISTS (SELECT 1 FROM tasks p WHERE p.id = NEW.parent_id
+            AND p.owner_id = NEW.owner_id AND p.parent_id IS NULL);
+      END;
+      CREATE TRIGGER tasks_hierarchy_update_valid
+      BEFORE UPDATE OF parent_id, child_position ON tasks
+      WHEN NEW.parent_id IS NOT NULL OR NEW.child_position IS NOT NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'task hierarchy is invalid')
+        WHERE NEW.parent_id IS NULL OR NEW.child_position IS NULL
+          OR NEW.parent_id = NEW.id
+          OR NOT EXISTS (SELECT 1 FROM tasks p WHERE p.id = NEW.parent_id
+            AND p.owner_id = NEW.owner_id AND p.parent_id IS NULL)
+          OR EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = NEW.id);
+      END;
+    `,
+  },
+  taskLinksMigration,
+  taskArchiveMigration,
+  recurrenceMigration,
+  timeHistoryMigration,
+  countersMigration,
+  pluginDataMigration,
+  dayOrderMigration,
+  boardsMigration,
+  focusMigration,
+  applicationPreferencesMigration,
+  captureMigration,
+  calendarSubscriptionMigration,
+  {
+    // ADR 0033: one version for the exclusive planned start / planned day
+    // slot. Existing clients replace their cache once from a snapshot.
+    id: "0037_sync_v2_planned_start_epoch_reset",
+    sql: `
+      CREATE TABLE task_field_versions_v3 (
+        task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        field TEXT NOT NULL CHECK(field IN ('title','notes','status','deadline','estimateMinutes','projectId','tagIds','plannedStart')),
+        version INTEGER NOT NULL CHECK(version > 0), PRIMARY KEY(task_id, field)
+      ) STRICT;
+      INSERT INTO task_field_versions_v3 (task_id,field,version)
+        SELECT task_id,field,version FROM task_field_versions;
+      INSERT INTO task_field_versions_v3 (task_id,field,version)
+        SELECT id,'plannedStart',revision FROM tasks;
+      DROP TABLE task_field_versions;
+      ALTER TABLE task_field_versions_v3 RENAME TO task_field_versions;
+      DELETE FROM sync_changes;
+      UPDATE sync_owner_state
+        SET epoch=lower(hex(randomblob(16))),next_sequence=1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+    `,
+  },
+  {
+    // ADR 0035: the owner-chosen token confirmation policy. Existing tokens
+    // keep the previous behaviour (every mutation is confirmed separately).
+    id: "0039_automation_token_confirmation_policy",
+    sql: `
+      ALTER TABLE automation_tokens ADD COLUMN confirmation_policy TEXT NOT NULL
+        DEFAULT 'confirm_all'
+        CHECK (confirmation_policy IN ('confirm_all', 'execute_ordinary'));
+    `,
+  },
+  googleWriteConsentMigration,
+  // ADR 0041: Google-Baikal bridge mappings, links, outbox and conflicts.
+  calendarBridgeMigration,
+  // ADR 0043: bridge worker schedule and cross-process leases.
+  calendarBridgeWorkerMigration,
+  {
+    // ADR 0045: the retained floor of the sync feed. Changes at or below it
+    // were pruned; a cursor below it must be replaced from a snapshot. An
+    // epoch reset restarts sequences at 1 and must set the floor back to 0.
+    id: "0048_sync_retained_floor",
+    sql: `
+      ALTER TABLE sync_owner_state ADD COLUMN retained_floor INTEGER NOT NULL
+        DEFAULT 0 CHECK (retained_floor >= 0);
+    `,
+  },
+  {
+    // ADR 0046: notes join the sync feed. Notes written before this
+    // migration have no feed change, so a client with a valid cursor would
+    // never receive them. Resetting the epoch makes every client replace its
+    // cache from a snapshot once; queued outbox operations replay over it.
+    id: "0049_sync_notes_epoch_reset",
+    sql: `
+      DELETE FROM sync_changes;
+      UPDATE sync_owner_state
+        SET epoch=lower(hex(randomblob(16))),next_sequence=1,retained_floor=0,
+            updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+    `,
+  },
+  {
+    // ADR 0050: saved day orders and time entries join the sync feed. Those
+    // written before this migration have no feed change, so the epoch is
+    // reset as in 0049: every client replaces its cache from a snapshot once
+    // and replays its queued operations over it. One reset covers every kind
+    // of the release.
+    id: "0050_sync_day_orders_time_entries_epoch_reset",
+    sql: `
+      DELETE FROM sync_changes;
+      UPDATE sync_owner_state
+        SET epoch=lower(hex(randomblob(16))),next_sequence=1,retained_floor=0,
+            updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+    `,
+  },
+  {
+    // ADR 0048: trusted-device sessions. A session with a device_id is the
+    // device record. Its token rotates: next_token_hash is a successor that
+    // was sent and not yet presented, and web_session_retired_tokens holds
+    // every replaced hash so a replay can be told from a late request.
+    id: "0051_trusted_device_sessions",
+    sql: `
+      ALTER TABLE web_sessions ADD COLUMN device_id TEXT;
+      ALTER TABLE web_sessions ADD COLUMN device_label TEXT
+        CHECK (device_label IS NULL OR length(device_label) BETWEEN 1 AND 100);
+      ALTER TABLE web_sessions ADD COLUMN last_address_family TEXT
+        CHECK (last_address_family IS NULL OR last_address_family IN ('ipv4', 'ipv6'));
+      ALTER TABLE web_sessions ADD COLUMN token_rotated_at TEXT;
+      ALTER TABLE web_sessions ADD COLUMN next_token_hash TEXT;
+      ALTER TABLE web_sessions ADD COLUMN next_issued_at TEXT;
+      ALTER TABLE web_sessions ADD COLUMN password_confirmed_at TEXT;
+      ALTER TABLE web_sessions ADD COLUMN revoked_reason TEXT
+        CHECK (revoked_reason IS NULL OR revoked_reason IN
+          ('signed-out', 'revoked-by-owner', 'token-reuse'));
+
+      CREATE UNIQUE INDEX web_sessions_by_device ON web_sessions(device_id);
+      CREATE UNIQUE INDEX web_sessions_by_next_token ON web_sessions(next_token_hash);
+
+      CREATE TABLE web_session_retired_tokens (
+        token_hash TEXT PRIMARY KEY,
+        device_id TEXT NOT NULL REFERENCES web_sessions(device_id) ON DELETE CASCADE,
+        retired_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE INDEX web_session_retired_tokens_by_device
+        ON web_session_retired_tokens(device_id);
+    `,
+  },
+  hostedOAuthMigration,
+  {
+    // Issue #114: focus preferences join the sync feed as a read-only
+    // offline singleton. Existing rows have no feed change, so every client
+    // replaces its cache once while retaining and replaying its outbox.
+    id: "0053_sync_focus_preferences_epoch_reset",
+    sql: `
+      DELETE FROM sync_changes;
+      UPDATE sync_owner_state
+        SET epoch=lower(hex(randomblob(16))),next_sequence=1,retained_floor=0,
+            updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now');
+    `,
+  },
+  {
+    id: "0054_issue_connections",
     sql: `CREATE TABLE issue_connections (
       id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owner_accounts(id),
       provider TEXT NOT NULL, origin TEXT NOT NULL, repository TEXT NOT NULL, record_json TEXT NOT NULL,
@@ -1235,7 +1861,7 @@ const migrations: readonly Migration[] = [
     ) STRICT;`,
   },
   {
-    id: "0022_issue_shared_tokens",
+    id: "0055_issue_shared_tokens",
     sql: `CREATE TABLE issue_shared_tokens (
       owner_id TEXT NOT NULL REFERENCES owner_accounts(id), provider TEXT NOT NULL,
       origin TEXT NOT NULL, credential TEXT NOT NULL,
@@ -1243,6 +1869,29 @@ const migrations: readonly Migration[] = [
     ) STRICT;`,
   },
 ];
+
+/**
+ * Pruning never removes the newest changes, whatever the retention window
+ * (ADR 0045).
+ */
+export const syncFeedMinimumRetainedChanges = 1000;
+
+/** The bounded feed page read; exported so a test can check its query plan. */
+export const syncChangePageSql =
+  "SELECT * FROM sync_changes WHERE owner_id = ? AND epoch = ? AND sequence > ? ORDER BY sequence LIMIT ?";
+
+const syncChangeFromRow = (
+  row: Readonly<Record<string, string | number>>,
+): SyncChangeRecord => ({
+  ownerId: String(row.owner_id),
+  epoch: String(row.epoch),
+  sequence: Number(row.sequence),
+  entityType: String(row.entity_type),
+  entityId: String(row.entity_id),
+  kind: String(row.kind),
+  revision: Number(row.revision),
+  createdAt: String(row.created_at),
+});
 
 const checksum = (sql: string): string =>
   createHash("sha256").update(sql).digest("hex");
@@ -1257,10 +1906,227 @@ export class SuiteDatabase {
   readonly habits: SqliteHabitStore;
   readonly calendarProjections: SqliteCalendarProjectionStore;
   readonly planningPreferences: SqlitePlanningPreferencesStore;
+  readonly notes: SqliteNoteStore;
+  readonly taskHierarchy: SqliteTaskHierarchyStore;
+  readonly taskLinks: SqliteTaskLinkStore;
+  /** ADR 0031: capture settings and the atomic capture boundary. */
+  readonly capture: SqliteCaptureStore;
+  readonly taskArchive: SqliteTaskArchiveStore;
+  readonly recurrence: SqliteRecurrenceStore;
+  readonly timeEntries: SqliteTimeEntryStore;
+  readonly counters: SqliteCounterStore;
+  readonly pluginData: SqlitePluginDataStore;
+  readonly dayOrders: SqliteDayOrderStore;
+  readonly boards: SqliteBoardStore;
+  readonly focus: SqliteFocusStore;
+  readonly applicationPreferences: SqliteApplicationPreferencesStore;
+  readonly calendarSubscriptions: SqliteCalendarSubscriptionStore;
+  /** ADR 0034: owner data export and restore. */
+  readonly dataExport: SqliteDataExportStore;
+  /** ADR 0048: owner sessions, trusted devices and token rotation. */
+  readonly deviceSessions: SqliteDeviceSessionStore;
+  /** ADR 0041: Google-Baikal bridge state; provider I/O is in the server. */
+  readonly calendarBridge: SqliteCalendarBridgeStore;
+  /** ADR 0043: bridge worker schedule, leases and health aggregates. */
+  readonly calendarBridgeWorker: SqliteCalendarBridgeWorkerStore;
+  /** ADR 0051: digest-only hosted MCP OAuth grants and credentials. */
+  readonly hostedOAuth: SqliteHostedOAuthStore;
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
     this.issues = new SqliteIssueStore(database);
+    this.hostedOAuth = new SqliteHostedOAuthStore(database);
+    this.dataExport = new SqliteDataExportStore(database);
+    this.deviceSessions = new SqliteDeviceSessionStore(database);
+    this.calendarSubscriptions = new SqliteCalendarSubscriptionStore(database);
+    this.calendarBridge = new SqliteCalendarBridgeStore(database);
+    this.calendarBridgeWorker = new SqliteCalendarBridgeWorkerStore(database);
+    this.counters = new SqliteCounterStore(database);
+    this.boards = new SqliteBoardStore(database, {
+      setTags: (ownerId, taskId, tagIds, revision, now) =>
+        this.setTaskTags(ownerId, taskId, tagIds, revision, now),
+      setCompleted: (ownerId, taskId, revision, completed, now) =>
+        this.setTaskCompleted(ownerId, taskId, revision, completed, now)
+          .kind === "updated",
+      assignProject: (ownerId, taskId, projectId, revision, now) =>
+        this.assignTaskProject(ownerId, taskId, projectId, revision, now) !==
+        undefined,
+      setPlannedDay: (ownerId, taskId, revision, plannedDay, now) => {
+        if (this.getTaskCalendarBlock(ownerId, taskId) !== undefined)
+          return "blocked";
+        return this.patchTask(ownerId, taskId, revision, { plannedDay }, now)
+          .kind === "updated"
+          ? "applied"
+          : "conflict";
+      },
+      setBacklog: (ownerId, projectId, taskId, inBacklog, now) => {
+        const project = this.listProjects(ownerId).find(
+          ({ id }) => id === projectId,
+        );
+        return (
+          project !== undefined &&
+          this.setProjectBacklog(
+            ownerId,
+            projectId,
+            project.revision,
+            taskId,
+            inBacklog,
+            now,
+          ).kind === "applied"
+        );
+      },
+      currentTaskRevision: (ownerId, taskId) =>
+        this.getTask(ownerId, taskId)?.revision,
+    });
+    this.focus = new SqliteFocusStore(database, (ownerId, revision, now) => {
+      this.#appendSyncChangeInTransaction(
+        ownerId,
+        "focus_preferences",
+        ownerId,
+        "upsert",
+        revision,
+        now,
+      );
+    });
+    this.applicationPreferences = new SqliteApplicationPreferencesStore(
+      database,
+      {
+        projectActive: (ownerId, projectId) =>
+          this.listProjects(ownerId).some(
+            (project) =>
+              project.id === projectId && project.archivedAt === null,
+          ),
+      },
+    );
+    this.dayOrders = new SqliteDayOrderStore(
+      database,
+      {
+        planTask: (ownerId, taskId, expectedRevision, date, now) => {
+          const task = this.getTask(ownerId, taskId);
+          if (task?.status !== "open") return "invalid";
+          if (task.revision !== expectedRevision) return "conflict";
+          if (task.plannedStart === null && task.plannedDay === date)
+            return "unchanged";
+          if (this.getTaskCalendarBlock(ownerId, taskId) !== undefined)
+            return "blocked";
+          const result = this.patchTask(
+            ownerId,
+            taskId,
+            expectedRevision,
+            { plannedDay: date },
+            now,
+          );
+          return result.kind === "updated"
+            ? "applied"
+            : result.kind === "precondition-failed"
+              ? "conflict"
+              : "invalid";
+        },
+      },
+      // ADR 0050: a saved day order and its feed change share one transaction.
+      (ownerId, date, revision, now) => {
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "day_order",
+          date,
+          "upsert",
+          revision,
+          now,
+        );
+      },
+    );
+    this.recurrence = new SqliteRecurrenceStore(database, {
+      getTask: (ownerId, taskId, includeInactive) =>
+        this.getTask(ownerId, taskId, includeInactive),
+      createTask: (ownerId, key, task) =>
+        this.createTaskIdempotently(ownerId, key, "recurrence-instance", task),
+      createChild: (ownerId, parentId, now, create) =>
+        this.taskHierarchy.createChild({ ownerId, parentId, now, create }),
+      patchTask: (ownerId, taskId, revision, patch, now) =>
+        this.patchTask(ownerId, taskId, revision, patch, now),
+      assignProject: (ownerId, taskId, projectId, revision, now) =>
+        this.assignTaskProject(ownerId, taskId, projectId, revision, now),
+      setTags: (ownerId, taskId, tagIds, revision, now) =>
+        this.setTaskTags(ownerId, taskId, tagIds, revision, now),
+      deleteTask: (ownerId, taskId, revision, now) =>
+        this.deleteTask(ownerId, taskId, revision, now),
+      blockedIds: (ownerId, taskId) =>
+        this.taskArchive.blockedIds(ownerId, taskId),
+      announceTask: (ownerId, taskId, revision, now) => {
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "task",
+          taskId,
+          "upsert",
+          revision,
+          now,
+        );
+      },
+    });
+    this.timeEntries = new SqliteTimeEntryStore(
+      database,
+      {
+        getTask: (ownerId, taskId, includeInactive) =>
+          this.getTask(ownerId, taskId, includeInactive),
+      },
+      // ADR 0050: a time entry write and its feed change share one
+      // transaction.
+      (ownerId, entryId, kind, revision, now) => {
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "time_entry",
+          entryId,
+          kind,
+          revision,
+          now,
+        );
+      },
+    );
+    // ADR 0046: a note write and its feed change share one transaction.
+    this.notes = new SqliteNoteStore(
+      database,
+      (ownerId, noteId, kind, revision, now) => {
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "note",
+          noteId,
+          kind,
+          revision,
+          now,
+        );
+      },
+    );
+    this.pluginData = new SqlitePluginDataStore(database);
+    this.taskArchive = new SqliteTaskArchiveStore(database, {
+      getTask: (ownerId, taskId, includeInactive) =>
+        this.getTask(ownerId, taskId, includeInactive),
+      appendChange: (ownerId, taskId, kind, revision, now) => {
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "task",
+          taskId,
+          kind,
+          revision,
+          now,
+        );
+      },
+    });
+    this.taskHierarchy = new SqliteTaskHierarchyStore(database, {
+      getTask: (ownerId, taskId, includeDeleted) =>
+        this.getTask(ownerId, taskId, includeDeleted),
+      appendChange: (ownerId, taskId, kind, revision, now) => {
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "task",
+          taskId,
+          kind,
+          revision,
+          now,
+        );
+      },
+    });
+    this.taskLinks = new SqliteTaskLinkStore(database);
+    this.capture = new SqliteCaptureStore(database);
     this.habits = new SqliteHabitStore(
       database,
       (ownerId, kind, id, revision, now) => {
@@ -1431,92 +2297,48 @@ export class SuiteDatabase {
         };
   }
 
-  createSession(session: SessionRecord & { readonly issuedAt: string }): void {
-    this.#database
-      .prepare(
-        `INSERT INTO web_sessions
-          (token_hash, owner_id, csrf_hash, issued_at, last_seen_at,
-           idle_expires_at, absolute_expires_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-      )
-      .run(
-        session.tokenHash,
-        session.ownerId,
-        session.csrfHash,
-        session.issuedAt,
-        session.issuedAt,
-        session.idleExpiresAt,
-        session.absoluteExpiresAt,
-      );
+  createSession(
+    session: SessionRecord & {
+      readonly issuedAt: string;
+      /** ADR 0048: present for a trusted-device session. */
+      readonly device?: SessionDeviceInput;
+    },
+  ): void {
+    this.deviceSessions.create(session);
   }
 
-  findSession(tokenHash: string): SessionRecord | undefined {
-    const row = this.#database
-      .prepare(
-        `SELECT token_hash, owner_id, csrf_hash, idle_expires_at,
-                absolute_expires_at, revoked_at
-         FROM web_sessions WHERE token_hash = ?`,
-      )
-      .get(tokenHash) as unknown as
-      | {
-          readonly token_hash: string;
-          readonly owner_id: string;
-          readonly csrf_hash: string;
-          readonly idle_expires_at: string;
-          readonly absolute_expires_at: string;
-          readonly revoked_at: string | null;
-        }
-      | undefined;
-    return row === undefined
-      ? undefined
-      : {
-          tokenHash: row.token_hash,
-          ownerId: row.owner_id,
-          csrfHash: row.csrf_hash,
-          idleExpiresAt: row.idle_expires_at,
-          absoluteExpiresAt: row.absolute_expires_at,
-          revokedAt: row.revoked_at,
-        };
+  findSession(tokenHash: string): StoredSession | undefined {
+    return this.deviceSessions.findByToken(tokenHash);
   }
 
   refreshSession(
     tokenHash: string,
     lastSeenAt: string,
     idleExpiresAt: string,
+    addressFamily?: SessionAddressFamily | null,
   ): void {
-    this.#database
-      .prepare(
-        `UPDATE web_sessions SET last_seen_at = ?, idle_expires_at = ?
-         WHERE token_hash = ? AND revoked_at IS NULL`,
-      )
-      .run(lastSeenAt, idleExpiresAt, tokenHash);
-  }
-
-  rotateSessionCsrf(tokenHash: string, csrfHash: string): void {
-    this.#database
-      .prepare(
-        "UPDATE web_sessions SET csrf_hash = ? WHERE token_hash = ? AND revoked_at IS NULL",
-      )
-      .run(csrfHash, tokenHash);
-  }
-
-  revokeSession(tokenHash: string, revokedAt: string): boolean {
-    return (
-      this.#database
-        .prepare(
-          `UPDATE web_sessions SET revoked_at = ?
-           WHERE token_hash = ? AND revoked_at IS NULL`,
-        )
-        .run(revokedAt, tokenHash).changes === 1
+    this.deviceSessions.refresh(
+      tokenHash,
+      lastSeenAt,
+      idleExpiresAt,
+      addressFamily,
     );
   }
 
-  deleteExpiredSessions(now: string): void {
-    this.#database
-      .prepare(
-        "DELETE FROM web_sessions WHERE absolute_expires_at <= ? OR revoked_at IS NOT NULL",
-      )
-      .run(now);
+  rotateSessionCsrf(tokenHash: string, csrfHash: string): void {
+    this.deviceSessions.rotateCsrf(tokenHash, csrfHash);
+  }
+
+  revokeSession(
+    tokenHash: string,
+    revokedAt: string,
+    reason?: SessionRevocationReason,
+  ): boolean {
+    return this.deviceSessions.revoke(tokenHash, revokedAt, reason);
+  }
+
+  deleteExpiredSessions(now: string, reuseRecordsBefore?: string): void {
+    this.deviceSessions.deleteExpired(now, reuseRecordsBefore);
   }
 
   putBaikalConnector(
@@ -1718,6 +2540,46 @@ export class SuiteDatabase {
     return this.getCalendarImportJob(ownerId, jobId);
   }
 
+  /** ADR 0038: every import job of the owner, newest first. */
+  listCalendarImportJobs(ownerId: string): readonly CalendarImportJobRecord[] {
+    const rows = this.#database
+      .prepare(
+        "SELECT id FROM calendar_import_jobs WHERE owner_id=? ORDER BY created_at DESC, id",
+      )
+      .all(ownerId) as unknown as readonly { id: string }[];
+    return rows.flatMap((row) => {
+      const job = this.getCalendarImportJob(ownerId, row.id);
+      return job === undefined ? [] : [job];
+    });
+  }
+
+  /**
+   * ADR 0038: Super Productivity import provenance per entity kind. The
+   * export itself is not stored; this counts what earlier imports recorded.
+   */
+  summarizeTaskImportSources(ownerId: string): readonly {
+    readonly entityKind: string;
+    readonly count: number;
+    readonly lastImportedAt: string;
+  }[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT entity_kind, COUNT(*) AS count, MAX(imported_at) AS last_imported_at
+         FROM task_import_sources WHERE owner_id=? AND source_kind='super_productivity'
+         GROUP BY entity_kind ORDER BY entity_kind`,
+      )
+      .all(ownerId) as unknown as readonly {
+      entity_kind: string;
+      count: number;
+      last_imported_at: string;
+    }[];
+    return rows.map((row) => ({
+      entityKind: row.entity_kind,
+      count: row.count,
+      lastImportedAt: row.last_imported_at,
+    }));
+  }
+
   listPublishedCalendarRaw(
     ownerId: string,
     calendarId: string,
@@ -1801,12 +2663,51 @@ export class SuiteDatabase {
     readonly ownerId: string;
     readonly expiresAt: string;
     readonly createdAt: string;
+    readonly requestedAccess?: "read" | "write";
   }): void {
     this.credentials.createGoogleOAuthState(record);
   }
 
   consumeGoogleOAuthState(stateHash: string, now: string): string | undefined {
     return this.credentials.consumeGoogleOAuthState(stateHash, now);
+  }
+
+  consumeGoogleOAuthRequest(
+    stateHash: string,
+    now: string,
+  ):
+    | { readonly ownerId: string; readonly requestedAccess: "read" | "write" }
+    | undefined {
+    return this.credentials.consumeGoogleOAuthRequest(stateHash, now);
+  }
+
+  setGoogleWriteConsent(
+    ownerId: string,
+    writeConsentAt: string | null,
+    now: string,
+  ): boolean {
+    return this.credentials.setGoogleWriteConsent(ownerId, writeConsentAt, now);
+  }
+
+  putGoogleCalendarCapabilities(
+    ownerId: string,
+    capabilities: readonly Omit<
+      GoogleCalendarCapabilityRecord,
+      "ownerId" | "observedAt"
+    >[],
+    observedAt: string,
+  ): void {
+    this.credentials.putGoogleCalendarCapabilities(
+      ownerId,
+      capabilities,
+      observedAt,
+    );
+  }
+
+  listGoogleCalendarCapabilities(
+    ownerId: string,
+  ): readonly GoogleCalendarCapabilityRecord[] {
+    return this.credentials.listGoogleCalendarCapabilities(ownerId);
   }
 
   putGoogleConnector(record: GoogleConnectorRecord): void {
@@ -1943,6 +2844,83 @@ export class SuiteDatabase {
     }
   }
 
+  getPreferenceRevision(
+    ownerId: string,
+    kind: "planning" | "notifications",
+  ): number {
+    const row = this.#database
+      .prepare(
+        "SELECT revision FROM owner_preference_revisions WHERE owner_id=? AND kind=?",
+      )
+      .get(ownerId, kind) as { revision: number } | undefined;
+    return row?.revision ?? 0;
+  }
+
+  #mutatePreferences(
+    ownerId: string,
+    kind: "planning" | "notifications",
+    expectedRevision: number,
+    apply: () => void,
+  ): boolean {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+      return false;
+    this.#database.exec("SAVEPOINT preference_mutation;");
+    try {
+      if (this.getPreferenceRevision(ownerId, kind) !== expectedRevision) {
+        this.#database.exec("RELEASE SAVEPOINT preference_mutation;");
+        return false;
+      }
+      apply();
+      this.#database.exec("RELEASE SAVEPOINT preference_mutation;");
+      return true;
+    } catch (error) {
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT preference_mutation; RELEASE SAVEPOINT preference_mutation;",
+      );
+      throw error;
+    }
+  }
+
+  mutatePlanningPreferences(
+    ownerId: string,
+    expectedRevision: number,
+    preferences: PlanningPreferencesRecord,
+    now: string,
+  ): PlanningPreferencesRecord | undefined {
+    const parsed = planningPreferencesSchema.safeParse(preferences);
+    if (!parsed.success) return undefined;
+    return this.#mutatePreferences(
+      ownerId,
+      "planning",
+      expectedRevision,
+      () => {
+        this.putPlanningPreferences(ownerId, parsed.data, now);
+      },
+    )
+      ? this.getPlanningPreferences(ownerId)
+      : undefined;
+  }
+
+  mutateNotificationPreferences(
+    ownerId: string,
+    expectedRevision: number,
+    preferences: NotificationPreferencesRecord,
+    now: string,
+  ): NotificationPreferencesRecord | undefined {
+    const parsed = notificationPreferencesSchema.safeParse(preferences);
+    if (!parsed.success) return undefined;
+    return this.#mutatePreferences(
+      ownerId,
+      "notifications",
+      expectedRevision,
+      () => {
+        this.putNotificationPreferences(ownerId, parsed.data, now);
+      },
+    )
+      ? this.getNotificationPreferences(ownerId)
+      : undefined;
+  }
+
   getPlanningPreferences(ownerId: string): PlanningPreferencesRecord {
     return this.planningPreferences.getPlanningPreferences(ownerId);
   }
@@ -2009,50 +2987,62 @@ export class SuiteDatabase {
     readonly preferences: NotificationPreferencesRecord;
     readonly now: string;
   }): void {
-    const scheduled = input.preferences.enabled
-      ? input.tasks.filter(
-          (task) =>
-            task.status === "open" &&
-            task.deletedAt === null &&
-            task.plannedStart !== null,
-        )
-      : [];
+    // Per-task settings and owner preferences resolve in the domain schedule
+    // (ADR 0020). Each row keeps the ADR 0016 identity: owner, task,
+    // occurrence and kind, so a delivered reminder is never recreated.
     const desired = new Set<string>();
-    const kinds: readonly ("lead" | "at_start")[] = [
-      ...(input.preferences.leadReminderEnabled ? (["lead"] as const) : []),
-      ...(input.preferences.atStartReminderEnabled
-        ? (["at_start"] as const)
-        : []),
-    ];
     this.#database.exec("BEGIN IMMEDIATE;");
     try {
-      for (const task of scheduled) {
-        if (task.plannedStart === null) continue;
-        for (const kind of kinds) {
-          const occurrenceStart = task.plannedStart;
-          desired.add(`${task.id}\n${occurrenceStart}\n${kind}`);
-          const dueAt = new Date(
-            Date.parse(occurrenceStart) - (kind === "lead" ? 15 * 60_000 : 0),
-          ).toISOString();
-          this.#database
-            .prepare(
-              `INSERT OR IGNORE INTO notification_deliveries
-                (id,owner_id,task_id,occurrence_start,reminder_kind,task_revision,state,due_at,next_attempt_at,attempt_count,error_code,created_at,updated_at,delivered_at)
-               VALUES (?,?,?,?,?,?,'pending',?,?,0,NULL,?,?,NULL)`,
-            )
-            .run(
-              randomUUID(),
-              input.ownerId,
-              task.id,
-              occurrenceStart,
-              kind,
-              task.revision,
-              dueAt,
-              dueAt,
-              input.now,
-              input.now,
-            );
-        }
+      const ownerDefault = this.applicationPreferences.get(input.ownerId)
+        .preferences.defaultTaskReminder;
+      for (const reminder of input.tasks.flatMap((task) =>
+        scheduledReminders(task, input.preferences, ownerDefault),
+      )) {
+        desired.add(
+          `${reminder.taskId}\n${reminder.occurrenceStart}\n${reminder.kind}`,
+        );
+        const task = input.tasks.find(({ id }) => id === reminder.taskId);
+        const inserted = this.#database
+          .prepare(
+            `INSERT OR IGNORE INTO notification_deliveries
+              (id,owner_id,task_id,occurrence_start,reminder_kind,task_revision,state,due_at,next_attempt_at,attempt_count,error_code,created_at,updated_at,delivered_at)
+             VALUES (?,?,?,?,?,?,'pending',?,?,0,NULL,?,?,NULL)`,
+          )
+          .run(
+            randomUUID(),
+            input.ownerId,
+            reminder.taskId,
+            reminder.occurrenceStart,
+            reminder.kind,
+            task?.revision ?? null,
+            reminder.dueAt,
+            reminder.dueAt,
+            input.now,
+            input.now,
+          );
+        if (Number(inserted.changes) === 1) continue;
+        // An offset change moves a row that has not been attempted. A row
+        // cancelled as obsolete was never published, so it may return to
+        // pending. Delivered, suppressed, failed or in-flight rows stay final.
+        this.#database
+          .prepare(
+            `UPDATE notification_deliveries
+             SET state='pending',due_at=?,next_attempt_at=?,attempt_count=0,error_code=NULL,task_revision=?,updated_at=?
+             WHERE owner_id=? AND task_id=? AND occurrence_start=? AND reminder_kind=?
+               AND ((state='pending' AND attempt_count=0 AND due_at<>?)
+                 OR (state='cancelled' AND error_code='OBSOLETE'))`,
+          )
+          .run(
+            reminder.dueAt,
+            reminder.dueAt,
+            task?.revision ?? null,
+            input.now,
+            input.ownerId,
+            reminder.taskId,
+            reminder.occurrenceStart,
+            reminder.kind,
+            reminder.dueAt,
+          );
       }
       const active = this.#database
         .prepare(
@@ -2064,7 +3054,7 @@ export class SuiteDatabase {
         readonly id: string;
         readonly task_id: string;
         readonly occurrence_start: string;
-        readonly reminder_kind: "lead" | "at_start";
+        readonly reminder_kind: "lead" | "at_start" | "deadline";
       }[];
       for (const delivery of active) {
         const key = `${delivery.task_id}\n${delivery.occurrence_start}\n${delivery.reminder_kind}`;
@@ -2161,6 +3151,40 @@ export class SuiteDatabase {
     return Number(result.changes);
   }
 
+  queueNotificationTest(
+    ownerId: string,
+    id: string,
+    now: string,
+  ): NotificationDeliveryRecord {
+    this.#database
+      .prepare(
+        `INSERT INTO notification_deliveries
+       (id,owner_id,task_id,occurrence_start,reminder_kind,task_revision,state,due_at,next_attempt_at,attempt_count,error_code,created_at,updated_at,delivered_at)
+       VALUES (?,?,NULL,?,'test',NULL,'pending',?,?,0,NULL,?,?,NULL)`,
+      )
+      .run(id, ownerId, now, now, now, now, now);
+    const delivery = this.getNotificationDelivery(id);
+    if (delivery === undefined)
+      throw new Error("Queued notification is missing");
+    return delivery;
+  }
+
+  listDueNotificationTests(
+    ownerId: string,
+    now: string,
+  ): readonly NotificationDeliveryRecord[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT * FROM notification_deliveries WHERE owner_id=? AND reminder_kind='test'
+       AND state IN ('pending','retry') AND next_attempt_at<=? ORDER BY next_attempt_at,id LIMIT 25`,
+      )
+      .all(ownerId, now) as unknown as readonly Record<
+      string,
+      string | number | null
+    >[];
+    return rows.map((row) => this.#notificationDeliveryFromRow(row));
+  }
+
   recordNotificationTest(
     ownerId: string,
     delivered: boolean,
@@ -2242,7 +3266,38 @@ export class SuiteDatabase {
     from: string,
     to: string,
   ): readonly CalendarEventProjectionRecord[] {
-    return this.calendarProjections.listProjectedEvents(ownerId, from, to);
+    // ADR 0032: visible subscription occurrences join the provider projection.
+    return [
+      ...this.calendarProjections.listProjectedEvents(ownerId, from, to),
+      ...this.calendarSubscriptions.listProjectedEvents(ownerId, from, to),
+    ];
+  }
+
+  listActiveTaskCalendarEventLinks(
+    ownerId: string,
+  ): readonly ActiveTaskCalendarEventLink[] {
+    return this.#database
+      .prepare(
+        `SELECT b.provider_id,b.calendar_id,b.event_href,b.task_id
+         FROM task_calendar_blocks b
+         JOIN tasks t ON t.id=b.task_id AND t.owner_id=b.owner_id
+         WHERE b.owner_id=? AND b.state='active' AND t.deleted_at IS NULL`,
+      )
+      .all(ownerId)
+      .map((row) => {
+        const link = row as {
+          provider_id: string;
+          calendar_id: string;
+          event_href: string;
+          task_id: string;
+        };
+        return {
+          providerId: link.provider_id,
+          calendarId: link.calendar_id,
+          eventHref: link.event_href,
+          taskId: link.task_id,
+        };
+      });
   }
 
   getTaskCalendarBlock(
@@ -2259,7 +3314,9 @@ export class SuiteDatabase {
     readonly expectedBlockRevision: number;
     readonly now: string;
   }): TaskRecord | undefined {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    // ADR 0037: a savepoint lets the automation confirmation release the
+    // block inside its own receipt transaction; outside one it commits alone.
+    this.#database.exec("SAVEPOINT release_task_block;");
     try {
       const task = this.getTask(input.ownerId, input.taskId);
       const block = this.getTaskCalendarBlock(input.ownerId, input.taskId);
@@ -2269,7 +3326,7 @@ export class SuiteDatabase {
         task.revision !== input.expectedTaskRevision ||
         block.revision !== input.expectedBlockRevision
       ) {
-        this.#database.exec("COMMIT;");
+        this.#database.exec("RELEASE SAVEPOINT release_task_block;");
         return undefined;
       }
       this.#database
@@ -2301,11 +3358,11 @@ export class SuiteDatabase {
           released.ownerId,
           released.id,
         );
-      this.#database
-        .prepare(
-          "INSERT INTO task_field_versions (task_id,field,version) VALUES (?, 'estimateMinutes', ?) ON CONFLICT(task_id,field) DO UPDATE SET version=excluded.version",
-        )
-        .run(released.id, released.revision);
+      const releasedVersion = this.#database.prepare(
+        "INSERT INTO task_field_versions (task_id,field,version) VALUES (?,?,?) ON CONFLICT(task_id,field) DO UPDATE SET version=excluded.version",
+      );
+      releasedVersion.run(released.id, "estimateMinutes", released.revision);
+      releasedVersion.run(released.id, "plannedStart", released.revision);
       this.#appendSyncChangeInTransaction(
         input.ownerId,
         "task",
@@ -2314,10 +3371,12 @@ export class SuiteDatabase {
         released.revision,
         input.now,
       );
-      this.#database.exec("COMMIT;");
+      this.#database.exec("RELEASE SAVEPOINT release_task_block;");
       return released;
     } catch (error: unknown) {
-      this.#database.exec("ROLLBACK;");
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT release_task_block; RELEASE SAVEPOINT release_task_block;",
+      );
       throw error;
     }
   }
@@ -2506,13 +3565,15 @@ export class SuiteDatabase {
       const task: TaskRecord = {
         ...currentTask,
         plannedStart: input.plannedStart,
+        plannedDay: null,
         estimateMinutes: input.estimateMinutes,
         revision: currentTask.revision + 1,
         updatedAt: input.now,
       };
+      // A calendar block's exact start supersedes a date-only plan.
       this.#database
         .prepare(
-          `UPDATE tasks SET planned_start = ?, estimate_minutes = ?,
+          `UPDATE tasks SET planned_start = ?, planned_day = NULL, estimate_minutes = ?,
              revision = ?, updated_at = ? WHERE owner_id = ? AND id = ?`,
         )
         .run(
@@ -2523,11 +3584,11 @@ export class SuiteDatabase {
           task.ownerId,
           task.id,
         );
-      this.#database
-        .prepare(
-          "INSERT INTO task_field_versions (task_id,field,version) VALUES (?, 'estimateMinutes', ?) ON CONFLICT(task_id,field) DO UPDATE SET version=excluded.version",
-        )
-        .run(task.id, task.revision);
+      const reservedVersion = this.#database.prepare(
+        "INSERT INTO task_field_versions (task_id,field,version) VALUES (?,?,?) ON CONFLICT(task_id,field) DO UPDATE SET version=excluded.version",
+      );
+      reservedVersion.run(task.id, "estimateMinutes", task.revision);
+      reservedVersion.run(task.id, "plannedStart", task.revision);
       this.#appendSyncChangeInTransaction(
         input.ownerId,
         "task",
@@ -2657,11 +3718,12 @@ export class SuiteDatabase {
   importTaskRecords(
     ownerId: string,
     records: readonly {
-      kind: "project" | "tag" | "task";
+      kind: "project" | "tag" | "task" | "note";
       sourceId: string;
       sourceHash: string;
       sourceJson: string;
       title: string;
+      /** Task notes, or the Markdown content of a note record. */
       notes: string;
       projectId: string | null;
       tagIds: readonly string[];
@@ -2671,12 +3733,118 @@ export class SuiteDatabase {
       estimateMinutes: number | null;
       completedAt: string | null;
       createdAt: string | null;
+      // Organization parity (ADR 0019); records arrive in their display order.
+      /** Archived at import time unless completion supplies the time. */
+      archived?: boolean;
+      color?: string | null;
+      icon?: string | null;
+      hiddenFromMenu?: boolean;
+      backlogEnabled?: boolean;
+      /** Source task IDs, applied after the batch's tasks exist. */
+      backlogTaskIds?: readonly string[];
+      pinnedToToday?: boolean;
+      plannedDay?: string | null;
+      startReminder?: StoredStartReminder;
+      deadlineReminderMinutes?: number | null;
+      /** Source parent task ID; the child is placed after all records exist. */
+      parentSourceId?: string | null;
+      /** Source order among the parent's children. */
+      childIndex?: number | null;
+      // Linked issue and attachments (ADR 0021); tasks only.
+      issueLink?: ImportedIssueLink | null;
+      attachments?: readonly ImportedAttachment[];
+      /**
+       * ADR 0022: for a task, `archived` imports it as archived history.
+       * `archiveStore` names its source store; review reasons and unresolved
+       * source references are stored as read-only provenance.
+       */
+      archiveStore?: "task" | "archiveYoung" | "archiveOld";
+      review?: readonly TaskArchiveReviewReason[];
+      historicalReferences?: readonly HistoricalReference[];
+      /** Daily work history of a task (ADR 0024); written for new tasks only. */
+      timeEntries?: readonly ImportedTimeEntry[];
     }[],
     now: string,
-  ): { created: number; existing: number } {
+    /** ADR 0023: repeat configurations and the instances that link to them. */
+    recurrence?: {
+      readonly series: readonly ImportedRecurringSeries[];
+      readonly links: readonly ImportedOccurrenceLink[];
+    },
+    options: {
+      /**
+       * Source work start/end and breaks by project, tag or Today context
+       * (ADR 0024). Context IDs are source IDs, mapped through this batch.
+       */
+      readonly workContexts?: readonly Omit<
+        ImportedWorkContextDay,
+        "projectId" | "tagId"
+      >[];
+      /** Counters with day values and daily evaluations (ADR 0025). */
+      readonly counters?: readonly ImportedCounter[];
+      readonly evaluations?: readonly ImportedEvaluation[];
+      /** Opaque plugin data and inert plugin metadata (ADR 0026). */
+      readonly pluginData?: {
+        readonly entries: readonly ImportedPluginDataEntry[];
+        readonly plugins: readonly ImportedPluginMetadata[];
+      };
+      /**
+       * ADR 0027: Today and planner-day orders by source task ID. A date's
+       * order is saved only when the date has no saved order yet.
+       */
+      readonly dayOrders?: readonly {
+        readonly date: string;
+        readonly sourceTaskIds: readonly string[];
+      }[];
+      /** ADR 0028: boards, sections, sidebar folders and task markers. */
+      readonly boards?: ImportedBoardData;
+      /** ADR 0029: focus preferences mapped from globalConfig, applied once. */
+      readonly focusPreferences?: {
+        readonly preferences: FocusPreferences;
+        readonly provenance: FocusPreferenceProvenance;
+      };
+      /**
+       * ADR 0030: mapped globalConfig settings, applied once while the owner
+       * has never saved application (or, for the day start, planning)
+       * preferences. Source project IDs are resolved to imported projects.
+       */
+      readonly applicationPreferences?: {
+        readonly preferences: Readonly<
+          Partial<Omit<ApplicationPreferences, "defaultProjectId">>
+        > & { readonly defaultProjectSourceId?: string | null };
+        readonly planning?: Readonly<
+          Partial<
+            Pick<
+              PlanningPreferencesRecord,
+              | "workdayStart"
+              | "workdayEnd"
+              | "breakStart"
+              | "breakEnd"
+              | "dayStartsAt"
+            >
+          >
+        >;
+      };
+    } = {},
+  ): {
+    created: number;
+    existing: number;
+    recurringSeries?: { created: number; existing: number };
+    counters?: ReturnType<SqliteCounterStore["importInTransaction"]>;
+    pluginData?: { created: number; existing: number };
+    dayOrders?: number;
+    boards?: ReturnType<SqliteBoardStore["importInTransaction"]>;
+    focusPreferences?: "applied" | "skipped";
+    applicationPreferences?: number;
+  } {
     this.#database.exec("BEGIN IMMEDIATE;");
     try {
       const targets = new Map<string, string>();
+      const backlogs: {
+        projectId: string;
+        sourceTaskIds: readonly string[];
+      }[] = [];
+      const newChildren: (typeof records)[number][] = [];
+      const newTasks: { id: string; record: (typeof records)[number] }[] = [];
       let created = 0;
       let existing = 0;
       for (const record of records) {
@@ -2695,7 +3863,23 @@ export class SuiteDatabase {
           continue;
         }
         const createdAt = record.createdAt ?? now;
-        if (record.kind === "project") {
+        if (record.kind === "note") {
+          const projectId =
+            record.projectId === null
+              ? null
+              : targets.get(`project:${record.projectId}`);
+          if (projectId === undefined)
+            throw new Error("IMPORT_REFERENCE_MISSING");
+          this.notes.insert(ownerId, {
+            id,
+            content: record.notes,
+            projectId,
+            tagId: null,
+            pinnedToToday: record.pinnedToToday === true,
+            createdAt,
+            updatedAt: now,
+          });
+        } else if (record.kind === "project") {
           this.createProject({
             id,
             ownerId,
@@ -2703,8 +3887,20 @@ export class SuiteDatabase {
             revision: 1,
             createdAt,
             updatedAt: now,
-            archivedAt: null,
+            // Completing a Super Productivity project also archives it.
+            archivedAt:
+              record.completedAt ?? (record.archived === true ? now : null),
+            completedAt: record.completedAt,
+            color: record.color ?? null,
+            icon: record.icon ?? null,
+            hiddenFromMenu: record.hiddenFromMenu === true,
+            backlogEnabled: record.backlogEnabled === true,
           });
+          if ((record.backlogTaskIds ?? []).length > 0)
+            backlogs.push({
+              projectId: id,
+              sourceTaskIds: record.backlogTaskIds ?? [],
+            });
           this.#appendSyncChangeInTransaction(
             ownerId,
             "project",
@@ -2722,7 +3918,9 @@ export class SuiteDatabase {
             revision: 1,
             createdAt,
             updatedAt: now,
-            archivedAt: null,
+            archivedAt: record.archived === true ? now : null,
+            color: record.color ?? null,
+            icon: record.icon ?? null,
           });
           this.#appendSyncChangeInTransaction(
             ownerId,
@@ -2752,6 +3950,9 @@ export class SuiteDatabase {
               createdAt,
               updatedAt: now,
               plannedStart: record.plannedStart,
+              plannedDay: record.plannedDay ?? null,
+              startReminder: record.startReminder ?? { kind: "default" },
+              deadlineReminderMinutes: record.deadlineReminderMinutes ?? null,
               deadlineDate: record.deadlineDate,
               deadlineAt: record.deadlineAt,
               estimateMinutes: record.estimateMinutes,
@@ -2769,6 +3970,18 @@ export class SuiteDatabase {
               "UPDATE tasks SET completed_at=? WHERE owner_id=? AND id=?",
             )
             .run(record.completedAt, ownerId, id);
+          if (
+            (record.issueLink ?? null) !== null ||
+            (record.attachments ?? []).length > 0
+          )
+            this.taskLinks.insertImported(
+              ownerId,
+              id,
+              record.issueLink ?? null,
+              record.attachments ?? [],
+              randomUUID,
+              now,
+            );
         }
         this.#database
           .prepare(
@@ -2783,10 +3996,201 @@ export class SuiteDatabase {
             record.sourceJson,
             now,
           );
+        if (record.kind === "task" && record.parentSourceId != null)
+          newChildren.push(record);
+        if (record.kind === "task") newTasks.push({ id, record });
         created++;
       }
+      const addToBacklog = this.#database.prepare(
+        "INSERT INTO project_backlog_tasks (owner_id,project_id,task_id,position) SELECT ?,?,id,? FROM tasks WHERE owner_id=? AND id=? AND project_id=?",
+      );
+      for (const backlog of backlogs)
+        backlog.sourceTaskIds.forEach((sourceId, position) => {
+          const taskId = targets.get(`task:${sourceId}`);
+          if (taskId === undefined) throw new Error("IMPORT_REFERENCE_MISSING");
+          if (
+            addToBacklog.run(
+              ownerId,
+              backlog.projectId,
+              position,
+              ownerId,
+              taskId,
+              backlog.projectId,
+            ).changes !== 1
+          )
+            throw new Error("IMPORT_REFERENCE_MISSING");
+        });
+      for (const child of newChildren.toSorted(
+        (left, right) => (left.childIndex ?? 0) - (right.childIndex ?? 0),
+      )) {
+        const taskId = targets.get(`task:${child.sourceId}`);
+        const parentId = targets.get(`task:${child.parentSourceId ?? ""}`);
+        if (taskId === undefined || parentId === undefined)
+          throw new Error("IMPORT_REFERENCE_MISSING");
+        const moved = this.taskHierarchy.move({
+          ownerId,
+          taskId,
+          parentId,
+          expectedRevision: 1,
+          now,
+        });
+        if (moved.kind !== "moved") throw new Error("IMPORT_HIERARCHY_INVALID");
+      }
+      // Work history is written before archiving: archived time is read-only.
+      for (const { id, record } of newTasks)
+        if ((record.timeEntries ?? []).length > 0)
+          this.timeEntries.insertImported(
+            ownerId,
+            id,
+            record.timeEntries ?? [],
+            randomUUID,
+            now,
+          );
+      this.timeEntries.importWorkContexts(
+        ownerId,
+        (options.workContexts ?? []).map((context) => ({
+          ...context,
+          projectId:
+            context.contextKind === "project"
+              ? (targets.get(`project:${context.sourceContextId}`) ?? null)
+              : null,
+          tagId:
+            context.contextKind === "tag"
+              ? (targets.get(`tag:${context.sourceContextId}`) ?? null)
+              : null,
+        })),
+        now,
+      );
+      // Archive after the hierarchy exists: archived rows are read-only.
+      for (const { id, record } of newTasks) {
+        if (
+          (record.review ?? []).length > 0 ||
+          (record.historicalReferences ?? []).length > 0 ||
+          record.archived === true
+        )
+          this.taskArchive.recordImportProvenance(
+            ownerId,
+            id,
+            {
+              sourceStore: record.archiveStore ?? "task",
+              review: record.review ?? [],
+              historicalReferences: record.historicalReferences ?? [],
+            },
+            now,
+          );
+        if (record.archived === true)
+          this.taskArchive.markImportedArchived(ownerId, id, now);
+      }
+      // Only an export with repeat configurations reports series counts.
+      const recurringSeries =
+        recurrence === undefined || recurrence.series.length === 0
+          ? undefined
+          : this.recurrence.importInTransaction(
+              ownerId,
+              recurrence,
+              (kind, sourceId) => {
+                const target = targets.get(`${kind}:${sourceId}`);
+                if (target === undefined)
+                  throw new Error("IMPORT_REFERENCE_MISSING");
+                return target;
+              },
+              randomUUID,
+              now,
+            );
+      // Only an export with counters or metric days reports their counts.
+      const counters =
+        (options.counters ?? []).length === 0 &&
+        (options.evaluations ?? []).length === 0
+          ? undefined
+          : this.counters.importInTransaction(
+              ownerId,
+              {
+                counters: options.counters ?? [],
+                evaluations: options.evaluations ?? [],
+              },
+              randomUUID,
+              now,
+            );
+      // Only an export with plugin records reports plugin data counts.
+      const pluginData =
+        options.pluginData === undefined ||
+        options.pluginData.entries.length +
+          options.pluginData.plugins.length ===
+          0
+          ? undefined
+          : this.pluginData.importInTransaction(
+              ownerId,
+              options.pluginData,
+              randomUUID,
+              now,
+            );
+      // Orders last: membership depends on final planned days and archive
+      // state. Unknown source IDs were reported by the preview and are
+      // dropped here.
+      const dayOrders =
+        options.dayOrders === undefined || options.dayOrders.length === 0
+          ? undefined
+          : this.dayOrders.importOrders(
+              ownerId,
+              options.dayOrders.map((order) => ({
+                date: order.date,
+                taskIds: order.sourceTaskIds.flatMap((sourceId) => {
+                  const target = targets.get(`task:${sourceId}`);
+                  return target === undefined ? [] : [target];
+                }),
+              })),
+              now,
+            );
+      // ADR 0028: boards, sections and folders reference tasks, projects and
+      // tags by their final IDs; markers apply to newly imported tasks only.
+      const boards =
+        options.boards === undefined ||
+        options.boards.boards.length +
+          options.boards.sections.length +
+          options.boards.folders.length +
+          options.boards.taskMarkers.length ===
+          0
+          ? undefined
+          : this.boards.importInTransaction(
+              ownerId,
+              options.boards,
+              (kind, sourceId) => targets.get(`${kind}:${sourceId}`),
+              new Set(newTasks.map(({ id }) => id)),
+              randomUUID,
+              now,
+            );
+      const focusPreferences =
+        options.focusPreferences === undefined
+          ? undefined
+          : this.focus.importInTransaction(
+              ownerId,
+              options.focusPreferences.preferences,
+              options.focusPreferences.provenance,
+              now,
+            );
+      const applicationPreferences =
+        options.applicationPreferences === undefined
+          ? undefined
+          : this.#importApplicationPreferences(
+              ownerId,
+              options.applicationPreferences,
+              targets,
+              now,
+            );
       this.#database.exec("COMMIT;");
-      return { created, existing };
+      return {
+        created,
+        existing,
+        ...(focusPreferences === undefined ? {} : { focusPreferences }),
+        ...(recurringSeries === undefined ? {} : { recurringSeries }),
+        ...(counters === undefined ? {} : { counters }),
+        ...(pluginData === undefined ? {} : { pluginData }),
+        ...(dayOrders === undefined ? {} : { dayOrders }),
+        ...(boards === undefined ? {} : { boards }),
+        ...(applicationPreferences === undefined
+          ? {}
+          : { applicationPreferences }),
+      };
     } catch (error) {
       this.#database.exec("ROLLBACK;");
       throw error;
@@ -2811,10 +4215,12 @@ export class SuiteDatabase {
         TaskRecord,
         | "title"
         | "plannedStart"
+        | "plannedDay"
         | "deadlineDate"
         | "deadlineAt"
         | "projectId"
         | "tagIds"
+        | "estimateMinutes"
       >
     >,
   ): IdempotentTaskCreateResult {
@@ -2879,6 +4285,9 @@ export class SuiteDatabase {
         deadlineAt: task.deadlineAt ?? null,
         projectId: task.projectId ?? null,
         tagIds: task.tagIds ?? [],
+        plannedDay: task.plannedDay ?? null,
+        startReminder: task.startReminder ?? { kind: "default" },
+        deadlineReminderMinutes: task.deadlineReminderMinutes ?? null,
       };
       this.#database
         .prepare(
@@ -2901,18 +4310,15 @@ export class SuiteDatabase {
           created.deadlineAt ?? null,
           created.estimateMinutes,
         );
+      writeTaskPlanning(this.#database, ownerId, created.id, {
+        plannedDay: created.plannedDay ?? null,
+        startReminder: created.startReminder ?? { kind: "default" },
+        deadlineReminderMinutes: created.deadlineReminderMinutes ?? null,
+      });
       const initialFieldVersion = this.#database.prepare(
         "INSERT INTO task_field_versions (task_id, field, version) VALUES (?, ?, 1)",
       );
-      for (const field of [
-        "title",
-        "notes",
-        "status",
-        "estimateMinutes",
-        "projectId",
-        "tagIds",
-        "deadline",
-      ])
+      for (const field of syncedTaskFields)
         initialFieldVersion.run(created.id, field);
       const insertTag = this.#database.prepare(
         "INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)",
@@ -2955,7 +4361,7 @@ export class SuiteDatabase {
       .prepare(
         `SELECT id, owner_id, title, notes, status, revision, created_at, updated_at,
                 completed_at, deleted_at, planned_start, estimate_minutes, deadline_date, deadline_at
-         FROM tasks WHERE owner_id = ? AND deleted_at IS NULL
+         FROM tasks WHERE owner_id = ? AND deleted_at IS NULL AND archived_at IS NULL
          ORDER BY created_at DESC, id DESC`,
       )
       .all(ownerId) as unknown as readonly {
@@ -3063,6 +4469,10 @@ export class SuiteDatabase {
     return rows.map((row) => this.#withTaskTags(this.#taskFromRow(row)));
   }
 
+  /**
+   * An active task. `includeDeleted` also returns soft-deleted and archived
+   * tasks; callers that write must check `deletedAt` and `archivedAt`.
+   */
   getTask(
     ownerId: string,
     taskId: string,
@@ -3073,7 +4483,7 @@ export class SuiteDatabase {
         `SELECT id, owner_id, title, notes, status, revision, created_at, updated_at,
                 completed_at, deleted_at, planned_start, estimate_minutes, deadline_date, deadline_at
          FROM tasks WHERE owner_id = ? AND id = ?
-           AND (? = 1 OR deleted_at IS NULL)`,
+           AND (? = 1 OR (deleted_at IS NULL AND archived_at IS NULL))`,
       )
       .get(ownerId, taskId, includeDeleted ? 1 : 0) as unknown as
       TaskRow | undefined;
@@ -3110,7 +4520,95 @@ export class SuiteDatabase {
         ...(patch.deadlineAt === undefined
           ? {}
           : { deadlineAt: patch.deadlineAt }),
+        // A planned day and an exact start are exclusive; setting one
+        // clears the other (ADR 0020).
+        ...(patch.plannedDay === undefined
+          ? patch.plannedStart == null
+            ? {}
+            : { plannedDay: null }
+          : {
+              plannedDay: patch.plannedDay,
+              ...(patch.plannedDay === null || patch.plannedStart !== undefined
+                ? {}
+                : { plannedStart: null }),
+            }),
+        ...(patch.startReminder === undefined
+          ? {}
+          : { startReminder: patch.startReminder }),
+        ...(patch.deadlineReminderMinutes === undefined
+          ? {}
+          : { deadlineReminderMinutes: patch.deadlineReminderMinutes }),
       }),
+      now,
+    );
+  }
+
+  /** ADR 0030 import: apply mapped settings once; count the fields applied. */
+  #importApplicationPreferences(
+    ownerId: string,
+    input: NonNullable<
+      Parameters<SuiteDatabase["importTaskRecords"]>[4]
+    >["applicationPreferences"] &
+      object,
+    targets: ReadonlyMap<string, string>,
+    now: string,
+  ): number {
+    const { defaultProjectSourceId, ...rest } = input.preferences;
+    const defaultProjectId =
+      typeof defaultProjectSourceId === "string"
+        ? targets.get(`project:${defaultProjectSourceId}`)
+        : undefined;
+    let applied = this.applicationPreferences.importInTransaction(
+      ownerId,
+      {
+        ...rest,
+        ...(defaultProjectId === undefined ? {} : { defaultProjectId }),
+      },
+      now,
+    );
+    const planning = Object.fromEntries(
+      Object.entries(input.planning ?? {}).filter(
+        ([, value]) => value !== undefined,
+      ),
+    );
+    if (
+      Object.keys(planning).length > 0 &&
+      this.getPreferenceRevision(ownerId, "planning") === 0
+    ) {
+      const candidate = {
+        ...this.getPlanningPreferences(ownerId),
+        ...planning,
+      };
+      if (planningPreferencesSchema.safeParse(candidate).success) {
+        this.putPlanningPreferences(ownerId, candidate, now);
+        applied += Object.keys(planning).length;
+      }
+    }
+    return applied;
+  }
+
+  /**
+   * ADR 0030: with `autoMarkParentDone` on, completing the last open child
+   * completes its parent through the same conditional update, so the parent
+   * gains a revision, a status version and a sync change.
+   */
+  #autoCompleteParent(ownerId: string, taskId: string, now: string): void {
+    if (
+      !this.applicationPreferences.get(ownerId).preferences.autoMarkParentDone
+    )
+      return;
+    const child = this.getTask(ownerId, taskId);
+    if (child?.parentId == null || child.status !== "completed") return;
+    const parent = this.getTask(ownerId, child.parentId);
+    if (parent?.status !== "open") return;
+    const children = this.taskHierarchy.listChildren(ownerId, parent.id);
+    if (children.some((sibling) => sibling.status !== "completed")) return;
+    this.#conditionallyUpdateTask(
+      ownerId,
+      parent.id,
+      parent.revision,
+      false,
+      (task) => ({ ...task, status: "completed", completedAt: now }),
       now,
     );
   }
@@ -3122,18 +4620,30 @@ export class SuiteDatabase {
     completed: boolean,
     now: string,
   ): ConditionalTaskResult {
-    return this.#conditionallyUpdateTask(
-      ownerId,
-      taskId,
-      expectedRevision,
-      false,
-      (task) => ({
-        ...task,
-        status: completed ? "completed" : "open",
-        completedAt: completed ? now : null,
-      }),
-      now,
-    );
+    this.#database.exec("SAVEPOINT task_completion;");
+    try {
+      const result = this.#conditionallyUpdateTask(
+        ownerId,
+        taskId,
+        expectedRevision,
+        false,
+        (task) => ({
+          ...task,
+          status: completed ? "completed" : "open",
+          completedAt: completed ? now : null,
+        }),
+        now,
+      );
+      if (result.kind === "updated" && completed)
+        this.#autoCompleteParent(ownerId, taskId, now);
+      this.#database.exec("RELEASE SAVEPOINT task_completion;");
+      return result;
+    } catch (error) {
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT task_completion; RELEASE SAVEPOINT task_completion;",
+      );
+      throw error;
+    }
   }
 
   deleteTask(
@@ -3264,8 +4774,8 @@ export class SuiteDatabase {
     this.#database
       .prepare(
         `INSERT INTO automation_tokens
-          (id,owner_id,label,secret_hash,scopes_json,created_at,last_used_at,expires_at,revoked_at)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
+          (id,owner_id,label,secret_hash,scopes_json,confirmation_policy,created_at,last_used_at,expires_at,revoked_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         record.id,
@@ -3273,6 +4783,7 @@ export class SuiteDatabase {
         record.label,
         record.secretHash,
         JSON.stringify([...record.scopes].sort()),
+        record.confirmationPolicy,
         record.createdAt,
         record.lastUsedAt,
         record.expiresAt,
@@ -3622,10 +5133,34 @@ export class SuiteDatabase {
       label: String(row.label),
       secretHash: String(row.secret_hash),
       scopes: JSON.parse(String(row.scopes_json)) as string[],
+      confirmationPolicy: row.confirmation_policy ?? "confirm_all",
       createdAt: String(row.created_at),
       lastUsedAt: row.last_used_at ?? null,
       expiresAt: row.expires_at ?? null,
       revokedAt: row.revoked_at ?? null,
+    };
+  }
+
+  /**
+   * ADR 0036: store methods that the assistant confirmation runs inside its
+   * receipt transaction cannot open a second transaction, so they start one
+   * only when none is open and use a savepoint otherwise.
+   */
+  #beginWrite(): { commit(): void; rollback(): void } {
+    if (this.#database.isTransaction) {
+      this.#database.exec("SAVEPOINT nested_write;");
+      return {
+        commit: () => this.#database.exec("RELEASE SAVEPOINT nested_write;"),
+        rollback: () =>
+          this.#database.exec(
+            "ROLLBACK TO SAVEPOINT nested_write; RELEASE SAVEPOINT nested_write;",
+          ),
+      };
+    }
+    this.#database.exec("BEGIN IMMEDIATE;");
+    return {
+      commit: () => this.#database.exec("COMMIT;"),
+      rollback: () => this.#database.exec("ROLLBACK;"),
     };
   }
 
@@ -3637,7 +5172,7 @@ export class SuiteDatabase {
     revision: number,
     now: string,
   ): SyncChangeRecord {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       const change = this.#appendSyncChangeInTransaction(
         ownerId,
@@ -3647,10 +5182,10 @@ export class SuiteDatabase {
         revision,
         now,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
       return change;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -3709,6 +5244,7 @@ export class SuiteDatabase {
     return change;
   }
 
+  /** The whole tail after a sequence. Request paths use pageSyncChanges. */
   listSyncChanges(
     ownerId: string,
     epoch: string,
@@ -3723,30 +5259,35 @@ export class SuiteDatabase {
         string,
         string | number
       >[]
-    ).map((row) => ({
-      ownerId: String(row.owner_id),
-      epoch: String(row.epoch),
-      sequence: Number(row.sequence),
-      entityType: String(row.entity_type),
-      entityId: String(row.entity_id),
-      kind: String(row.kind),
-      revision: Number(row.revision),
-      createdAt: String(row.created_at),
-    }));
+    ).map(syncChangeFromRow);
   }
 
   getSyncState(ownerId: string): {
     readonly epoch: string;
     readonly cursor: number;
   } {
+    const { epoch, cursor } = this.#syncOwnerState(ownerId);
+    return { epoch, cursor };
+  }
+
+  #syncOwnerState(ownerId: string): {
+    readonly epoch: string;
+    readonly cursor: number;
+    readonly floor: number;
+  } {
     const row = this.#database
       .prepare(
-        "SELECT epoch, next_sequence FROM sync_owner_state WHERE owner_id=?",
+        "SELECT epoch, next_sequence, retained_floor FROM sync_owner_state WHERE owner_id=?",
       )
       .get(ownerId) as unknown as
-      { epoch: string; next_sequence: number } | undefined;
+      | { epoch: string; next_sequence: number; retained_floor: number }
+      | undefined;
     if (row !== undefined)
-      return { epoch: row.epoch, cursor: row.next_sequence - 1 };
+      return {
+        epoch: row.epoch,
+        cursor: row.next_sequence - 1,
+        floor: row.retained_floor,
+      };
     const now = new Date().toISOString();
     const epoch = randomUUID();
     this.#database
@@ -3754,9 +5295,15 @@ export class SuiteDatabase {
         "INSERT INTO sync_owner_state (owner_id,epoch,next_sequence,updated_at) VALUES (?,?,1,?)",
       )
       .run(ownerId, epoch, now);
-    return { epoch, cursor: 0 };
+    return { epoch, cursor: 0, floor: 0 };
   }
 
+  /**
+   * One page of the feed after a cursor, read with a SQL limit (ADR 0045).
+   * A cursor from another epoch, past the head or below the retained floor
+   * cannot be served and requires a snapshot. A cursor exactly at the floor
+   * is valid: every change after it is still retained.
+   */
   pageSyncChanges(
     ownerId: string,
     epoch: string,
@@ -3767,21 +5314,122 @@ export class SuiteDatabase {
     readonly changes: readonly SyncChangeRecord[];
     readonly cursor: number;
   } {
-    const state = this.getSyncState(ownerId);
+    const state = this.#syncOwnerState(ownerId);
     if (
       state.epoch !== epoch ||
-      afterSequence < 0 ||
+      afterSequence < state.floor ||
       afterSequence > state.cursor
     )
       return { resetRequired: true, changes: [], cursor: state.cursor };
-    const changes = this.listSyncChanges(ownerId, epoch, afterSequence).slice(
-      0,
-      Math.max(1, Math.min(limit, 500)),
-    );
+    const changes = (
+      this.#database
+        .prepare(syncChangePageSql)
+        .all(
+          ownerId,
+          epoch,
+          afterSequence,
+          Math.max(1, Math.min(Math.trunc(limit), 500)),
+        ) as unknown as readonly Record<string, string | number>[]
+    ).map(syncChangeFromRow);
     return {
       resetRequired: false,
       changes,
       cursor: changes.at(-1)?.sequence ?? afterSequence,
+    };
+  }
+
+  /**
+   * Deletes feed changes created before `olderThan` and raises the retained
+   * floor to the highest deleted sequence (ADR 0045). Only a contiguous
+   * prefix of the current epoch is removed: pruning stops at the first change
+   * inside the window, and the newest `keepNewest` changes always stay, so a
+   * misconfigured window cannot empty the feed. Operation outcomes are not
+   * touched; a replayed outbox entry of any age still finds its outcome.
+   */
+  pruneSyncChanges(
+    ownerId: string,
+    olderThan: string,
+    now: string,
+    keepNewest = syncFeedMinimumRetainedChanges,
+  ): { readonly deleted: number; readonly floor: number } {
+    const cutoff = new Date(olderThan).toISOString();
+    if (!Number.isInteger(keepNewest) || keepNewest < 0)
+      throw new Error("keepNewest must be a non-negative integer");
+    const write = this.#beginWrite();
+    try {
+      const row = this.#database
+        .prepare(
+          "SELECT epoch, next_sequence, retained_floor FROM sync_owner_state WHERE owner_id=?",
+        )
+        .get(ownerId) as unknown as
+        | { epoch: string; next_sequence: number; retained_floor: number }
+        | undefined;
+      const floor = row?.retained_floor ?? 0;
+      // The highest sequence the keep-newest guard allows to be removed.
+      const ceiling = (row?.next_sequence ?? 1) - 1 - keepNewest;
+      if (row === undefined || ceiling <= floor) {
+        write.commit();
+        return { deleted: 0, floor };
+      }
+      // Walks the primary key from the floor and stops at the first change
+      // inside the window, so the scan covers only what is about to go.
+      const firstRetained = this.#database
+        .prepare(
+          "SELECT sequence FROM sync_changes WHERE owner_id=? AND epoch=? AND sequence>? AND sequence<=? AND created_at>=? ORDER BY sequence LIMIT 1",
+        )
+        .get(ownerId, row.epoch, floor, ceiling, cutoff) as unknown as
+        { sequence: number } | undefined;
+      const target =
+        firstRetained === undefined ? ceiling : firstRetained.sequence - 1;
+      if (target <= floor) {
+        write.commit();
+        return { deleted: 0, floor };
+      }
+      const deleted = Number(
+        this.#database
+          .prepare(
+            "DELETE FROM sync_changes WHERE owner_id=? AND epoch=? AND sequence<=?",
+          )
+          .run(ownerId, row.epoch, target).changes,
+      );
+      this.#database
+        .prepare(
+          "UPDATE sync_owner_state SET retained_floor=?, updated_at=? WHERE owner_id=?",
+        )
+        .run(target, now, ownerId);
+      write.commit();
+      return { deleted, floor: target };
+    } catch (error) {
+      write.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Content-free feed retention figures for metrics: the retained floor
+   * (the number of changes pruned in the current epoch) and the creation
+   * time of the oldest change still retained. Never creates sync state.
+   */
+  getSyncRetention(ownerId: string): {
+    readonly floor: number;
+    readonly oldestRetainedAt: string | null;
+  } {
+    const state = this.#database
+      .prepare(
+        "SELECT epoch, retained_floor FROM sync_owner_state WHERE owner_id=?",
+      )
+      .get(ownerId) as unknown as
+      { epoch: string; retained_floor: number } | undefined;
+    if (state === undefined) return { floor: 0, oldestRetainedAt: null };
+    const oldest = this.#database
+      .prepare(
+        "SELECT created_at FROM sync_changes WHERE owner_id=? AND epoch=? ORDER BY sequence LIMIT 1",
+      )
+      .get(ownerId, state.epoch) as unknown as
+      { created_at: string } | undefined;
+    return {
+      floor: state.retained_floor,
+      oldestRetainedAt: oldest?.created_at ?? null,
     };
   }
 
@@ -3793,7 +5441,11 @@ export class SuiteDatabase {
     const rows = this.#database
       .prepare("SELECT field,version FROM task_field_versions WHERE task_id=?")
       .all(taskId) as unknown as readonly { field: string; version: number }[];
-    return Object.fromEntries(rows.map((row) => [row.field, row.version]));
+    const parent = this.taskHierarchy.parentVersion(ownerId, taskId);
+    return {
+      ...Object.fromEntries(rows.map((row) => [row.field, row.version])),
+      ...(parent === undefined ? {} : { parent }),
+    };
   }
 
   fullSyncSnapshot(ownerId: string): {
@@ -3801,6 +5453,8 @@ export class SuiteDatabase {
     readonly projects: readonly ProjectRecord[];
     readonly tags: readonly TagRecord[];
     readonly subtasks: readonly SubtaskRecord[];
+    readonly notes: readonly NoteRecord[];
+    readonly dayOrders: readonly SavedDayOrderRecord[];
     readonly templates: readonly TaskTemplateRecord[];
     readonly templateBlueprints: readonly TemplateSubtaskBlueprintRecord[];
     readonly templateSets: readonly TemplateSetRecord[];
@@ -3816,6 +5470,8 @@ export class SuiteDatabase {
       projects: this.listProjects(ownerId),
       tags: this.listTags(ownerId),
       subtasks,
+      notes: this.notes.list(ownerId),
+      dayOrders: this.dayOrders.listSaved(ownerId),
       templates,
       templateBlueprints: templates.flatMap((template) =>
         this.listTemplateSubtaskBlueprints(template.id),
@@ -3825,10 +5481,306 @@ export class SuiteDatabase {
     };
   }
 
-  createProject(record: ProjectRecord): void {
+  /** Shared HTTP/assistant lifecycle boundary; safe inside confirmation transactions. */
+  mutateOrganization(
+    kind: "project" | "tag",
+    ownerId: string,
+    id: string,
+    expectedRevision: number | null,
+    fields: OrganizationFields,
+    now: string,
+  ): ProjectRecord | TagRecord | undefined {
+    const title = fields.title?.trim();
+    const color =
+      typeof fields.color === "string"
+        ? fields.color.toLowerCase()
+        : fields.color;
+    const projectOnly = [
+      fields.completed,
+      fields.hiddenFromMenu,
+      fields.backlogEnabled,
+    ];
+    if (
+      (title !== undefined &&
+        (title.length === 0 ||
+          title.length > (kind === "project" ? 240 : 100))) ||
+      (fields.archived !== undefined && typeof fields.archived !== "boolean") ||
+      (fields.completed !== undefined &&
+        typeof fields.completed !== "boolean") ||
+      (fields.archived !== undefined && fields.completed !== undefined) ||
+      (kind === "tag" && projectOnly.some((value) => value !== undefined)) ||
+      (typeof color === "string" && !colorPattern.test(color)) ||
+      (typeof fields.icon === "string" &&
+        !organizationIconPattern.test(fields.icon)) ||
+      Object.values(fields).every((value) => value === undefined)
+    )
+      return undefined;
+    this.#database.exec("SAVEPOINT organization_mutation;");
+    try {
+      const current =
+        kind === "project"
+          ? this.#project(ownerId, id)
+          : this.#tag(ownerId, id);
+      if (
+        (expectedRevision === null &&
+          (current !== undefined ||
+            title === undefined ||
+            fields.archived !== undefined ||
+            fields.completed !== undefined)) ||
+        (expectedRevision !== null && current?.revision !== expectedRevision)
+      ) {
+        this.#database.exec("RELEASE SAVEPOINT organization_mutation;");
+        return undefined;
+      }
+      if (expectedRevision === null) {
+        const record = {
+          id,
+          ownerId,
+          title: title ?? "",
+          revision: 1,
+          createdAt: now,
+          updatedAt: now,
+          archivedAt: null,
+          color: color ?? null,
+          icon: fields.icon ?? null,
+          position: this.#nextOrganizationPosition(kind, ownerId),
+        };
+        if (kind === "project")
+          this.createProject({
+            ...record,
+            hiddenFromMenu: fields.hiddenFromMenu ?? false,
+            backlogEnabled: fields.backlogEnabled ?? false,
+          });
+        else
+          this.createTag({
+            ...record,
+            normalizedName: record.title.normalize("NFKC").toLocaleLowerCase(),
+          });
+      } else {
+        if (current === undefined) throw new Error("Organization disappeared");
+        const nextTitle = title ?? current.title;
+        let archivedAt = current.archivedAt;
+        let completedAt = "completedAt" in current ? current.completedAt : null;
+        if (fields.archived === true) archivedAt = current.archivedAt ?? now;
+        // Restoring an archive also reopens a completed project (SP 19.1.0).
+        if (fields.archived === false || fields.completed === false) {
+          archivedAt = null;
+          completedAt = null;
+        }
+        if (fields.completed === true) {
+          completedAt = completedAt ?? now;
+          archivedAt = current.archivedAt ?? now;
+        }
+        const nextColor = color === undefined ? current.color : color;
+        const nextIcon = fields.icon === undefined ? current.icon : fields.icon;
+        if (kind === "project" && "completedAt" in current) {
+          this.#database
+            .prepare(
+              "UPDATE projects SET title=?, archived_at=?, completed_at=?, color=?, icon=?, hidden_from_menu=?, backlog_enabled=?, revision=revision+1, updated_at=? WHERE owner_id=? AND id=? AND revision=?",
+            )
+            .run(
+              nextTitle,
+              archivedAt,
+              completedAt,
+              nextColor,
+              nextIcon,
+              (fields.hiddenFromMenu ?? current.hiddenFromMenu) ? 1 : 0,
+              (fields.backlogEnabled ?? current.backlogEnabled) ? 1 : 0,
+              now,
+              ownerId,
+              id,
+              expectedRevision,
+            );
+          // Disabling a backlog returns its tasks to the regular list (SP 19.1.0).
+          if (fields.backlogEnabled === false)
+            this.#database
+              .prepare(
+                "DELETE FROM project_backlog_tasks WHERE owner_id=? AND project_id=?",
+              )
+              .run(ownerId, id);
+        } else {
+          this.#database
+            .prepare(
+              "UPDATE tags SET display_name=?, normalized_name=?, archived_at=?, color=?, icon=?, revision=revision+1, updated_at=? WHERE owner_id=? AND id=? AND revision=?",
+            )
+            .run(
+              nextTitle,
+              nextTitle.normalize("NFKC").toLocaleLowerCase(),
+              archivedAt,
+              nextColor,
+              nextIcon,
+              now,
+              ownerId,
+              id,
+              expectedRevision,
+            );
+        }
+      }
+      const result =
+        kind === "project"
+          ? this.#project(ownerId, id)
+          : this.#tag(ownerId, id);
+      if (result === undefined) throw new Error("Organization result missing");
+      this.#appendSyncChangeInTransaction(
+        ownerId,
+        kind,
+        id,
+        "upsert",
+        result.revision,
+        now,
+      );
+      this.#database.exec("RELEASE SAVEPOINT organization_mutation;");
+      return result;
+    } catch (error) {
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT organization_mutation; RELEASE SAVEPOINT organization_mutation;",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Replaces the owner's complete project or tag order. Every record must be
+   * listed with its current revision; only moved records gain a revision.
+   */
+  reorderOrganization(
+    kind: "project" | "tag",
+    ownerId: string,
+    items: readonly { readonly id: string; readonly revision: number }[],
+    now: string,
+  ): readonly (ProjectRecord | TagRecord)[] | undefined {
+    this.#database.exec("SAVEPOINT organization_order;");
+    try {
+      const current: readonly (ProjectRecord | TagRecord)[] =
+        kind === "project"
+          ? this.listProjects(ownerId)
+          : this.listTags(ownerId);
+      if (
+        current.length !== items.length ||
+        new Set(items.map(({ id }) => id)).size !== items.length ||
+        items.some(
+          (item) =>
+            current.find(({ id }) => id === item.id)?.revision !==
+            item.revision,
+        )
+      ) {
+        this.#database.exec("RELEASE SAVEPOINT organization_order;");
+        return undefined;
+      }
+      const update = this.#database.prepare(
+        `UPDATE ${kind === "project" ? "projects" : "tags"} SET position=?, revision=revision+1, updated_at=? WHERE owner_id=? AND id=?`,
+      );
+      items.forEach((item, position) => {
+        const before = current.find(({ id }) => id === item.id);
+        if (before === undefined || before.position === position) return;
+        update.run(position, now, ownerId, item.id);
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          kind,
+          item.id,
+          "upsert",
+          before.revision + 1,
+          now,
+        );
+      });
+      const result =
+        kind === "project"
+          ? this.listProjects(ownerId)
+          : this.listTags(ownerId);
+      this.#database.exec("RELEASE SAVEPOINT organization_order;");
+      return result;
+    } catch (error) {
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT organization_order; RELEASE SAVEPOINT organization_order;",
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Moves one active task of an unarchived, backlog-enabled project into or out
+   * of that project's backlog. Membership belongs to the project record.
+   */
+  setProjectBacklog(
+    ownerId: string,
+    projectId: string,
+    expectedRevision: number,
+    taskId: string,
+    inBacklog: boolean,
+    now: string,
+  ):
+    | { readonly kind: "applied"; readonly project: ProjectRecord }
+    | { readonly kind: "conflict" | "invalid" } {
+    this.#database.exec("SAVEPOINT project_backlog;");
+    try {
+      const project = this.#project(ownerId, projectId);
+      if (project?.revision !== expectedRevision) {
+        this.#database.exec("RELEASE SAVEPOINT project_backlog;");
+        return { kind: "conflict" };
+      }
+      const task = this.getTask(ownerId, taskId);
+      if (
+        !project.backlogEnabled ||
+        project.archivedAt !== null ||
+        task?.projectId !== projectId ||
+        project.backlogTaskIds.includes(taskId) === inBacklog
+      ) {
+        this.#database.exec("RELEASE SAVEPOINT project_backlog;");
+        return { kind: "invalid" };
+      }
+      if (inBacklog)
+        this.#database
+          .prepare(
+            "INSERT INTO project_backlog_tasks (owner_id,project_id,task_id,position) VALUES (?,?,?,(SELECT coalesce(max(position)+1,0) FROM project_backlog_tasks WHERE owner_id=? AND project_id=?)) ON CONFLICT(task_id) DO UPDATE SET project_id=excluded.project_id, position=excluded.position",
+          )
+          .run(ownerId, projectId, taskId, ownerId, projectId);
+      else
+        this.#database
+          .prepare(
+            "DELETE FROM project_backlog_tasks WHERE owner_id=? AND task_id=?",
+          )
+          .run(ownerId, taskId);
+      this.#database
+        .prepare(
+          "UPDATE projects SET revision=revision+1, updated_at=? WHERE owner_id=? AND id=?",
+        )
+        .run(now, ownerId, projectId);
+      const updated = this.#project(ownerId, projectId);
+      if (updated === undefined) throw new Error("Backlog project missing");
+      this.#appendSyncChangeInTransaction(
+        ownerId,
+        "project",
+        projectId,
+        "upsert",
+        updated.revision,
+        now,
+      );
+      this.#database.exec("RELEASE SAVEPOINT project_backlog;");
+      return { kind: "applied", project: updated };
+    } catch (error) {
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT project_backlog; RELEASE SAVEPOINT project_backlog;",
+      );
+      throw error;
+    }
+  }
+
+  #nextOrganizationPosition(kind: "project" | "tag", ownerId: string): number {
+    return Number(
+      (
+        this.#database
+          .prepare(
+            `SELECT coalesce(max(position) + 1, 0) AS next FROM ${kind === "project" ? "projects" : "tags"} WHERE owner_id=?`,
+          )
+          .get(ownerId) as { next: unknown }
+      ).next,
+    );
+  }
+
+  createProject(record: ProjectCreateRecord): void {
     this.#database
       .prepare(
-        "INSERT INTO projects (id, owner_id, title, revision, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO projects (id, owner_id, title, revision, created_at, updated_at, archived_at, color, icon, position, hidden_from_menu, completed_at, backlog_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         record.id,
@@ -3838,6 +5790,13 @@ export class SuiteDatabase {
         record.createdAt,
         record.updatedAt,
         record.archivedAt,
+        record.color ?? null,
+        record.icon ?? null,
+        record.position ??
+          this.#nextOrganizationPosition("project", record.ownerId),
+        record.hiddenFromMenu === true ? 1 : 0,
+        record.completedAt ?? null,
+        record.backlogEnabled === true ? 1 : 0,
       );
   }
   archiveProject(
@@ -3857,13 +5816,13 @@ export class SuiteDatabase {
     return (
       this.#database
         .prepare(
-          "SELECT * FROM projects WHERE owner_id = ? ORDER BY archived_at IS NOT NULL, title COLLATE NOCASE, id",
+          "SELECT * FROM projects WHERE owner_id = ? ORDER BY archived_at IS NOT NULL, position, title COLLATE NOCASE, id",
         )
         .all(ownerId) as unknown as readonly Record<
         string,
         string | number | null
       >[]
-    ).map((row) => this.#projectFromRow(row));
+    ).map((row) => this.#projectFromRow(row, this.#backlogTaskIds(ownerId)));
   }
   renameProject(
     ownerId: string,
@@ -3879,10 +5838,10 @@ export class SuiteDatabase {
       .run(title, now, ownerId, id, expectedRevision);
     return result.changes === 1 ? this.#project(ownerId, id) : undefined;
   }
-  createTag(record: TagRecord): void {
+  createTag(record: TagCreateRecord): void {
     this.#database
       .prepare(
-        "INSERT INTO tags (id, owner_id, display_name, normalized_name, revision, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tags (id, owner_id, display_name, normalized_name, revision, created_at, updated_at, archived_at, color, icon, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         record.id,
@@ -3893,6 +5852,10 @@ export class SuiteDatabase {
         record.createdAt,
         record.updatedAt,
         record.archivedAt,
+        record.color ?? null,
+        record.icon ?? null,
+        record.position ??
+          this.#nextOrganizationPosition("tag", record.ownerId),
       );
   }
   archiveTag(
@@ -3912,16 +5875,13 @@ export class SuiteDatabase {
     return (
       this.#database
         .prepare(
-          "SELECT * FROM tags WHERE owner_id=? ORDER BY archived_at IS NOT NULL,display_name COLLATE NOCASE,id",
+          "SELECT * FROM tags WHERE owner_id=? ORDER BY archived_at IS NOT NULL,position,display_name COLLATE NOCASE,id",
         )
         .all(ownerId) as unknown as readonly Record<
         string,
         string | number | null
       >[]
-    ).map((row) => ({
-      ...this.#projectFromRow({ ...row, title: String(row.display_name) }),
-      normalizedName: String(row.normalized_name),
-    }));
+    ).map((row) => this.#tagFromRow(row));
   }
   renameTag(
     ownerId: string,
@@ -3945,7 +5905,7 @@ export class SuiteDatabase {
     expectedRevision: number,
     now: string,
   ): TaskRecord | undefined {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    this.#database.exec("SAVEPOINT task_project;");
     try {
       const valid =
         projectId === null ||
@@ -3955,16 +5915,18 @@ export class SuiteDatabase {
           )
           .get(projectId, ownerId) !== undefined;
       if (!valid) {
-        this.#database.exec("ROLLBACK;");
+        this.#database.exec(
+          "ROLLBACK TO SAVEPOINT task_project; RELEASE SAVEPOINT task_project;",
+        );
         return undefined;
       }
       const changed = this.#database
         .prepare(
-          "UPDATE tasks SET project_id=?,revision=revision+1,updated_at=? WHERE owner_id=? AND id=? AND revision=?",
+          "UPDATE tasks SET project_id=?,revision=revision+1,updated_at=? WHERE owner_id=? AND id=? AND revision=? AND deleted_at IS NULL AND archived_at IS NULL",
         )
         .run(projectId, now, ownerId, taskId, expectedRevision).changes;
       if (changed !== 1) {
-        this.#database.exec("COMMIT;");
+        this.#database.exec("RELEASE SAVEPOINT task_project;");
         return undefined;
       }
       const task = this.getTask(ownerId, taskId);
@@ -3982,10 +5944,40 @@ export class SuiteDatabase {
         task.revision,
         now,
       );
-      this.#database.exec("COMMIT;");
+      // Leaving a project also leaves that project's backlog.
+      const backlog = this.#database
+        .prepare(
+          "SELECT project_id FROM project_backlog_tasks WHERE owner_id=? AND task_id=?",
+        )
+        .get(ownerId, taskId) as { project_id: string } | undefined;
+      if (backlog !== undefined && backlog.project_id !== projectId) {
+        this.#database
+          .prepare(
+            "DELETE FROM project_backlog_tasks WHERE owner_id=? AND task_id=?",
+          )
+          .run(ownerId, taskId);
+        this.#database
+          .prepare(
+            "UPDATE projects SET revision=revision+1, updated_at=? WHERE owner_id=? AND id=?",
+          )
+          .run(now, ownerId, backlog.project_id);
+        const previous = this.#project(ownerId, backlog.project_id);
+        if (previous !== undefined)
+          this.#appendSyncChangeInTransaction(
+            ownerId,
+            "project",
+            previous.id,
+            "upsert",
+            previous.revision,
+            now,
+          );
+      }
+      this.#database.exec("RELEASE SAVEPOINT task_project;");
       return task;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT task_project; RELEASE SAVEPOINT task_project;",
+      );
       throw error;
     }
   }
@@ -3998,7 +5990,7 @@ export class SuiteDatabase {
   ): boolean {
     if (tagIds.length > 25 || new Set(tagIds).size !== tagIds.length)
       return false;
-    this.#database.exec("BEGIN IMMEDIATE;");
+    this.#database.exec("SAVEPOINT task_tags;");
     try {
       const current = this.getTask(ownerId, taskId);
       if (
@@ -4006,7 +5998,9 @@ export class SuiteDatabase {
         (expectedRevision !== undefined &&
           current.revision !== expectedRevision)
       ) {
-        this.#database.exec("ROLLBACK;");
+        this.#database.exec(
+          "ROLLBACK TO SAVEPOINT task_tags; RELEASE SAVEPOINT task_tags;",
+        );
         return false;
       }
       const valid = this.#database
@@ -4015,7 +6009,9 @@ export class SuiteDatabase {
         )
         .get(ownerId, ...tagIds) as unknown as { count: number };
       if (valid.count !== tagIds.length) {
-        this.#database.exec("ROLLBACK;");
+        this.#database.exec(
+          "ROLLBACK TO SAVEPOINT task_tags; RELEASE SAVEPOINT task_tags;",
+        );
         return false;
       }
       this.#database
@@ -4046,13 +6042,121 @@ export class SuiteDatabase {
         nextRevision,
         now,
       );
-      this.#database.exec("COMMIT;");
+      this.#database.exec("RELEASE SAVEPOINT task_tags;");
       return true;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT task_tags; RELEASE SAVEPOINT task_tags;",
+      );
       throw error;
     }
   }
+  getSubtask(ownerId: string, id: string): SubtaskRecord | undefined {
+    const row = this.#database
+      .prepare("SELECT task_id FROM subtasks WHERE owner_id=? AND id=?")
+      .get(ownerId, id) as { task_id: string } | undefined;
+    if (row === undefined || this.getTask(ownerId, row.task_id) === undefined)
+      return undefined;
+    return this.listSubtasks(ownerId, row.task_id).find(
+      (item) => item.id === id,
+    );
+  }
+
+  mutateChecklist(
+    ownerId: string,
+    command: ChecklistCommand,
+    now: string,
+    expectedTaskRevision?: number,
+  ): readonly SubtaskRecord[] | undefined {
+    const parsed = checklistCommandSchema.safeParse(command);
+    if (!parsed.success) return undefined;
+    command = parsed.data;
+    this.#database.exec("SAVEPOINT checklist_mutation;");
+    try {
+      const task = this.getTask(ownerId, command.taskId);
+      if (
+        task === undefined ||
+        (expectedTaskRevision !== undefined &&
+          task.revision !== expectedTaskRevision)
+      ) {
+        this.#database.exec("RELEASE SAVEPOINT checklist_mutation;");
+        return undefined;
+      }
+      if (command.action === "reorder") {
+        if (
+          this.reorderSubtasks(ownerId, command.taskId, command.items, now) ===
+          undefined
+        ) {
+          this.#database.exec("RELEASE SAVEPOINT checklist_mutation;");
+          return undefined;
+        }
+      } else {
+        const current = this.getSubtask(ownerId, command.id);
+        if (
+          command.action === "create"
+            ? current !== undefined
+            : current?.taskId !== command.taskId ||
+              current.revision !== command.expectedRevision
+        ) {
+          this.#database.exec("RELEASE SAVEPOINT checklist_mutation;");
+          return undefined;
+        }
+        let revision = 1;
+        if (command.action === "create") {
+          this.createSubtask({
+            id: command.id,
+            ownerId,
+            taskId: command.taskId,
+            title: command.title,
+            position: command.position,
+            completed: false,
+            revision,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else if (command.action === "update") {
+          const { title, completed, position } = command.patch;
+          const updated = this.updateSubtask(
+            ownerId,
+            command.id,
+            command.expectedRevision,
+            {
+              ...(title === undefined ? {} : { title }),
+              ...(completed === undefined ? {} : { completed }),
+              ...(position === undefined ? {} : { position }),
+            },
+            now,
+          );
+          if (updated === undefined)
+            throw new Error("Checklist changed during atomic update");
+          revision = updated.revision;
+        } else {
+          if (
+            !this.deleteSubtask(ownerId, command.id, command.expectedRevision)
+          )
+            throw new Error("Checklist changed during atomic delete");
+          revision = command.expectedRevision + 1;
+        }
+        this.#appendSyncChangeInTransaction(
+          ownerId,
+          "subtask",
+          command.id,
+          command.action === "delete" ? "deleted" : "upsert",
+          revision,
+          now,
+        );
+      }
+      const result = this.listSubtasks(ownerId, command.taskId);
+      this.#database.exec("RELEASE SAVEPOINT checklist_mutation;");
+      return result;
+    } catch (error) {
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT checklist_mutation; RELEASE SAVEPOINT checklist_mutation;",
+      );
+      throw error;
+    }
+  }
+
   createSubtask(record: SubtaskRecord): void {
     this.#database
       .prepare(
@@ -4069,6 +6173,26 @@ export class SuiteDatabase {
         record.createdAt,
         record.updatedAt,
       );
+  }
+  /** Every checklist item of the owner, grouped by task in list order. */
+  listAllSubtasks(ownerId: string): readonly SubtaskRecord[] {
+    return (
+      this.#database
+        .prepare(
+          "SELECT * FROM subtasks WHERE owner_id = ? ORDER BY task_id, position, id",
+        )
+        .all(ownerId) as unknown as readonly Record<string, string | number>[]
+    ).map((row) => ({
+      id: String(row.id),
+      ownerId: String(row.owner_id),
+      taskId: String(row.task_id),
+      title: String(row.title),
+      completed: Number(row.completed) === 1,
+      position: Number(row.position),
+      revision: Number(row.revision),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    }));
   }
   listSubtasks(ownerId: string, taskId: string): readonly SubtaskRecord[] {
     return (
@@ -4134,19 +6258,20 @@ export class SuiteDatabase {
     items: readonly { readonly id: string; readonly revision: number }[],
     now: string,
   ): readonly SubtaskRecord[] | undefined {
-    const current = this.listSubtasks(ownerId, taskId);
-    const currentById = new Map(current.map((item) => [item.id, item]));
-    if (
-      items.length !== current.length ||
-      new Set(items.map(({ id }) => id)).size !== items.length ||
-      items.some(
-        ({ id, revision }) => currentById.get(id)?.revision !== revision,
-      )
-    )
-      return undefined;
-
-    this.#database.exec("BEGIN IMMEDIATE;");
+    this.#database.exec("SAVEPOINT checklist_order;");
     try {
+      const current = this.listSubtasks(ownerId, taskId);
+      const currentById = new Map(current.map((item) => [item.id, item]));
+      if (
+        items.length !== current.length ||
+        new Set(items.map(({ id }) => id)).size !== items.length ||
+        items.some(
+          ({ id, revision }) => currentById.get(id)?.revision !== revision,
+        )
+      ) {
+        this.#database.exec("RELEASE SAVEPOINT checklist_order;");
+        return undefined;
+      }
       const update = this.#database.prepare(
         "UPDATE subtasks SET position=?,revision=revision+1,updated_at=? WHERE owner_id=? AND task_id=? AND id=? AND revision=?",
       );
@@ -4155,7 +6280,9 @@ export class SuiteDatabase {
           update.run(position, now, ownerId, taskId, item.id, item.revision)
             .changes !== 1
         ) {
-          this.#database.exec("ROLLBACK;");
+          this.#database.exec(
+            "ROLLBACK TO SAVEPOINT checklist_order; RELEASE SAVEPOINT checklist_order;",
+          );
           return undefined;
         }
         this.#appendSyncChangeInTransaction(
@@ -4167,10 +6294,12 @@ export class SuiteDatabase {
           now,
         );
       }
-      this.#database.exec("COMMIT;");
+      this.#database.exec("RELEASE SAVEPOINT checklist_order;");
       return this.listSubtasks(ownerId, taskId);
     } catch (error: unknown) {
-      this.#database.exec("ROLLBACK;");
+      this.#database.exec(
+        "ROLLBACK TO SAVEPOINT checklist_order; RELEASE SAVEPOINT checklist_order;",
+      );
       throw error;
     }
   }
@@ -4197,7 +6326,7 @@ export class SuiteDatabase {
       >[];
     },
   ): TaskTemplateRecord {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       if (
         input.suggestedProjectId !== null &&
@@ -4262,13 +6391,13 @@ export class SuiteDatabase {
         input.revision,
         input.createdAt,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
       const created = this.getTaskTemplate(input.ownerId, input.id);
       if (created === undefined)
         throw new Error("Created task template could not be read");
       return created;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -4373,11 +6502,11 @@ export class SuiteDatabase {
     >[];
     readonly now: string;
   }): TaskTemplateRecord | undefined {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       const current = this.getTaskTemplate(input.ownerId, input.id);
       if (current?.revision !== input.expectedRevision) {
-        this.#database.exec("COMMIT;");
+        write.commit();
         return undefined;
       }
       if (
@@ -4388,7 +6517,7 @@ export class SuiteDatabase {
           )
           .get(input.suggestedProjectId, input.ownerId) === undefined
       ) {
-        this.#database.exec("ROLLBACK;");
+        write.rollback();
         return undefined;
       }
       if (
@@ -4401,7 +6530,7 @@ export class SuiteDatabase {
             .get(input.ownerId, ...input.tagIds) as unknown as { count: number }
         ).count !== input.tagIds.length
       ) {
-        this.#database.exec("ROLLBACK;");
+        write.rollback();
         return undefined;
       }
       const revision = current.revision + 1;
@@ -4449,13 +6578,13 @@ export class SuiteDatabase {
         revision,
         input.now,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
       const updated = this.getTaskTemplate(input.ownerId, input.id);
       if (updated === undefined)
         throw new Error("Updated task template could not be read");
       return updated;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -4578,7 +6707,7 @@ export class SuiteDatabase {
     record: TemplateSetRecord,
     members: readonly TemplateSetMemberRecord[],
   ): void {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       if (
         members.length === 0 ||
@@ -4623,9 +6752,9 @@ export class SuiteDatabase {
         record.revision,
         record.createdAt,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -4782,6 +6911,8 @@ export class SuiteDatabase {
     readonly intervals: readonly ActiveSessionIntervalRecord[];
     readonly events: readonly ActiveSessionEventRecord[];
     readonly now: string;
+    /** ADR 0029: extra rows committed with the transition (idle provenance). */
+    readonly inTransaction?: () => void;
   }): {
     readonly kind: "applied" | "replayed" | "conflict" | "stale";
     readonly session?: ActiveSessionRecord;
@@ -4857,6 +6988,7 @@ export class SuiteDatabase {
           event.actorClientId,
           event.createdAt,
         );
+      input.inTransaction?.();
       this.#database
         .prepare(
           "INSERT INTO active_session_operation_outcomes (owner_id,client_id,idempotency_key,request_hash,session_id,revision,response_json,created_at) VALUES (?,?,?,?,?,?,?,?)",
@@ -4979,17 +7111,16 @@ export class SuiteDatabase {
     readonly operationId: string;
     readonly requestHash: string;
     readonly taskId: string;
-    readonly baseVersions: Readonly<
-      Partial<
-        Record<
-          "title" | "notes" | "status" | "estimateMinutes" | "deadline",
-          number
-        >
-      >
-    >;
+    readonly baseVersions: Readonly<Partial<Record<SyncedTaskField, number>>>;
     readonly patch: Partial<
       Pick<TaskRecord, "title" | "notes" | "status" | "estimateMinutes">
-    > & { readonly deadline?: TaskDeadline | null };
+    > & {
+      readonly deadline?: TaskDeadline | null;
+      readonly plannedStart?: string | null;
+      readonly plannedDay?: string | null;
+      readonly projectId?: string | null;
+      readonly tagIds?: readonly string[];
+    };
     readonly now: string;
   }): {
     readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
@@ -5029,22 +7160,7 @@ export class SuiteDatabase {
         this.#database.exec("COMMIT;");
         return { kind: "conflict", fields: ["task"] };
       }
-      const fields = Object.keys(
-        input.patch,
-      ) as (keyof typeof input.baseVersions)[];
-      const rows = this.#database
-        .prepare(
-          "SELECT field, version FROM task_field_versions WHERE task_id = ?",
-        )
-        .all(input.taskId) as unknown as readonly {
-        field: keyof typeof input.baseVersions;
-        version: number;
-      }[];
-      const versions = new Map(rows.map((row) => [row.field, row.version]));
-      const conflicts = fields.filter(
-        (field) => versions.get(field) !== input.baseVersions[field],
-      );
-      if (conflicts.length > 0) {
+      const recordConflict = (fields: readonly string[]) => {
         this.#database
           .prepare(
             "INSERT INTO sync_operation_outcomes (owner_id,client_id,operation_id,request_hash,state,entity_id,revision,conflict_fields,created_at) VALUES (?,?,?,?, 'conflict',?,?,?,?)",
@@ -5056,15 +7172,90 @@ export class SuiteDatabase {
             input.requestHash,
             input.taskId,
             task.revision,
-            JSON.stringify(conflicts),
+            JSON.stringify(fields),
             input.now,
           );
         this.#database.exec("COMMIT;");
-        return { kind: "conflict", task, fields: conflicts };
+        return { kind: "conflict" as const, fields, task };
+      };
+      // Archived history is read-only (ADR 0022): an offline edit queued
+      // before the archive becomes a visible, replay-stable conflict.
+      if (task.archivedAt != null) return recordConflict(["archivedAt"]);
+      const planningChange =
+        input.patch.plannedStart !== undefined ||
+        input.patch.plannedDay !== undefined;
+      const fields = [
+        ...new Set(
+          Object.keys(input.patch).map((field) =>
+            field === "plannedDay" ? "plannedStart" : field,
+          ),
+        ),
+      ] as SyncedTaskField[];
+      const rows = this.#database
+        .prepare(
+          "SELECT field, version FROM task_field_versions WHERE task_id = ?",
+        )
+        .all(input.taskId) as unknown as readonly {
+        field: SyncedTaskField;
+        version: number;
+      }[];
+      const versions = new Map(rows.map((row) => [row.field, row.version]));
+      const conflicts = fields.filter(
+        (field) =>
+          (versions.get(field) ?? task.revision) !== input.baseVersions[field],
+      );
+      if (conflicts.length > 0) return recordConflict(conflicts);
+      // ADR 0033: a calendar block owns the planned start (ADR 0009). The
+      // owner changes it through the planner; nothing is queued for Baikal.
+      if (
+        planningChange &&
+        this.getTaskCalendarBlock(input.ownerId, input.taskId) !== undefined
+      )
+        return recordConflict(["calendarBlock"]);
+      if (
+        input.patch.projectId != null &&
+        this.#database
+          .prepare(
+            "SELECT 1 FROM projects WHERE id=? AND owner_id=? AND archived_at IS NULL",
+          )
+          .get(input.patch.projectId, input.ownerId) === undefined
+      )
+        return recordConflict(["project"]);
+      if (input.patch.tagIds !== undefined) {
+        const tagIds = input.patch.tagIds;
+        const valid =
+          tagIds.length <= 25 &&
+          new Set(tagIds).size === tagIds.length &&
+          tagIds.every(
+            (tagId) =>
+              this.#database
+                .prepare(
+                  "SELECT 1 FROM tags WHERE id=? AND owner_id=? AND archived_at IS NULL",
+                )
+                .get(tagId, input.ownerId) !== undefined,
+          );
+        if (!valid) return recordConflict(["tag"]);
       }
       const next = {
         ...task,
-        ...input.patch,
+        ...(input.patch.title === undefined
+          ? {}
+          : { title: input.patch.title }),
+        ...(input.patch.notes === undefined
+          ? {}
+          : { notes: input.patch.notes }),
+        ...(input.patch.status === undefined
+          ? {}
+          : { status: input.patch.status }),
+        ...(input.patch.estimateMinutes === undefined
+          ? {}
+          : { estimateMinutes: input.patch.estimateMinutes }),
+        ...(input.patch.projectId === undefined
+          ? {}
+          : { projectId: input.patch.projectId }),
+        ...(input.patch.tagIds === undefined
+          ? {}
+          : { tagIds: input.patch.tagIds }),
         ...(input.patch.deadline === undefined
           ? {}
           : deadlineColumns(input.patch.deadline)),
@@ -5074,12 +7265,35 @@ export class SuiteDatabase {
               completedAt:
                 input.patch.status === "completed" ? input.now : null,
             }),
+        // The planning slot is exclusive (ADR 0020): setting one side clears
+        // the other, exactly as the conditional task API does.
+        ...(input.patch.plannedStart === undefined
+          ? input.patch.plannedDay === undefined
+            ? {}
+            : {
+                plannedDay: input.patch.plannedDay,
+                ...(input.patch.plannedDay === null
+                  ? {}
+                  : { plannedStart: null }),
+              }
+          : {
+              plannedStart: input.patch.plannedStart,
+              plannedDay:
+                input.patch.plannedStart === null
+                  ? (input.patch.plannedDay ?? task.plannedDay ?? null)
+                  : null,
+            }),
         revision: task.revision + 1,
         updatedAt: input.now,
       };
+      if (planningChange)
+        writeTaskPlanning(this.#database, input.ownerId, input.taskId, {
+          ...readTaskPlanning(this.#database, input.ownerId, input.taskId),
+          plannedDay: null,
+        });
       this.#database
         .prepare(
-          "UPDATE tasks SET title=?,notes=?,status=?,completed_at=?,estimate_minutes=?,deadline_date=?,deadline_at=?,revision=?,updated_at=? WHERE owner_id=? AND id=?",
+          "UPDATE tasks SET title=?,notes=?,status=?,completed_at=?,estimate_minutes=?,deadline_date=?,deadline_at=?,planned_start=?,project_id=?,revision=?,updated_at=? WHERE owner_id=? AND id=?",
         )
         .run(
           next.title,
@@ -5089,10 +7303,36 @@ export class SuiteDatabase {
           next.estimateMinutes,
           next.deadlineDate ?? null,
           next.deadlineAt ?? null,
+          next.plannedStart,
+          next.projectId ?? null,
           next.revision,
           next.updatedAt,
           input.ownerId,
           input.taskId,
+        );
+      if (planningChange)
+        writeTaskPlanning(this.#database, input.ownerId, input.taskId, {
+          ...readTaskPlanning(this.#database, input.ownerId, input.taskId),
+          plannedDay: next.plannedDay ?? null,
+        });
+      if (input.patch.tagIds !== undefined) {
+        this.#database
+          .prepare("DELETE FROM task_tags WHERE task_id = ?")
+          .run(input.taskId);
+        const insert = this.#database.prepare(
+          "INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)",
+        );
+        for (const tagId of input.patch.tagIds) insert.run(input.taskId, tagId);
+      }
+      if (
+        input.patch.projectId !== undefined &&
+        input.patch.projectId !== (task.projectId ?? null)
+      )
+        this.#leaveProjectBacklog(
+          input.ownerId,
+          input.taskId,
+          input.patch.projectId,
+          input.now,
         );
       const update = this.#database.prepare(
         "INSERT INTO task_field_versions (task_id,field,version) VALUES (?,?,?) ON CONFLICT(task_id,field) DO UPDATE SET version=excluded.version",
@@ -5112,41 +7352,607 @@ export class SuiteDatabase {
           next.revision,
           input.now,
         );
-      let sync = this.#database
-        .prepare(
-          "SELECT epoch,next_sequence FROM sync_owner_state WHERE owner_id=?",
+      this.#appendSyncChangeInTransaction(
+        input.ownerId,
+        "task",
+        input.taskId,
+        "upsert",
+        next.revision,
+        input.now,
+      );
+      this.#database.exec("COMMIT;");
+      const stored = this.getTask(input.ownerId, input.taskId, true);
+      return { kind: "applied", task: stored ?? next };
+    } catch (error) {
+      this.#database.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  /** Leaving a project also leaves that project's backlog (ADR 0019). */
+  #leaveProjectBacklog(
+    ownerId: string,
+    taskId: string,
+    projectId: string | null,
+    now: string,
+  ): void {
+    const backlog = this.#database
+      .prepare(
+        "SELECT project_id FROM project_backlog_tasks WHERE owner_id=? AND task_id=?",
+      )
+      .get(ownerId, taskId) as { project_id: string } | undefined;
+    if (backlog === undefined || backlog.project_id === projectId) return;
+    this.#database
+      .prepare(
+        "DELETE FROM project_backlog_tasks WHERE owner_id=? AND task_id=?",
+      )
+      .run(ownerId, taskId);
+    this.#database
+      .prepare(
+        "UPDATE projects SET revision=revision+1, updated_at=? WHERE owner_id=? AND id=?",
+      )
+      .run(now, ownerId, backlog.project_id);
+    const previous = this.#project(ownerId, backlog.project_id);
+    if (previous !== undefined)
+      this.#appendSyncChangeInTransaction(
+        ownerId,
+        "project",
+        previous.id,
+        "upsert",
+        previous.revision,
+        now,
+      );
+  }
+
+  /**
+   * ADR 0033: project and tag create/patch from the outbox. Records keep one
+   * revision, so every failure is a replay-stable resource conflict.
+   */
+  applyOrganizationSync(input: {
+    readonly ownerId: string;
+    readonly clientId: string;
+    readonly operationId: string;
+    readonly requestHash: string;
+    readonly kind: "project" | "tag";
+    readonly id: string;
+    /** Null creates the record; otherwise the expected current revision. */
+    readonly baseRevision: number | null;
+    readonly fields: OrganizationFields;
+    readonly now: string;
+  }): {
+    readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
+    readonly record?: ProjectRecord | TagRecord;
+    readonly fields?: readonly string[];
+  } {
+    return this.#applySyncOperation(input, () => {
+      const current =
+        input.kind === "project"
+          ? this.#project(input.ownerId, input.id)
+          : this.#tag(input.ownerId, input.id);
+      const failure = (fields: readonly string[]) => ({
+        kind: "conflict" as const,
+        fields,
+        revision: current?.revision ?? null,
+        record: current,
+      });
+      if (input.baseRevision === null) {
+        if (current !== undefined) return failure(["record"]);
+      } else if (current?.revision !== input.baseRevision)
+        return failure(["revision"]);
+      let record: ProjectRecord | TagRecord | undefined;
+      try {
+        record = this.mutateOrganization(
+          input.kind,
+          input.ownerId,
+          input.id,
+          input.baseRevision,
+          input.fields,
+          input.now,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("UNIQUE constraint failed")
         )
-        .get(input.ownerId) as unknown as
-        { epoch: string; next_sequence: number } | undefined;
-      if (sync === undefined) {
-        sync = { epoch: randomUUID(), next_sequence: 1 };
-        this.#database
-          .prepare(
-            "INSERT INTO sync_owner_state (owner_id,epoch,next_sequence,updated_at) VALUES (?,?,?,?)",
-          )
-          .run(input.ownerId, sync.epoch, 1, input.now);
+          return failure(["name"]);
+        throw error;
       }
+      if (record === undefined) return failure(["fields"]);
+      return { kind: "applied", record, revision: record.revision };
+    });
+  }
+
+  /** ADR 0033: checklist create, patch and delete from the outbox. */
+  applyChecklistSync(input: {
+    readonly ownerId: string;
+    readonly clientId: string;
+    readonly operationId: string;
+    readonly requestHash: string;
+    readonly command:
+      | {
+          readonly action: "create";
+          readonly id: string;
+          readonly taskId: string;
+          readonly title: string;
+          readonly position: number;
+        }
+      | {
+          readonly action: "update";
+          readonly id: string;
+          readonly baseRevision: number;
+          readonly patch: Partial<
+            Pick<SubtaskRecord, "title" | "completed" | "position">
+          >;
+        }
+      | {
+          readonly action: "delete";
+          readonly id: string;
+          readonly baseRevision: number;
+        };
+    readonly now: string;
+  }): {
+    readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
+    readonly record?: SubtaskRecord;
+    readonly fields?: readonly string[];
+  } {
+    const { command } = input;
+    return this.#applySyncOperation(
+      { ...input, id: command.id, kind: "subtask" },
+      () => {
+        const current = this.getSubtask(input.ownerId, command.id);
+        const failure = (fields: readonly string[]) => ({
+          kind: "conflict" as const,
+          fields,
+          revision: current?.revision ?? null,
+          record: current,
+        });
+        if (command.action === "create") {
+          if (current !== undefined) return failure(["record"]);
+          if (this.getTask(input.ownerId, command.taskId) === undefined)
+            return failure(["task"]);
+        } else if (current === undefined) {
+          // A deleted item cannot be told from a never-created one; both
+          // are resource conflicts that change nothing.
+          return failure(["record"]);
+        } else if (current.revision !== command.baseRevision)
+          return failure(["revision"]);
+        const taskId =
+          command.action === "create" ? command.taskId : current?.taskId;
+        if (taskId === undefined) return failure(["task"]);
+        const items = this.mutateChecklist(
+          input.ownerId,
+          command.action === "create"
+            ? {
+                action: "create",
+                taskId,
+                id: command.id,
+                title: command.title,
+                position: command.position,
+              }
+            : command.action === "update"
+              ? {
+                  action: "update",
+                  taskId,
+                  id: command.id,
+                  expectedRevision: command.baseRevision,
+                  patch: command.patch,
+                }
+              : {
+                  action: "delete",
+                  taskId,
+                  id: command.id,
+                  expectedRevision: command.baseRevision,
+                },
+          input.now,
+        );
+        if (items === undefined) return failure(["fields"]);
+        const record = items.find((item) => item.id === command.id);
+        return {
+          kind: "applied",
+          record,
+          revision:
+            record?.revision ??
+            (command.action === "delete" ? command.baseRevision + 1 : 1),
+        };
+      },
+    );
+  }
+
+  /**
+   * ADR 0046: note create, patch and delete from the outbox. A note keeps
+   * one record revision: a patch or delete whose base revision is not the
+   * current one is a resource conflict that changes nothing, and the
+   * canonical note is re-sent so the client can show both versions. A note
+   * that no longer exists cannot be told from one that never did; both are
+   * resource conflicts.
+   */
+  applyNoteSync(input: {
+    readonly ownerId: string;
+    readonly clientId: string;
+    readonly operationId: string;
+    readonly requestHash: string;
+    readonly command:
+      | ({ readonly action: "create" } & NoteCreateInput)
+      | {
+          readonly action: "update";
+          readonly id: string;
+          readonly baseRevision: number;
+          readonly patch: NotePatch;
+        }
+      | {
+          readonly action: "delete";
+          readonly id: string;
+          readonly baseRevision: number;
+        };
+    readonly now: string;
+  }): {
+    readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
+    readonly record?: NoteRecord;
+    readonly fields?: readonly string[];
+    readonly revision?: number;
+  } {
+    const { command } = input;
+    return this.#applySyncOperation<NoteRecord>(
+      { ...input, id: command.id, kind: "note" },
+      () => {
+        const current = this.notes.get(input.ownerId, command.id);
+        const failure = (fields: readonly string[]) => ({
+          kind: "conflict" as const,
+          fields,
+          revision: current?.revision ?? null,
+          record: current,
+        });
+        if (command.action === "create") {
+          // The ID may also belong to another owner; either way it is taken.
+          if (current !== undefined) return failure(["record"]);
+        } else if (current === undefined) return failure(["record"]);
+        else if (current.revision !== command.baseRevision)
+          return failure(["revision"]);
+        const association =
+          command.action === "create"
+            ? command
+            : command.action === "update"
+              ? command.patch
+              : {};
+        // An archived project or tag stays a valid target (ADR 0019); one
+        // that does not exist for this owner names the missing reference.
+        if (
+          association.projectId != null &&
+          !this.notes.associationExists(
+            input.ownerId,
+            association.projectId,
+            null,
+          )
+        )
+          return failure(["project"]);
+        if (
+          association.tagId != null &&
+          !this.notes.associationExists(input.ownerId, null, association.tagId)
+        )
+          return failure(["tag"]);
+        const result =
+          command.action === "create"
+            ? this.notes.create(
+                input.ownerId,
+                {
+                  id: command.id,
+                  content: command.content,
+                  projectId: command.projectId,
+                  tagId: command.tagId,
+                  pinnedToToday: command.pinnedToToday,
+                },
+                input.now,
+              )
+            : command.action === "update"
+              ? this.notes.update(
+                  input.ownerId,
+                  command.id,
+                  command.baseRevision,
+                  command.patch,
+                  input.now,
+                )
+              : this.notes.delete(
+                  input.ownerId,
+                  command.id,
+                  command.baseRevision,
+                  input.now,
+                );
+        if (result.kind === "conflict") return failure(["record"]);
+        if (result.kind === "invalid") return failure(["fields"]);
+        const record = result.notes[0];
+        return {
+          kind: "applied",
+          record,
+          revision:
+            record?.revision ??
+            (command.action === "delete" ? command.baseRevision + 1 : 1),
+        };
+      },
+    );
+  }
+
+  /**
+   * ADR 0050: a day-order reorder from the outbox. The saved order of a date
+   * keeps one record revision (0 before the first write): a reorder of any
+   * other revision is a resource conflict that changes nothing, and the
+   * saved order is re-sent. Membership never conflicts; see
+   * `SqliteDayOrderStore.reorderFromSync`.
+   */
+  applyDayOrderSync(input: {
+    readonly ownerId: string;
+    readonly clientId: string;
+    readonly operationId: string;
+    readonly requestHash: string;
+    readonly date: string;
+    readonly baseRevision: number;
+    readonly taskIds: readonly string[];
+    readonly now: string;
+  }): {
+    readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
+    readonly record?: SavedDayOrderRecord;
+    readonly fields?: readonly string[];
+    readonly revision?: number;
+  } {
+    return this.#applySyncOperation<SavedDayOrderRecord>(
+      { ...input, id: input.date, kind: "day_order" },
+      () => {
+        const result = this.dayOrders.reorderFromSync(input);
+        return result.kind === "applied"
+          ? {
+              kind: "applied",
+              record: result.saved,
+              revision: result.saved.revision,
+            }
+          : {
+              kind: "conflict",
+              fields: ["revision"],
+              revision: result.saved?.revision ?? null,
+              record: result.saved,
+            };
+      },
+    );
+  }
+
+  /**
+   * ADR 0050: the stored time entries a sync snapshot carries: those dated
+   * inside the rolling window that ends on the owner's current calendar
+   * date, and any dated later. Older history is read through the report.
+   */
+  listSyncTimeEntries(
+    ownerId: string,
+    now: string,
+  ): readonly TimeEntryRecord[] {
+    return this.timeEntries.listSince(
+      ownerId,
+      syncTimeEntryWindowStart(
+        zonedCalendarDate(now, this.getPlanningPreferences(ownerId).timeZone),
+      ),
+    );
+  }
+
+  /**
+   * ADR 0050: time entry create, patch and delete from the outbox. An entry
+   * keeps one record revision: a patch or delete of another revision is a
+   * resource conflict that changes nothing, and the entry is re-sent. The
+   * rules of ADR 0024 (active task, day total within 0 to 24 hours, no
+   * lowering under a running focus interval) are checked here, because the
+   * client holds no focus time; a broken rule is a conflict named after it.
+   */
+  applyTimeEntrySync(input: {
+    readonly ownerId: string;
+    readonly clientId: string;
+    readonly operationId: string;
+    readonly requestHash: string;
+    readonly command:
+      | {
+          readonly action: "create";
+          readonly id: string;
+          readonly taskId: string;
+          readonly workDate: string;
+          readonly durationMs: number;
+          readonly note: string;
+        }
+      | {
+          readonly action: "update";
+          readonly id: string;
+          readonly baseRevision: number;
+          readonly patch: {
+            readonly workDate?: string | undefined;
+            readonly durationMs?: number | undefined;
+            readonly note?: string | undefined;
+          };
+        }
+      | {
+          readonly action: "delete";
+          readonly id: string;
+          readonly baseRevision: number;
+        };
+    readonly now: string;
+  }): {
+    readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
+    readonly record?: TimeEntryRecord;
+    readonly fields?: readonly string[];
+    readonly revision?: number;
+  } {
+    const { command, ownerId, now } = input;
+    return this.#applySyncOperation<TimeEntryRecord>(
+      { ...input, id: command.id, kind: "time_entry" },
+      () => {
+        const timeZone = this.getPlanningPreferences(ownerId).timeZone;
+        const result =
+          command.action === "create"
+            ? this.timeEntries.create({
+                ownerId,
+                id: command.id,
+                taskId: command.taskId,
+                workDate: command.workDate,
+                durationMs: command.durationMs,
+                note: command.note,
+                timeZone,
+                now,
+              })
+            : command.action === "update"
+              ? this.timeEntries.update({
+                  ownerId,
+                  id: command.id,
+                  expectedRevision: command.baseRevision,
+                  patch: command.patch,
+                  timeZone,
+                  now,
+                })
+              : this.timeEntries.delete({
+                  ownerId,
+                  id: command.id,
+                  expectedRevision: command.baseRevision,
+                  timeZone,
+                  now,
+                });
+        if (result.kind === "applied")
+          return {
+            kind: "applied",
+            record: result.entry ?? undefined,
+            revision:
+              result.entry?.revision ??
+              (command.action === "create" ? 1 : command.baseRevision + 1),
+          };
+        const current = this.timeEntries.get(ownerId, command.id);
+        return {
+          kind: "conflict",
+          fields: [
+            result.kind === "invalid"
+              ? result.code
+              : result.kind === "precondition-failed"
+                ? "revision"
+                : // The ID is taken (`exists`, or `replayed` for an entry an
+                  // HTTP write already made) or names no entry.
+                  "record",
+          ],
+          revision: current?.revision ?? null,
+          record: current,
+        };
+      },
+    );
+  }
+
+  /**
+   * Shared idempotent envelope for non-task outbox operations: a stored
+   * outcome replays (or reports an idempotency conflict), otherwise the
+   * body runs inside one transaction and its outcome is recorded.
+   */
+  #applySyncOperation<Entity>(
+    input: {
+      readonly ownerId: string;
+      readonly clientId: string;
+      readonly operationId: string;
+      readonly requestHash: string;
+      readonly kind:
+        "project" | "tag" | "subtask" | "note" | "day_order" | "time_entry";
+      readonly id: string;
+      readonly now: string;
+    },
+    body: () =>
+      | {
+          readonly kind: "applied";
+          readonly record: Entity | undefined;
+          readonly revision: number;
+        }
+      | {
+          readonly kind: "conflict";
+          readonly fields: readonly string[];
+          readonly revision: number | null;
+          readonly record: Entity | undefined;
+        },
+  ): {
+    readonly kind: "applied" | "replayed" | "conflict" | "idempotency-conflict";
+    readonly record?: Entity;
+    readonly fields?: readonly string[];
+    /**
+     * The revision recorded with the outcome. A deletion has no record left
+     * to read it from, so the sync route reports this one.
+     */
+    readonly revision?: number;
+  } {
+    const load = (): Entity | undefined =>
+      (input.kind === "project"
+        ? this.#project(input.ownerId, input.id)
+        : input.kind === "tag"
+          ? this.#tag(input.ownerId, input.id)
+          : input.kind === "note"
+            ? this.notes.get(input.ownerId, input.id)
+            : input.kind === "day_order"
+              ? this.dayOrders.getSaved(input.ownerId, input.id)
+              : input.kind === "time_entry"
+                ? this.timeEntries.get(input.ownerId, input.id)
+                : this.getSubtask(input.ownerId, input.id)) as
+        Entity | undefined;
+    this.#database.exec("BEGIN IMMEDIATE;");
+    try {
+      const previous = this.#database
+        .prepare(
+          "SELECT request_hash,state,conflict_fields,revision FROM sync_operation_outcomes WHERE owner_id=? AND client_id=? AND operation_id=?",
+        )
+        .get(input.ownerId, input.clientId, input.operationId) as
+        | {
+            request_hash: string;
+            state: string;
+            conflict_fields: string | null;
+            revision: number | null;
+          }
+        | undefined;
+      if (previous !== undefined) {
+        this.#database.exec("COMMIT;");
+        if (previous.request_hash !== input.requestHash)
+          return { kind: "idempotency-conflict" };
+        const record = load();
+        return {
+          kind: previous.state === "conflict" ? "conflict" : "replayed",
+          ...(record === undefined ? {} : { record }),
+          ...(previous.revision === null
+            ? {}
+            : { revision: previous.revision }),
+          ...(previous.state === "conflict"
+            ? {
+                fields: JSON.parse(
+                  previous.conflict_fields ?? "[]",
+                ) as string[],
+              }
+            : {}),
+        };
+      }
+      const result = body();
       this.#database
         .prepare(
-          "INSERT INTO sync_changes (owner_id,epoch,sequence,entity_type,entity_id,kind,revision,created_at) VALUES (?,?,?,?,?,?,?,?)",
+          "INSERT INTO sync_operation_outcomes (owner_id,client_id,operation_id,request_hash,state,entity_id,revision,conflict_fields,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         )
         .run(
           input.ownerId,
-          sync.epoch,
-          sync.next_sequence,
-          "task",
-          input.taskId,
-          "task.patch",
-          next.revision,
+          input.clientId,
+          input.operationId,
+          input.requestHash,
+          result.kind,
+          input.id,
+          result.revision,
+          result.kind === "conflict" ? JSON.stringify(result.fields) : null,
           input.now,
         );
-      this.#database
-        .prepare(
-          "UPDATE sync_owner_state SET next_sequence=?,updated_at=? WHERE owner_id=?",
-        )
-        .run(sync.next_sequence + 1, input.now, input.ownerId);
+      // The client applied the change optimistically; re-send the canonical
+      // record so a rejected write does not linger in its cache.
+      if (result.kind === "conflict" && result.record !== undefined)
+        this.#appendSyncChangeInTransaction(
+          input.ownerId,
+          input.kind,
+          input.id,
+          "upsert",
+          result.revision ?? 1,
+          input.now,
+        );
       this.#database.exec("COMMIT;");
-      return { kind: "applied", task: next };
+      return {
+        kind: result.kind,
+        ...(result.record === undefined ? {} : { record: result.record }),
+        ...(result.revision === null ? {} : { revision: result.revision }),
+        ...(result.kind === "conflict" ? { fields: result.fields } : {}),
+      };
     } catch (error) {
       this.#database.exec("ROLLBACK;");
       throw error;
@@ -5167,7 +7973,7 @@ export class SuiteDatabase {
     readonly task?: TaskRecord;
     readonly fields?: readonly string[];
   } {
-    return this.applyTaskFieldSync({
+    const result = this.applyTaskFieldSync({
       ownerId: input.ownerId,
       clientId: input.clientId,
       operationId: input.operationId,
@@ -5177,6 +7983,9 @@ export class SuiteDatabase {
       patch: { status: input.completed ? "completed" : "open" },
       now: input.now,
     });
+    if (result.kind === "applied" && input.completed)
+      this.#autoCompleteParent(input.ownerId, input.taskId, input.now);
+    return result;
   }
 
   applyTaskCreateSync(input: {
@@ -5267,15 +8076,7 @@ export class SuiteDatabase {
       const field = this.#database.prepare(
         "INSERT INTO task_field_versions (task_id,field,version) VALUES (?,?,?)",
       );
-      for (const name of [
-        "title",
-        "notes",
-        "status",
-        "estimateMinutes",
-        "projectId",
-        "tagIds",
-        "deadline",
-      ])
+      for (const name of syncedTaskFields)
         field.run(task.id, name, task.revision);
       this.#database
         .prepare(
@@ -5343,9 +8144,13 @@ export class SuiteDatabase {
         : this.getActiveSession(input.ownerId);
       if (
         task?.revision !== input.baseRevision ||
+        task.archivedAt != null ||
         (input.restore ? task.deletedAt === null : task.deletedAt !== null) ||
         (activeSession?.endedAt === null &&
-          activeSession.taskId === input.taskId)
+          activeSession.taskId === input.taskId) ||
+        (!input.restore &&
+          this.taskHierarchy.blockedChildIds(input.ownerId, input.taskId)
+            .length > 0)
       ) {
         this.#database
           .prepare(
@@ -5377,6 +8182,12 @@ export class SuiteDatabase {
           input.taskId,
           task.revision,
         );
+      this.#applyHierarchyLifecycle(
+        input.ownerId,
+        task,
+        input.restore ? null : input.now,
+        input.now,
+      );
       const next = this.getTask(input.ownerId, input.taskId, true);
       if (next === undefined) throw new Error("Deleted task disappeared");
       this.#database
@@ -5421,6 +8232,7 @@ export class SuiteDatabase {
       const current = this.getTask(ownerId, taskId, true);
       if (
         current === undefined ||
+        current.archivedAt != null ||
         (requireDeleted
           ? current.deletedAt === null
           : current.deletedAt !== null)
@@ -5432,11 +8244,25 @@ export class SuiteDatabase {
         this.#database.exec("RELEASE SAVEPOINT conditional_task;");
         return { kind: "precondition-failed", task: current };
       }
+      const updated = update(current);
       const next = {
-        ...update(current),
+        ...updated,
+        // Deadline reminders need a timed deadline; clearing or changing the
+        // deadline to a date removes the reminder, as in the source app.
+        deadlineReminderMinutes:
+          (updated.deadlineAt ?? null) === null
+            ? null
+            : (updated.deadlineReminderMinutes ?? null),
         revision: current.revision + 1,
         updatedAt: now,
       };
+      // Release exclusive planning columns so the consistency triggers see
+      // only the final state after both updates below.
+      writeTaskPlanning(this.#database, ownerId, taskId, {
+        ...readTaskPlanning(this.#database, ownerId, taskId),
+        plannedDay: null,
+        deadlineReminderMinutes: null,
+      });
       const changed = this.#database
         .prepare(
           `UPDATE tasks SET title = ?, notes = ?, status = ?, revision = ?,
@@ -5461,6 +8287,11 @@ export class SuiteDatabase {
           expectedRevision,
         ).changes;
       if (changed !== 1) throw new Error("Conditional task update was lost");
+      writeTaskPlanning(this.#database, ownerId, taskId, {
+        plannedDay: next.plannedDay ?? null,
+        startReminder: next.startReminder ?? { kind: "default" },
+        deadlineReminderMinutes: next.deadlineReminderMinutes,
+      });
       const fieldVersions = this.#database.prepare(
         "INSERT INTO task_field_versions (task_id,field,version) VALUES (?,?,?) ON CONFLICT(task_id,field) DO UPDATE SET version=excluded.version",
       );
@@ -5478,6 +8309,13 @@ export class SuiteDatabase {
         current.deadlineAt !== next.deadlineAt
       )
         fieldVersions.run(taskId, "deadline", next.revision);
+      // ADR 0033: the planning slot has one version for start and day.
+      if (
+        current.plannedStart !== next.plannedStart ||
+        (current.plannedDay ?? null) !== (next.plannedDay ?? null)
+      )
+        fieldVersions.run(taskId, "plannedStart", next.revision);
+      this.#applyHierarchyLifecycle(ownerId, current, next.deletedAt, now);
       this.#appendSyncChangeInTransaction(
         ownerId,
         "task",
@@ -5487,13 +8325,34 @@ export class SuiteDatabase {
         now,
       );
       this.#database.exec("RELEASE SAVEPOINT conditional_task;");
-      return { kind: "updated", task: next };
+      return {
+        kind: "updated",
+        task: this.getTask(ownerId, taskId, true) ?? next,
+      };
     } catch (error: unknown) {
       this.#database.exec(
         "ROLLBACK TO SAVEPOINT conditional_task; RELEASE SAVEPOINT conditional_task;",
       );
       throw error;
     }
+  }
+
+  /** Soft-delete cascades to children; restore brings back co-deleted children. */
+  #applyHierarchyLifecycle(
+    ownerId: string,
+    before: TaskRecord,
+    deletedAt: string | null,
+    now: string,
+  ): void {
+    if (before.deletedAt === null && deletedAt !== null)
+      this.taskHierarchy.cascadeDelete(ownerId, before.id, deletedAt, now);
+    else if (before.deletedAt !== null && deletedAt === null)
+      this.taskHierarchy.afterRestore(
+        ownerId,
+        before.id,
+        before.deletedAt,
+        now,
+      );
   }
 
   #findTask(ownerId: string, taskId: string): TaskRecord | undefined {
@@ -5560,9 +8419,17 @@ export class SuiteDatabase {
 
   #withTaskTags(task: TaskRecord): TaskRecord {
     const project = this.#database
-      .prepare("SELECT project_id FROM tasks WHERE owner_id = ? AND id = ?")
+      .prepare(
+        "SELECT project_id, parent_id, child_position, archived_at FROM tasks WHERE owner_id = ? AND id = ?",
+      )
       .get(task.ownerId, task.id) as unknown as
-      { project_id: string | null } | undefined;
+      | {
+          project_id: string | null;
+          parent_id: string | null;
+          child_position: number | null;
+          archived_at: string | null;
+        }
+      | undefined;
     const tags = this.#database
       .prepare("SELECT tag_id FROM task_tags WHERE task_id = ? ORDER BY tag_id")
       .all(task.id) as unknown as readonly { tag_id: string }[];
@@ -5570,6 +8437,11 @@ export class SuiteDatabase {
       ...task,
       projectId: project?.project_id ?? null,
       tagIds: tags.map((tag) => tag.tag_id),
+      ...readTaskPlanning(this.#database, task.ownerId, task.id),
+      parentId: project?.parent_id ?? null,
+      childPosition: project?.child_position ?? null,
+      archivedAt: project?.archived_at ?? null,
+      recurrence: this.recurrence.linkOf(task.ownerId, task.id),
     };
   }
 
@@ -5578,7 +8450,34 @@ export class SuiteDatabase {
       .prepare("SELECT * FROM projects WHERE owner_id = ? AND id = ?")
       .get(ownerId, id) as unknown as
       Record<string, string | number | null> | undefined;
-    return row === undefined ? undefined : this.#projectFromRow(row);
+    return row === undefined
+      ? undefined
+      : this.#projectFromRow(row, this.#backlogTaskIds(ownerId, id));
+  }
+  /** Backlog task IDs by project, excluding deleted or reassigned tasks. */
+  #backlogTaskIds(
+    ownerId: string,
+    projectId?: string,
+  ): ReadonlyMap<string, readonly string[]> {
+    const rows = this.#database
+      .prepare(
+        `SELECT b.project_id, b.task_id FROM project_backlog_tasks b
+         JOIN tasks t ON t.id = b.task_id AND t.owner_id = b.owner_id
+         WHERE b.owner_id = ? AND t.deleted_at IS NULL AND t.archived_at IS NULL
+           AND t.project_id = b.project_id
+           ${projectId === undefined ? "" : "AND b.project_id = ?"}
+         ORDER BY b.project_id, b.position, b.task_id`,
+      )
+      .all(
+        ...(projectId === undefined ? [ownerId] : [ownerId, projectId]),
+      ) as unknown as readonly { project_id: string; task_id: string }[];
+    const grouped = new Map<string, string[]>();
+    for (const row of rows)
+      grouped.set(row.project_id, [
+        ...(grouped.get(row.project_id) ?? []),
+        row.task_id,
+      ]);
+    return grouped;
   }
   #templateFromRow(
     row: Record<string, string | number | null>,
@@ -5746,16 +8645,7 @@ export class SuiteDatabase {
           template.estimateMinutes,
           input.destinationProjectId,
         );
-        for (const field of [
-          "title",
-          "notes",
-          "status",
-          "estimateMinutes",
-          "projectId",
-          "tagIds",
-          "deadline",
-        ])
-          insertField.run(taskId, field);
+        for (const field of syncedTaskFields) insertField.run(taskId, field);
         for (const tagId of template.tagIds) insertTag.run(taskId, tagId);
         for (const blueprint of this.listTemplateSubtaskBlueprints(
           template.id,
@@ -5872,7 +8762,7 @@ export class SuiteDatabase {
     pool: ChoicePoolRecord,
     items: readonly ChoicePoolItemRecord[],
   ): ChoicePoolRecord {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       if (
         items.length < pool.pickCount ||
@@ -5920,10 +8810,10 @@ export class SuiteDatabase {
         pool.revision,
         pool.createdAt,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
       return pool;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -5938,14 +8828,14 @@ export class SuiteDatabase {
     readonly items: readonly { readonly id?: string; readonly title: string }[];
     readonly now: string;
   }): ChoicePoolRecord | undefined {
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       const current = this.getChoicePool(input.ownerId, input.id);
       if (
         current?.revision !== input.expectedRevision ||
         input.items.length < input.pickCount
       ) {
-        this.#database.exec("COMMIT;");
+        write.commit();
         return undefined;
       }
       const existing = this.listChoicePoolItems(input.id, true);
@@ -6021,10 +8911,10 @@ export class SuiteDatabase {
         input.expectedRevision + 1,
         input.now,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
       return this.getChoicePool(input.ownerId, input.id, true);
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -6140,7 +9030,7 @@ export class SuiteDatabase {
       this.listChoicePoolItems(record.poolId, false).length < record.pickCount
     )
       return undefined;
-    this.#database.exec("BEGIN IMMEDIATE;");
+    const write = this.#beginWrite();
     try {
       this.#database
         .prepare(
@@ -6167,10 +9057,10 @@ export class SuiteDatabase {
         record.revision,
         record.createdAt,
       );
-      this.#database.exec("COMMIT;");
+      write.commit();
       return record;
     } catch (error) {
-      this.#database.exec("ROLLBACK;");
+      write.rollback();
       throw error;
     }
   }
@@ -6505,15 +9395,39 @@ export class SuiteDatabase {
       createdAt: String(row.created_at),
     };
   }
-  #projectFromRow(row: Record<string, string | number | null>): ProjectRecord {
+  #organizationFromRow(
+    row: Record<string, string | number | null>,
+    title: string,
+  ): Omit<TagRecord, "normalizedName"> {
     return {
       id: String(row.id),
       ownerId: String(row.owner_id),
-      title: String(row.title),
+      title,
       revision: Number(row.revision),
       createdAt: String(row.created_at),
       updatedAt: String(row.updated_at),
       archivedAt: row.archived_at === null ? null : String(row.archived_at),
+      color: row.color == null ? null : String(row.color),
+      icon: row.icon == null ? null : String(row.icon),
+      position: Number(row.position ?? 0),
+    };
+  }
+  #projectFromRow(
+    row: Record<string, string | number | null>,
+    backlog: ReadonlyMap<string, readonly string[]>,
+  ): ProjectRecord {
+    return {
+      ...this.#organizationFromRow(row, String(row.title)),
+      hiddenFromMenu: Number(row.hidden_from_menu) === 1,
+      completedAt: row.completed_at == null ? null : String(row.completed_at),
+      backlogEnabled: Number(row.backlog_enabled) === 1,
+      backlogTaskIds: backlog.get(String(row.id)) ?? [],
+    };
+  }
+  #tagFromRow(row: Record<string, string | number | null>): TagRecord {
+    return {
+      ...this.#organizationFromRow(row, String(row.display_name)),
+      normalizedName: String(row.normalized_name),
     };
   }
   #tag(ownerId: string, id: string): TagRecord | undefined {
@@ -6521,12 +9435,7 @@ export class SuiteDatabase {
       .prepare("SELECT * FROM tags WHERE owner_id=? AND id=?")
       .get(ownerId, id) as unknown as
       Record<string, string | number | null> | undefined;
-    return row === undefined
-      ? undefined
-      : {
-          ...this.#projectFromRow({ ...row, title: String(row.display_name) }),
-          normalizedName: String(row.normalized_name),
-        };
+    return row === undefined ? undefined : this.#tagFromRow(row);
   }
 
   #migrate(): void {

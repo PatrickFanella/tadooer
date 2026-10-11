@@ -2,24 +2,39 @@ import {
   issueConnectionsResponseSchema,
   issueBrowseResponseSchema,
   type IssueConnectionInput,
+  capturePreferencesResponseSchema,
+  capturePreviewResponseSchema,
+  taskBatchMutationResponseSchema,
+  type CapturePreferences,
+  type CapturePreferencesResponse,
+  type CapturePreviewRequest,
+  type CapturePreviewResponse,
+  type TaskBatchCreateRequest,
+  type TaskBatchMutationResponse,
   taskImportApplyResponseSchema,
   automationTokenListResponseSchema,
   createAutomationTokenRequestSchema,
   createAutomationTokenResponseSchema,
   type CreateAutomationTokenRequest,
   superProductivityPreviewSchema,
+  dataRestoreApplyResponseSchema,
+  dataRestorePreviewSchema,
+  type DataRestoreMode,
 } from "@suite/contracts";
 import {
   apiErrorSchema,
   activeSessionCommandResponseSchema,
   activeSessionCommandSchema,
   activeSessionSchema,
+  baikalProbeResponseSchema,
   baikalStatusResponseSchema,
   clientRegistrationResponseSchema,
   projectSchema,
   subtaskSchema,
-  syncRoundResponseSchema,
-  syncSnapshotResponseSchema,
+  clientSyncRoundResponseSchema,
+  clientSyncSnapshotResponseSchema,
+  type ClientSyncRoundResponse,
+  type ClientSyncSnapshotResponse,
   tagSchema,
   taskTemplateLibraryResponseSchema,
   taskTemplateSchema,
@@ -51,6 +66,10 @@ import {
   googleConnectorStatusResponseSchema,
   googleSyncResponseSchema,
   planningPreferencesSchema,
+  applicationPreferenceMutationInputSchema,
+  applicationPreferenceSnapshotSchema,
+  type ApplicationPreferenceMutationInput,
+  type ApplicationPreferenceSnapshot,
   dayPlanResponseSchema,
   notificationPreferencesSchema,
   notificationStatusResponseSchema,
@@ -64,6 +83,7 @@ import {
   sessionResponseSchema,
   setupStatusResponseSchema,
   type BaikalConnectRequest,
+  type BaikalProbeResponse,
   type BaikalStatusResponse,
   type ActiveSession,
   type ActiveSessionCommand,
@@ -84,9 +104,7 @@ import {
   type Project,
   type Subtask,
   type SyncRoundRequest,
-  type SyncRoundResponse,
   type SyncEntitySnapshot,
-  type SyncSnapshotResponse,
   type Tag,
   type GoogleConnectorStatusResponse,
   type GoogleSyncResponse,
@@ -96,11 +114,208 @@ import {
   type NotificationStatusResponse,
   type NotificationTestResponse,
 } from "@suite/contracts";
-import { ApiRequestError } from "@suite/contracts";
+import {
+  ApiRequestError,
+  liveSyncPushTrigger,
+  liveSyncTriggerHeader,
+} from "@suite/contracts";
+import {
+  devicesSignedOutResponseSchema,
+  passwordConfirmationResponseSchema,
+  reauthenticationRequiredCode,
+  signedInDevicesResponseSchema,
+  type PasswordConfirmationResponse,
+  type SignedInDevicesResponse,
+} from "@suite/contracts";
+import {
+  organizationOrderRequestSchema,
+  projectBacklogRequestSchema,
+  projectPatchRequestSchema,
+  tagPatchRequestSchema,
+  type OrganizationOrderItem,
+} from "@suite/contracts";
+import {
+  taskAttachmentCreateRequestSchema,
+  taskAttachmentPatchRequestSchema,
+  taskLinksResponseSchema,
+  type TaskAttachmentPatchRequest,
+  type TaskLinksResponse,
+  taskArchiveMutationResponseSchema,
+  taskHistoryResponseSchema,
+  type TaskArchiveMutationResponse,
+  type TaskHistoryResponse,
+} from "@suite/contracts";
+import {
+  recurrenceOccurrenceRequestSchema,
+  recurringSeriesCreateRequestSchema,
+  recurringSeriesListResponseSchema,
+  recurringSeriesMutationResponseSchema,
+  recurringSeriesPatchRequestSchema,
+  type RecurringSeriesCreateRequest,
+  type RecurringSeriesListResponse,
+  type RecurringSeriesMutationResponse,
+  type RecurringSeriesPatchRequest,
+  timeEntryMutationResponseSchema,
+  timeReportResponseSchema,
+  type TimeEntryCreateRequest,
+  type TimeEntryMutationResponse,
+  type TimeEntryPatchRequest,
+  type TimeReport,
+  pluginDataContentResponseSchema,
+  pluginDataListResponseSchema,
+  type PluginDataContentResponse,
+  type PluginDataListResponse,
+} from "@suite/contracts";
+import {
+  counterHistoryResponseSchema,
+  counterMutationResponseSchema,
+  evaluationListResponseSchema,
+  evaluationMutationResponseSchema,
+  type CounterCreateRequest,
+  type CounterDayWriteRequest,
+  type CounterHistory,
+  type CounterMutationResponse,
+  type CounterPatchRequest,
+  type EvaluationList,
+  type EvaluationMutationResponse,
+  type EvaluationWriteRequest,
+} from "@suite/contracts";
+import {
+  boardCreateRequestSchema,
+  boardListResponseSchema,
+  boardMoveRequestSchema,
+  boardMoveResponseSchema,
+  boardOrderRequestSchema,
+  boardPanelOrderRequestSchema,
+  boardResponseSchema,
+  boardUpdateRequestSchema,
+  boardViewResponseSchema,
+  menuFolderCreateRequestSchema,
+  menuFolderListResponseSchema,
+  menuFolderOrderRequestSchema,
+  menuFolderUpdateRequestSchema,
+  sectionCreateRequestSchema,
+  sectionListResponseSchema,
+  sectionOrderRequestSchema,
+  sectionUpdateRequestSchema,
+  taskViewListResponseSchema,
+  taskViewResponseSchema,
+  taskViewSetRequestSchema,
+  type Board,
+  type BoardMoveResponse,
+  type BoardView,
+  type MenuFolder,
+  type MenuFolderUpdateRequest,
+  type Section,
+  type SectionContextKind,
+  type SectionCreateRequest,
+  type SectionUpdateRequest,
+  type TaskView,
+} from "@suite/contracts";
+import {
+  focusBreakSnoozeResponseSchema,
+  focusIdleRequestSchema,
+  focusIdleResponseSchema,
+  focusPlanRequestSchema,
+  focusPreferencesResponseSchema,
+  focusPreferencesSchema,
+  focusTimerSchema,
+  type FocusIdleRequest,
+  type FocusIdleResponse,
+  type FocusPlanRequest,
+  type FocusPreferences,
+  type FocusPreferencesResponse,
+  type FocusTimer,
+} from "@suite/contracts";
+import {
+  calendarSubscriptionConversionResponseSchema,
+  calendarSubscriptionCreateRequestSchema,
+  calendarSubscriptionEventListResponseSchema,
+  calendarSubscriptionEventMutationResponseSchema,
+  calendarSubscriptionListResponseSchema,
+  calendarSubscriptionMutationResponseSchema,
+  calendarSubscriptionPatchRequestSchema,
+  calendarSubscriptionRefreshResponseSchema,
+  type CalendarSubscriptionConversionResponse,
+  type CalendarSubscriptionCreateRequest,
+  type CalendarSubscriptionEventListResponse,
+  type CalendarSubscriptionEventMutationResponse,
+  type CalendarSubscriptionListResponse,
+  type CalendarSubscriptionMutationResponse,
+  type CalendarSubscriptionPatchRequest,
+  type CalendarSubscriptionRefreshResponse,
+} from "@suite/contracts";
+import {
+  calendarBridgeLinkSchema,
+  calendarBridgeMappingCreateRequestSchema,
+  calendarBridgeMappingPreviewResponseSchema,
+  calendarBridgeMappingSchema,
+  calendarBridgeOperationSchema,
+  calendarBridgeOverviewResponseSchema,
+  calendarBridgeReviewResponseSchema,
+  calendarBridgeRunResponseSchema,
+  type CalendarBridgeLink,
+  type CalendarBridgeMapping,
+  type CalendarBridgeMappingCreateRequest,
+  type CalendarBridgeMappingPreviewResponse,
+  type CalendarBridgeOperation,
+  type CalendarBridgeOverviewResponse,
+  type CalendarBridgeReviewResponse,
+  type CalendarBridgeRunResponse,
+  type CalendarBridgeSide,
+} from "@suite/contracts";
 import { z } from "zod";
+import { liveSyncPath } from "@suite/contracts";
 import { reportSessionFailure } from "./session-recovery.ts";
+import { requestReauthentication } from "./reauthentication.ts";
 import type { LocalClientIdentity } from "./local-store.ts";
-import { SyncCursorResetRequired, type SyncTransport } from "./sync-engine.ts";
+import {
+  SyncCursorResetRequired,
+  type SyncRoundTrigger,
+  type SyncTransport,
+} from "./sync-engine.ts";
+
+let backgroundReadsUntil = 0;
+
+/**
+ * Marks reads for the next few seconds as caused by a live sync hint rather
+ * than by the owner (ADR 0045). They carry the push trigger header, so the
+ * server does not count them as activity and an unattended device still
+ * reaches its idle limit. Writes are never marked.
+ */
+export const noteBackgroundReads = (
+  now: number = Date.now(),
+  windowMs = 3000,
+): void => {
+  backgroundReadsUntil = Math.max(backgroundReadsUntil, now + windowMs);
+};
+
+/** Owner activity ends the window: what follows is the owner's own request. */
+export const endBackgroundReads = (): void => {
+  backgroundReadsUntil = 0;
+};
+
+/**
+ * `fetch` for owner routes. When a trusted device is asked for a recent
+ * password (ADR 0048), the owner is prompted and the request is sent once
+ * more; a declined prompt returns the refusal.
+ */
+const ownerFetch = async (
+  path: string,
+  init?: RequestInit,
+): Promise<Response> => {
+  const response = await fetch(path, init);
+  if (response.status !== 403) return response;
+  const refusal = apiErrorSchema.safeParse(
+    await response
+      .clone()
+      .json()
+      .catch(() => undefined),
+  );
+  if (!refusal.success || refusal.data.code !== reauthenticationRequiredCode)
+    return response;
+  return (await requestReauthentication()) ? fetch(path, init) : response;
+};
 
 const request = async <T>(
   path: string,
@@ -109,8 +324,14 @@ const request = async <T>(
 ): Promise<T> => {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
+  if (
+    (init?.method ?? "GET") === "GET" &&
+    Date.now() < backgroundReadsUntil &&
+    !headers.has(liveSyncTriggerHeader)
+  )
+    headers.set(liveSyncTriggerHeader, liveSyncPushTrigger);
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
-  const response = await fetch(path, {
+  const response = await ownerFetch(path, {
     ...init,
     headers,
   });
@@ -195,7 +416,7 @@ const requestEmpty = async (
 ): Promise<void> => {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  const response = await fetch(path, { ...init, headers });
+  const response = await ownerFetch(path, { ...init, headers });
   if (response.ok) return;
   const body: unknown = await response.json().catch(() => undefined);
   const error = apiErrorSchema.safeParse(body);
@@ -252,6 +473,63 @@ export const logout = async (csrfToken: string): Promise<void> => {
   });
 };
 
+/**
+ * Trusted devices (ADR 0048). `confirmPassword` satisfies the recent-password
+ * gate for the next 15 minutes; the device calls list, rename and sign out
+ * the owner's trusted devices.
+ */
+export const confirmPassword = (
+  password: string,
+  csrfToken: string,
+): Promise<PasswordConfirmationResponse> =>
+  request("/api/auth/confirm-password", passwordConfirmationResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify({ password }),
+  });
+
+export const listSignedInDevices = (): Promise<SignedInDevicesResponse> =>
+  request("/api/auth/devices", signedInDevicesResponseSchema);
+
+export const renameSignedInDevice = async (
+  deviceId: string,
+  label: string,
+  csrfToken: string,
+): Promise<void> => {
+  await request(
+    `/api/auth/devices/${deviceId}`,
+    z.object({ renamed: z.literal(true) }),
+    {
+      method: "PATCH",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ label }),
+    },
+  );
+};
+
+export const signOutDevice = async (
+  deviceId: string,
+  csrfToken: string,
+): Promise<void> => {
+  await request(
+    `/api/auth/devices/${deviceId}`,
+    devicesSignedOutResponseSchema,
+    {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrfToken },
+    },
+  );
+};
+
+export const signOutOtherDevices = async (csrfToken: string): Promise<number> =>
+  (
+    await request(
+      "/api/auth/devices/sign-out-others",
+      devicesSignedOutResponseSchema,
+      { method: "POST", headers: { "X-CSRF-Token": csrfToken } },
+    )
+  ).signedOut;
+
 export const getBaikalStatus = (): Promise<BaikalStatusResponse> =>
   request("/api/connectors/baikal", baikalStatusResponseSchema);
 
@@ -265,17 +543,51 @@ export const connectBaikal = (
     body: JSON.stringify(input),
   });
 
+/** Read-only setup check; stores nothing (ADR 0039). */
+export const probeBaikal = (
+  input: BaikalConnectRequest,
+  csrfToken: string,
+): Promise<BaikalProbeResponse> =>
+  request("/api/connectors/baikal/probe", baikalProbeResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(input),
+  });
+
 export const getGoogleStatus = (): Promise<GoogleConnectorStatusResponse> =>
   request("/api/connectors/google", googleConnectorStatusResponseSchema);
 
+/**
+ * Read-only is the default. `write` is the separate explicit consent step of
+ * ADR 0040 and is sent only from the owner's "Allow event changes" action.
+ */
 export const beginGoogleAuthorization = (
   csrfToken: string,
+  access: "read" | "write" = "read",
 ): Promise<{ readonly authorizationUrl: string; readonly expiresAt: string }> =>
   request(
     "/api/connectors/google/authorize",
     googleAuthorizationResponseSchema,
+    access === "read"
+      ? {
+          method: "POST",
+          headers: { "X-CSRF-Token": csrfToken },
+        }
+      : {
+          method: "POST",
+          headers: { "X-CSRF-Token": csrfToken },
+          body: JSON.stringify({ access }),
+        },
+  );
+
+export const withdrawGoogleWriteConsent = (
+  csrfToken: string,
+): Promise<GoogleConnectorStatusResponse> =>
+  request(
+    "/api/connectors/google/write-consent",
+    googleConnectorStatusResponseSchema,
     {
-      method: "POST",
+      method: "DELETE",
       headers: { "X-CSRF-Token": csrfToken },
     },
   );
@@ -316,6 +628,24 @@ export const updatePlanningPreferences = (
     method: "PUT",
     headers: { "X-CSRF-Token": csrfToken },
     body: JSON.stringify(planningPreferencesSchema.parse(input)),
+  });
+
+/** Application preferences and shortcuts (ADR 0030); online-only. */
+export const getApplicationPreferences =
+  (): Promise<ApplicationPreferenceSnapshot> =>
+    request(
+      "/api/application/preferences",
+      applicationPreferenceSnapshotSchema,
+    );
+
+export const updateApplicationPreferences = (
+  input: ApplicationPreferenceMutationInput,
+  csrfToken: string,
+): Promise<ApplicationPreferenceSnapshot> =>
+  request("/api/application/preferences", applicationPreferenceSnapshotSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(applicationPreferenceMutationInputSchema.parse(input)),
   });
 
 export const getDayPlan = (
@@ -475,14 +805,23 @@ export const syncRound = async (
   client: LocalClientIdentity,
   csrfToken: string,
   input: SyncRoundRequest,
-): Promise<SyncRoundResponse> => {
+  /**
+   * `push` marks a round the app started without the owner acting (a live
+   * sync hint or the fallback interval), so the server does not refresh the
+   * session idle timer for it (ADR 0045).
+   */
+  trigger?: SyncRoundTrigger,
+): Promise<ClientSyncRoundResponse> => {
   try {
-    return await request("/api/sync/round", syncRoundResponseSchema, {
+    // ADR 0050: a change of a kind this build does not know is skipped and
+    // counted, so a newer server cannot stall an open tab.
+    return await request("/api/sync/round", clientSyncRoundResponseSchema, {
       method: "POST",
       headers: {
         ...clientProofHeaders(client),
         "X-CSRF-Token": csrfToken,
         "X-Suite-Sync-Version": "2",
+        ...(trigger === undefined ? {} : { "X-Suite-Sync-Trigger": trigger }),
       },
       body: JSON.stringify(input),
     });
@@ -501,10 +840,10 @@ export const syncRound = async (
 const getSyncSnapshotPage = (
   client: LocalClientIdentity,
   offset: number,
-): Promise<SyncSnapshotResponse> =>
+): Promise<ClientSyncSnapshotResponse> =>
   request(
     `/api/sync/snapshot?offset=${String(offset)}`,
-    syncSnapshotResponseSchema,
+    clientSyncSnapshotResponseSchema,
     {
       headers: { ...clientProofHeaders(client), "X-Suite-Sync-Version": "2" },
     },
@@ -512,12 +851,13 @@ const getSyncSnapshotPage = (
 
 export const getSyncSnapshot = async (
   client: LocalClientIdentity,
-): Promise<SyncSnapshotResponse> => {
+): Promise<ClientSyncSnapshotResponse> => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const snapshots: SyncEntitySnapshot[] = [];
     let offset = 0;
+    let skippedUnknownKinds = 0;
     let expectedCursor: string | undefined;
-    let page: SyncSnapshotResponse;
+    let page: ClientSyncSnapshotResponse;
     let changed = false;
     do {
       page = await getSyncSnapshotPage(client, offset);
@@ -527,8 +867,12 @@ export const getSyncSnapshot = async (
         break;
       }
       snapshots.push(...page.snapshots);
-      offset += page.snapshots.length;
-      if (page.hasMore && page.snapshots.length === 0)
+      // ADR 0050: the offset counts what the server sent, including the
+      // records of unknown kinds that were skipped while reading the page.
+      const received = page.snapshots.length + page.skippedUnknownKinds;
+      skippedUnknownKinds += page.skippedUnknownKinds;
+      offset += received;
+      if (page.hasMore && received === 0)
         throw new Error("Sync snapshot page was empty before completion");
     } while (page.hasMore);
     if (changed) continue;
@@ -538,6 +882,7 @@ export const getSyncSnapshot = async (
       hasMore: false,
       protocolVersion: 2 as const,
       serverTimestamp: page.serverTimestamp,
+      skippedUnknownKinds,
     };
   }
   throw new Error("Sync snapshot kept changing during pagination");
@@ -546,8 +891,31 @@ export const getSyncSnapshot = async (
 export const createSyncTransport = (csrfToken: string): SyncTransport => ({
   registerClient: () => registerSyncClient(csrfToken),
   snapshot: getSyncSnapshot,
-  syncRound: (client, input) => syncRound(client, csrfToken, input),
+  syncRound: (client, input, trigger) =>
+    syncRound(client, csrfToken, input, trigger),
 });
+
+/**
+ * Opens the live sync hint stream (ADR 0045). The request carries the same
+ * proof as a sync round: the session cookie and the registered client
+ * headers. The caller reads the `text/event-stream` body and owns the retry
+ * policy, so a failed response is returned rather than thrown and does not
+ * raise the session recovery prompt.
+ */
+export const openLiveSyncStream = (
+  client: LocalClientIdentity,
+  signal: AbortSignal,
+): Promise<Response> =>
+  fetch(liveSyncPath, {
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      ...clientProofHeaders(client),
+      "X-Suite-Sync-Version": "2",
+      Accept: "text/event-stream",
+    },
+    signal,
+  });
 
 const activeSessionResponseSchema = z.object({
   session: activeSessionSchema.nullable(),
@@ -588,14 +956,6 @@ const subtaskResponseSchema = z.object({ subtask: subtaskSchema });
 const organizationCreateSchema = z.object({
   title: z.string().trim().min(1).max(240),
 });
-const organizationPatchSchema = z
-  .object({
-    title: z.string().trim().min(1).max(240).optional(),
-    archived: z.literal(true).optional(),
-  })
-  .refine(({ title, archived }) => title !== undefined || archived === true, {
-    message: "Provide an organization title or archive it",
-  });
 const taskProjectAssignmentSchema = z.object({
   projectId: z.uuid().nullable(),
 });
@@ -634,7 +994,8 @@ const subtaskOrderSchema = z.object({
     ),
 });
 
-export type OrganizationPatch = z.infer<typeof organizationPatchSchema>;
+export type OrganizationPatch = z.input<typeof projectPatchRequestSchema>;
+export type TagPatch = z.input<typeof tagPatchRequestSchema>;
 export type SubtaskCreate = z.infer<typeof subtaskCreateSchema>;
 export type SubtaskPatch = z.infer<typeof subtaskPatchSchema>;
 
@@ -667,13 +1028,13 @@ const patchOrganization = <T>(
   path: string,
   schema: z.ZodType<T>,
   revision: number,
-  input: OrganizationPatch,
+  body: unknown,
   csrfToken: string,
 ): Promise<T> =>
   request(path, schema, {
     method: "PATCH",
     headers: conditionalHeaders(revision, csrfToken),
-    body: JSON.stringify(organizationPatchSchema.parse(input)),
+    body: JSON.stringify(body),
   });
 
 export const patchProject = (
@@ -686,23 +1047,62 @@ export const patchProject = (
     `/api/projects/${projectId}`,
     projectResponseSchema,
     revision,
-    input,
+    projectPatchRequestSchema.parse(input),
     csrfToken,
   ).then(({ project }) => project);
 
 export const patchTag = (
   tagId: string,
   revision: number,
-  input: OrganizationPatch,
+  input: TagPatch,
   csrfToken: string,
 ): Promise<Tag> =>
   patchOrganization(
     `/api/tags/${tagId}`,
     tagResponseSchema,
     revision,
-    input,
+    tagPatchRequestSchema.parse(input),
     csrfToken,
   ).then(({ tag }) => tag);
+
+/** Sends the complete order with each record's current revision. */
+export const reorderProjects = (
+  items: readonly OrganizationOrderItem[],
+  csrfToken: string,
+): Promise<readonly Project[]> =>
+  request("/api/projects/order", projectListResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(organizationOrderRequestSchema.parse({ items })),
+  }).then(({ projects }) => projects);
+
+export const reorderTags = (
+  items: readonly OrganizationOrderItem[],
+  csrfToken: string,
+): Promise<readonly Tag[]> =>
+  request("/api/tags/order", tagListResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(organizationOrderRequestSchema.parse({ items })),
+  }).then(({ tags }) => tags);
+
+export const setProjectBacklog = (
+  projectId: string,
+  revision: number,
+  taskId: string,
+  inBacklog: boolean,
+  csrfToken: string,
+): Promise<Project> =>
+  request(`/api/projects/${projectId}/backlog`, projectResponseSchema, {
+    method: "PUT",
+    headers: conditionalHeaders(revision, csrfToken),
+    body: JSON.stringify(
+      projectBacklogRequestSchema.parse({ taskId, inBacklog }),
+    ),
+  }).then(({ project }) => project);
+
+// Notes have no HTTP client here: the web app reads them from the offline
+// cache and writes them through the sync outbox (ADR 0046).
 
 export const assignTaskProject = (
   taskId: string,
@@ -730,6 +1130,15 @@ export const assignTaskTags = (
     method: "PUT",
     headers: conditionalHeaders(revision, csrfToken),
     body: JSON.stringify(taskTagAssignmentSchema.parse({ tagIds })),
+  });
+
+/** Every checklist item of the owner, keyed by task, in one request. */
+export const getAllSubtasks = (): Promise<Record<string, readonly Subtask[]>> =>
+  request("/api/subtasks", subtaskListResponseSchema).then(({ subtasks }) => {
+    const byTask: Record<string, Subtask[]> = {};
+    for (const subtask of subtasks)
+      (byTask[subtask.taskId] ??= []).push(subtask);
+    return byTask;
   });
 
 export const getSubtasks = (taskId: string): Promise<readonly Subtask[]> =>
@@ -1084,3 +1493,954 @@ export const applyTaskImport = (
       body: rawJson,
     },
   );
+
+/**
+ * Task attachments and imported issue links are online-only (ADR 0021): they
+ * are not cached or queued offline, and no call contacts an issue provider.
+ */
+export const getTaskLinks = (taskId: string): Promise<TaskLinksResponse> =>
+  request(`/api/tasks/${taskId}/links`, taskLinksResponseSchema);
+
+export const createTaskAttachment = (
+  taskId: string,
+  input: z.input<typeof taskAttachmentCreateRequestSchema>,
+  csrfToken: string,
+): Promise<TaskLinksResponse> =>
+  request(`/api/tasks/${taskId}/attachments`, taskLinksResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(taskAttachmentCreateRequestSchema.parse(input)),
+  });
+
+export const patchTaskAttachment = (
+  taskId: string,
+  attachmentId: string,
+  revision: number,
+  input: TaskAttachmentPatchRequest,
+  csrfToken: string,
+): Promise<TaskLinksResponse> =>
+  request(
+    `/api/tasks/${taskId}/attachments/${attachmentId}`,
+    taskLinksResponseSchema,
+    {
+      method: "PATCH",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify(taskAttachmentPatchRequestSchema.parse(input)),
+    },
+  );
+
+export const deleteTaskAttachment = (
+  taskId: string,
+  attachmentId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(`/api/tasks/${taskId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+    headers: conditionalHeaders(revision, csrfToken),
+  });
+
+export const deleteTaskIssueLink = (
+  taskId: string,
+  linkId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(`/api/tasks/${taskId}/issue-link/${linkId}`, {
+    method: "DELETE",
+    headers: conditionalHeaders(revision, csrfToken),
+  });
+// ADR 0022 archived history. Online-only: archive state is not a sync v2
+// operation, so the browser never queues archive or restore offline.
+export const getTaskHistory = (
+  input: { readonly query?: string; readonly cursor?: string | null } = {},
+): Promise<TaskHistoryResponse> => {
+  const params = new URLSearchParams();
+  if (input.query !== undefined && input.query.trim() !== "")
+    params.set("query", input.query.trim());
+  if (input.cursor != null) params.set("cursor", input.cursor);
+  const query = params.toString();
+  return request(
+    `/api/tasks/history${query === "" ? "" : `?${query}`}`,
+    taskHistoryResponseSchema,
+  );
+};
+
+const taskArchiveRequest = (
+  action: "archive" | "unarchive",
+  taskId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<TaskArchiveMutationResponse> =>
+  request(
+    `/api/tasks/${encodeURIComponent(taskId)}/${action}`,
+    taskArchiveMutationResponseSchema,
+    {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": csrfToken,
+        "If-Match": `"${String(revision)}"`,
+      },
+      body: "{}",
+    },
+  );
+
+export const archiveTask = (
+  taskId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<TaskArchiveMutationResponse> =>
+  taskArchiveRequest("archive", taskId, revision, csrfToken);
+
+export const unarchiveTask = (
+  taskId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<TaskArchiveMutationResponse> =>
+  taskArchiveRequest("unarchive", taskId, revision, csrfToken);
+
+// ADR 0023 recurring series. Series writes are online-only revisioned HTTP
+// requests; generated instances arrive as ordinary tasks through sync.
+export const getRecurringSeries = (): Promise<RecurringSeriesListResponse> =>
+  request("/api/recurring-series", recurringSeriesListResponseSchema);
+
+export const createRecurringSeries = (
+  input: RecurringSeriesCreateRequest,
+  csrfToken: string,
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<RecurringSeriesMutationResponse> =>
+  request("/api/recurring-series", recurringSeriesMutationResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken, "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(recurringSeriesCreateRequestSchema.parse(input)),
+  });
+
+export const patchRecurringSeries = (
+  seriesId: string,
+  revision: number,
+  patch: RecurringSeriesPatchRequest,
+  csrfToken: string,
+): Promise<RecurringSeriesMutationResponse> =>
+  request(
+    `/api/recurring-series/${encodeURIComponent(seriesId)}`,
+    recurringSeriesMutationResponseSchema,
+    {
+      method: "PATCH",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify(recurringSeriesPatchRequestSchema.parse(patch)),
+    },
+  );
+
+export const setRecurringSeriesState = (
+  seriesId: string,
+  revision: number,
+  action: "pause" | "resume" | "end",
+  csrfToken: string,
+): Promise<RecurringSeriesMutationResponse> =>
+  request(
+    `/api/recurring-series/${encodeURIComponent(seriesId)}/state`,
+    recurringSeriesMutationResponseSchema,
+    {
+      method: "POST",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify({ action }),
+    },
+  );
+
+export const changeRecurrenceOccurrence = (
+  seriesId: string,
+  revision: number,
+  date: string,
+  action: "skip" | "unskip" | "delete_instance",
+  csrfToken: string,
+): Promise<RecurringSeriesMutationResponse> =>
+  request(
+    `/api/recurring-series/${encodeURIComponent(seriesId)}/occurrences/${encodeURIComponent(date)}`,
+    recurringSeriesMutationResponseSchema,
+    {
+      method: "POST",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify(recurrenceOccurrenceRequestSchema.parse({ action })),
+    },
+  );
+
+// Work history (ADR 0024) is online-only: reads and writes go to the server.
+export const getTimeReport = (from: string, to: string): Promise<TimeReport> =>
+  request(
+    `/api/time/report?${new URLSearchParams({ from, to }).toString()}`,
+    timeReportResponseSchema,
+  );
+
+export const createTimeEntry = (
+  entry: TimeEntryCreateRequest,
+  csrfToken: string,
+): Promise<TimeEntryMutationResponse> =>
+  request("/api/time/entries", timeEntryMutationResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(entry),
+  });
+
+export const updateTimeEntry = (
+  id: string,
+  revision: number,
+  patch: TimeEntryPatchRequest,
+  csrfToken: string,
+): Promise<TimeEntryMutationResponse> =>
+  request(
+    `/api/time/entries/${encodeURIComponent(id)}`,
+    timeEntryMutationResponseSchema,
+    {
+      method: "PATCH",
+      headers: {
+        "X-CSRF-Token": csrfToken,
+        "If-Match": `"${String(revision)}"`,
+      },
+      body: JSON.stringify(patch),
+    },
+  );
+
+export const deleteTimeEntry = (
+  id: string,
+  revision: number,
+  csrfToken: string,
+): Promise<TimeEntryMutationResponse> =>
+  request(
+    `/api/time/entries/${encodeURIComponent(id)}`,
+    timeEntryMutationResponseSchema,
+    {
+      method: "DELETE",
+      headers: {
+        "X-CSRF-Token": csrfToken,
+        "If-Match": `"${String(revision)}"`,
+      },
+    },
+  );
+
+// Counters and daily evaluations (ADR 0025) are online-only HTTP records.
+export const getCounterHistory = (
+  from: string,
+  to: string,
+): Promise<CounterHistory> =>
+  request(
+    `/api/counters?${new URLSearchParams({ from, to }).toString()}`,
+    counterHistoryResponseSchema,
+  );
+
+export const createCounter = (
+  counter: CounterCreateRequest,
+  csrfToken: string,
+): Promise<CounterMutationResponse> =>
+  request("/api/counters", counterMutationResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(counter),
+  });
+
+export const updateCounter = (
+  id: string,
+  revision: number,
+  patch: CounterPatchRequest,
+  csrfToken: string,
+): Promise<CounterMutationResponse> =>
+  request(
+    `/api/counters/${encodeURIComponent(id)}`,
+    counterMutationResponseSchema,
+    {
+      method: "PATCH",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify(patch),
+    },
+  );
+
+export const deleteCounter = (
+  id: string,
+  revision: number,
+  csrfToken: string,
+): Promise<CounterMutationResponse> =>
+  request(
+    `/api/counters/${encodeURIComponent(id)}`,
+    counterMutationResponseSchema,
+    { method: "DELETE", headers: conditionalHeaders(revision, csrfToken) },
+  );
+
+export const recordCounterDay = (
+  id: string,
+  day: string,
+  write: CounterDayWriteRequest,
+  csrfToken: string,
+): Promise<CounterMutationResponse> =>
+  request(
+    `/api/counters/${encodeURIComponent(id)}/days/${encodeURIComponent(day)}`,
+    counterMutationResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(write),
+    },
+  );
+
+export const controlCounterStopwatch = (
+  id: string,
+  revision: number,
+  action: "start" | "stop",
+  csrfToken: string,
+): Promise<CounterMutationResponse> =>
+  request(
+    `/api/counters/${encodeURIComponent(id)}/stopwatch`,
+    counterMutationResponseSchema,
+    {
+      method: "POST",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify({ action }),
+    },
+  );
+
+export const getEvaluations = (
+  from: string,
+  to: string,
+): Promise<EvaluationList> =>
+  request(
+    `/api/evaluations?${new URLSearchParams({ from, to }).toString()}`,
+    evaluationListResponseSchema,
+  );
+
+export const saveEvaluation = (
+  day: string,
+  write: EvaluationWriteRequest,
+  csrfToken: string,
+): Promise<EvaluationMutationResponse> =>
+  request(
+    `/api/evaluations/${encodeURIComponent(day)}`,
+    evaluationMutationResponseSchema,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(write),
+    },
+  );
+// Imported plugin data (ADR 0026) is online-only. Listings carry sizes and
+// flags; only an explicit download reads an entry's opaque data.
+export const getPluginData = (): Promise<PluginDataListResponse> =>
+  request("/api/plugin-data", pluginDataListResponseSchema);
+
+export const getPluginDataContent = (
+  id: string,
+): Promise<PluginDataContentResponse> =>
+  request(
+    `/api/plugin-data/entries/${encodeURIComponent(id)}`,
+    pluginDataContentResponseSchema,
+  );
+
+export const deletePluginDataEntry = (
+  id: string,
+  revision: number,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(`/api/plugin-data/entries/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: conditionalHeaders(revision, csrfToken),
+  });
+
+export const deletePluginMetadata = (
+  id: string,
+  revision: number,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(`/api/plugin-data/plugins/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: conditionalHeaders(revision, csrfToken),
+  });
+// Boards, sections, saved task views and sidebar folders (issue #63, ADR
+// 0028). Online-only HTTP records with revisions; nothing here is cached.
+
+export const getBoards = (): Promise<readonly Board[]> =>
+  request("/api/boards", boardListResponseSchema).then(({ boards }) => boards);
+
+export const getBoardView = (boardId: string): Promise<BoardView> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}`,
+    boardViewResponseSchema,
+  ).then(({ view }) => view);
+
+export const createBoard = (
+  input: z.input<typeof boardCreateRequestSchema>,
+  csrfToken: string,
+): Promise<Board> =>
+  request("/api/boards", boardResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(boardCreateRequestSchema.parse(input)),
+  }).then(({ board }) => board);
+
+export const updateBoard = (
+  boardId: string,
+  input: z.input<typeof boardUpdateRequestSchema>,
+  csrfToken: string,
+): Promise<Board> =>
+  request(`/api/boards/${encodeURIComponent(boardId)}`, boardResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(boardUpdateRequestSchema.parse(input)),
+  }).then(({ board }) => board);
+
+export const reorderBoards = (
+  items: readonly { readonly id: string; readonly revision: number }[],
+  csrfToken: string,
+): Promise<readonly Board[]> =>
+  request("/api/boards/order", boardListResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(boardOrderRequestSchema.parse({ items })),
+  }).then(({ boards }) => boards);
+
+export const deleteBoard = (
+  boardId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(`/api/boards/${encodeURIComponent(boardId)}`, {
+    method: "DELETE",
+    headers: conditionalHeaders(revision, csrfToken),
+  });
+
+export const reorderBoardPanel = (
+  boardId: string,
+  panelId: string,
+  input: z.input<typeof boardPanelOrderRequestSchema>,
+  csrfToken: string,
+): Promise<BoardView> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}/panels/${encodeURIComponent(panelId)}/order`,
+    boardViewResponseSchema,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(boardPanelOrderRequestSchema.parse(input)),
+    },
+  ).then(({ view }) => view);
+
+/** With `dryRun`, returns the change list without applying it. */
+export const moveTaskToPanel = (
+  boardId: string,
+  panelId: string,
+  input: z.input<typeof boardMoveRequestSchema>,
+  csrfToken: string,
+): Promise<BoardMoveResponse> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}/panels/${encodeURIComponent(panelId)}/tasks`,
+    boardMoveResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(boardMoveRequestSchema.parse(input)),
+    },
+  );
+
+export const getSections = (
+  contextKind: SectionContextKind,
+  contextId: string,
+): Promise<readonly Section[]> =>
+  request(
+    `/api/sections?${new URLSearchParams({ contextKind, contextId }).toString()}`,
+    sectionListResponseSchema,
+  ).then(({ sections }) => sections);
+
+export const createSection = (
+  input: SectionCreateRequest,
+  csrfToken: string,
+): Promise<readonly Section[]> =>
+  request("/api/sections", sectionListResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(sectionCreateRequestSchema.parse(input)),
+  }).then(({ sections }) => sections);
+
+export const updateSection = (
+  sectionId: string,
+  input: SectionUpdateRequest,
+  csrfToken: string,
+): Promise<readonly Section[]> =>
+  request(
+    `/api/sections/${encodeURIComponent(sectionId)}`,
+    sectionListResponseSchema,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(sectionUpdateRequestSchema.parse(input)),
+    },
+  ).then(({ sections }) => sections);
+
+export const reorderSections = (
+  input: z.input<typeof sectionOrderRequestSchema>,
+  csrfToken: string,
+): Promise<readonly Section[]> =>
+  request("/api/sections/order", sectionListResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(sectionOrderRequestSchema.parse(input)),
+  }).then(({ sections }) => sections);
+
+export const deleteSection = (
+  sectionId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<readonly Section[]> =>
+  request(
+    `/api/sections/${encodeURIComponent(sectionId)}`,
+    sectionListResponseSchema,
+    { method: "DELETE", headers: conditionalHeaders(revision, csrfToken) },
+  ).then(({ sections }) => sections);
+
+export const getTaskViews = (): Promise<readonly TaskView[]> =>
+  request("/api/task-views", taskViewListResponseSchema).then(
+    ({ views }) => views,
+  );
+
+export const setTaskView = (
+  input: z.input<typeof taskViewSetRequestSchema>,
+  csrfToken: string,
+): Promise<TaskView> =>
+  request("/api/task-views", taskViewResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(taskViewSetRequestSchema.parse(input)),
+  }).then(({ view }) => view);
+
+export const getMenuFolders = (): Promise<readonly MenuFolder[]> =>
+  request("/api/menu-folders", menuFolderListResponseSchema).then(
+    ({ folders }) => folders,
+  );
+
+export const createMenuFolder = (
+  input: z.input<typeof menuFolderCreateRequestSchema>,
+  csrfToken: string,
+): Promise<readonly MenuFolder[]> =>
+  request("/api/menu-folders", menuFolderListResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(menuFolderCreateRequestSchema.parse(input)),
+  }).then(({ folders }) => folders);
+
+export const updateMenuFolder = (
+  folderId: string,
+  input: MenuFolderUpdateRequest,
+  csrfToken: string,
+): Promise<readonly MenuFolder[]> =>
+  request(
+    `/api/menu-folders/${encodeURIComponent(folderId)}`,
+    menuFolderListResponseSchema,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(menuFolderUpdateRequestSchema.parse(input)),
+    },
+  ).then(({ folders }) => folders);
+
+export const reorderMenuFolders = (
+  input: z.input<typeof menuFolderOrderRequestSchema>,
+  csrfToken: string,
+): Promise<readonly MenuFolder[]> =>
+  request("/api/menu-folders/order", menuFolderListResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(menuFolderOrderRequestSchema.parse(input)),
+  }).then(({ folders }) => folders);
+
+export const deleteMenuFolder = (
+  folderId: string,
+  revision: number,
+  csrfToken: string,
+): Promise<readonly MenuFolder[]> =>
+  request(
+    `/api/menu-folders/${encodeURIComponent(folderId)}`,
+    menuFolderListResponseSchema,
+    { method: "DELETE", headers: conditionalHeaders(revision, csrfToken) },
+  ).then(({ folders }) => folders);
+// Focus presets, idle disposition and break reminders (issue #65, ADR 0029).
+// Online-only: nothing here is cached or queued offline.
+
+export const getFocusPreferences = (): Promise<FocusPreferencesResponse> =>
+  request("/api/focus/preferences", focusPreferencesResponseSchema);
+
+export const updateFocusPreferences = (
+  preferences: FocusPreferences,
+  revision: number,
+  csrfToken: string,
+): Promise<FocusPreferencesResponse> =>
+  request("/api/focus/preferences", focusPreferencesResponseSchema, {
+    method: "PUT",
+    headers: {
+      "X-CSRF-Token": csrfToken,
+      "If-Match": `"${String(revision)}"`,
+    },
+    body: JSON.stringify(focusPreferencesSchema.parse(preferences)),
+  });
+
+export const getFocusTimer = (
+  client: LocalClientIdentity,
+): Promise<FocusTimer> =>
+  request("/api/focus/timer", focusTimerSchema, {
+    headers: clientProofHeaders(client),
+  });
+
+export const setFocusPlan = (
+  client: LocalClientIdentity,
+  csrfToken: string,
+  plan: FocusPlanRequest,
+): Promise<FocusTimer> =>
+  request("/api/focus/plan", focusTimerSchema, {
+    method: "PUT",
+    headers: { ...clientProofHeaders(client), "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(focusPlanRequestSchema.parse(plan)),
+  });
+
+export const applyIdleDisposition = (
+  client: LocalClientIdentity,
+  csrfToken: string,
+  input: FocusIdleRequest,
+): Promise<FocusIdleResponse> =>
+  request("/api/focus/idle", focusIdleResponseSchema, {
+    method: "POST",
+    headers: { ...clientProofHeaders(client), "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(focusIdleRequestSchema.parse(input)),
+  });
+
+export const snoozeBreakReminder = (
+  csrfToken: string,
+): Promise<{ readonly snoozedUntil: string }> =>
+  request("/api/focus/break-reminder/snooze", focusBreakSnoozeResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: "{}",
+  });
+
+// Capture syntax (issue #90, ADR 0031): online-only preview, batch and settings.
+export const previewTaskCapture = (
+  input: CapturePreviewRequest,
+  csrfToken: string,
+): Promise<CapturePreviewResponse> =>
+  request("/api/tasks/capture-preview", capturePreviewResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(input),
+  });
+
+export const createTaskBatch = (
+  input: TaskBatchCreateRequest,
+  csrfToken: string,
+  idempotencyKey: string,
+): Promise<TaskBatchMutationResponse> =>
+  request("/api/tasks/batch", taskBatchMutationResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken, "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+
+export const getCapturePreferences = (): Promise<CapturePreferencesResponse> =>
+  request("/api/capture-preferences", capturePreferencesResponseSchema);
+
+export const updateCapturePreferences = (
+  preferences: CapturePreferences,
+  expectedRevision: number,
+  csrfToken: string,
+): Promise<CapturePreferencesResponse> =>
+  request("/api/capture-preferences", capturePreferencesResponseSchema, {
+    method: "PUT",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify({ preferences, expectedRevision }),
+  });
+// Read-only iCal subscriptions (ADR 0032). Online-only and owner-only: the
+// feed address is sent once on create or change and never read back.
+export const listCalendarSubscriptions =
+  (): Promise<CalendarSubscriptionListResponse> =>
+    request(
+      "/api/calendar-subscriptions",
+      calendarSubscriptionListResponseSchema,
+    );
+
+export const createCalendarSubscription = (
+  input: CalendarSubscriptionCreateRequest,
+  csrfToken: string,
+): Promise<CalendarSubscriptionRefreshResponse> =>
+  request(
+    "/api/calendar-subscriptions",
+    calendarSubscriptionRefreshResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(
+        calendarSubscriptionCreateRequestSchema.parse(input),
+      ),
+    },
+  );
+
+export const updateCalendarSubscription = (
+  id: string,
+  revision: number,
+  input: CalendarSubscriptionPatchRequest,
+  csrfToken: string,
+): Promise<CalendarSubscriptionMutationResponse> =>
+  request(
+    `/api/calendar-subscriptions/${encodeURIComponent(id)}`,
+    calendarSubscriptionMutationResponseSchema,
+    {
+      method: "PATCH",
+      headers: conditionalHeaders(revision, csrfToken),
+      body: JSON.stringify(calendarSubscriptionPatchRequestSchema.parse(input)),
+    },
+  );
+
+export const deleteCalendarSubscription = (
+  id: string,
+  revision: number,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(`/api/calendar-subscriptions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: conditionalHeaders(revision, csrfToken),
+  });
+
+export const refreshCalendarSubscription = (
+  id: string,
+  csrfToken: string,
+): Promise<CalendarSubscriptionRefreshResponse> =>
+  request(
+    `/api/calendar-subscriptions/${encodeURIComponent(id)}/refresh`,
+    calendarSubscriptionRefreshResponseSchema,
+    { method: "POST", headers: { "X-CSRF-Token": csrfToken } },
+  );
+
+export const listCalendarSubscriptionEvents = (
+  from: string,
+  to: string,
+): Promise<CalendarSubscriptionEventListResponse> =>
+  request(
+    `/api/calendar-subscriptions/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    calendarSubscriptionEventListResponseSchema,
+  );
+
+export const setCalendarSubscriptionEventHidden = (
+  subscriptionId: string,
+  event: { readonly uid: string; readonly occurrenceStart: string },
+  hidden: boolean,
+  csrfToken: string,
+): Promise<CalendarSubscriptionEventMutationResponse> =>
+  request(
+    `/api/calendar-subscriptions/${encodeURIComponent(subscriptionId)}/events/hidden`,
+    calendarSubscriptionEventMutationResponseSchema,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ ...event, hidden }),
+    },
+  );
+
+export const convertCalendarSubscriptionEvent = (
+  subscriptionId: string,
+  event: { readonly uid: string; readonly occurrenceStart: string },
+  csrfToken: string,
+): Promise<CalendarSubscriptionConversionResponse> =>
+  request(
+    `/api/calendar-subscriptions/${encodeURIComponent(subscriptionId)}/events/convert`,
+    calendarSubscriptionConversionResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(event),
+    },
+  );
+
+export const dismissCalendarSubscriptionEvent = (
+  subscriptionId: string,
+  event: { readonly uid: string; readonly occurrenceStart: string },
+  csrfToken: string,
+): Promise<CalendarSubscriptionEventMutationResponse> =>
+  request(
+    `/api/calendar-subscriptions/${encodeURIComponent(subscriptionId)}/events/dismiss`,
+    calendarSubscriptionEventMutationResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(event),
+    },
+  );
+
+// Google-Baikal calendar bridge controls (ADR 0041, ADR 0044). Online-only
+// and owner-only; no response carries a credential or raw iCalendar.
+const bridgePath = "/api/calendar-bridge";
+const bridgeMappingPath = (id: string): string =>
+  `${bridgePath}/mappings/${encodeURIComponent(id)}`;
+
+export const getCalendarBridgeOverview =
+  (): Promise<CalendarBridgeOverviewResponse> =>
+    request(`${bridgePath}/overview`, calendarBridgeOverviewResponseSchema);
+
+export const previewCalendarBridgeMapping = (
+  input: CalendarBridgeMappingCreateRequest,
+  csrfToken: string,
+): Promise<CalendarBridgeMappingPreviewResponse> =>
+  request(
+    `${bridgePath}/mappings/preview`,
+    calendarBridgeMappingPreviewResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(
+        calendarBridgeMappingCreateRequestSchema.parse(input),
+      ),
+    },
+  );
+
+export const createCalendarBridgeMapping = async (
+  input: CalendarBridgeMappingCreateRequest,
+  csrfToken: string,
+): Promise<CalendarBridgeMapping> =>
+  (
+    await request(
+      `${bridgePath}/mappings`,
+      z.object({ mapping: calendarBridgeMappingSchema }),
+      {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrfToken },
+        body: JSON.stringify(
+          calendarBridgeMappingCreateRequestSchema.parse(input),
+        ),
+      },
+    )
+  ).mapping;
+
+export const setCalendarBridgeMappingEnabled = async (
+  id: string,
+  revision: number,
+  enabled: boolean,
+  csrfToken: string,
+): Promise<CalendarBridgeMapping> =>
+  (
+    await request(
+      bridgeMappingPath(id),
+      z.object({ mapping: calendarBridgeMappingSchema }),
+      {
+        method: "PATCH",
+        headers: conditionalHeaders(revision, csrfToken),
+        body: JSON.stringify({ enabled }),
+      },
+    )
+  ).mapping;
+
+/** Never deletes events; pending writes are discarded only when asked. */
+export const removeCalendarBridgeMapping = (
+  id: string,
+  revision: number,
+  cancelPendingWork: boolean,
+  csrfToken: string,
+): Promise<void> =>
+  requestEmpty(
+    `${bridgeMappingPath(id)}${cancelPendingWork ? "?pendingWork=cancel" : ""}`,
+    { method: "DELETE", headers: conditionalHeaders(revision, csrfToken) },
+  );
+
+export const runCalendarBridgeMapping = (
+  id: string,
+  csrfToken: string,
+): Promise<CalendarBridgeRunResponse> =>
+  request(`${bridgeMappingPath(id)}/run`, calendarBridgeRunResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
+
+export const getCalendarBridgeReview = (
+  id: string,
+): Promise<CalendarBridgeReviewResponse> =>
+  request(
+    `${bridgeMappingPath(id)}/review`,
+    calendarBridgeReviewResponseSchema,
+  );
+
+/** `approve` lets the next pass delete the other copy; `keep` unlinks it. */
+export const decideCalendarBridgeDeletion = async (
+  mappingId: string,
+  linkId: string,
+  linkRevision: number,
+  decision: "approve" | "decline",
+  csrfToken: string,
+): Promise<CalendarBridgeLink> =>
+  (
+    await request(
+      `${bridgeMappingPath(mappingId)}/links/${encodeURIComponent(linkId)}/${decision}-deletion`,
+      z.object({ link: calendarBridgeLinkSchema }),
+      { method: "POST", headers: conditionalHeaders(linkRevision, csrfToken) },
+    )
+  ).link;
+
+export const resolveCalendarBridgeConflict = async (
+  mappingId: string,
+  conflictId: string,
+  linkRevision: number,
+  keep: CalendarBridgeSide,
+  csrfToken: string,
+): Promise<CalendarBridgeOperation> =>
+  (
+    await request(
+      `${bridgeMappingPath(mappingId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
+      z.object({ operation: calendarBridgeOperationSchema }),
+      {
+        method: "POST",
+        headers: conditionalHeaders(linkRevision, csrfToken),
+        body: JSON.stringify({ keep }),
+      },
+    )
+  ).operation;
+
+/**
+ * Owner data export and restore (issue #93, ADR 0034). Owner session only;
+ * the export is returned as text so the browser saves the exact bytes.
+ */
+export const downloadDataExport = async (): Promise<{
+  readonly filename: string;
+  readonly text: string;
+}> => {
+  const response = await ownerFetch("/api/data/export", {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => undefined);
+    const error = apiErrorSchema.safeParse(body);
+    const failure = new ApiRequestError(
+      response.status,
+      error.success ? error.data.code : "INVALID_RESPONSE",
+      error.success
+        ? error.data.message
+        : "The server returned an invalid response",
+    );
+    reportSessionFailure(failure);
+    throw failure;
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename =
+    /filename="([^"]+)"/.exec(disposition)?.[1] ?? "tadooer-export.json";
+  return { filename, text: await response.text() };
+};
+
+export const previewDataRestore = (rawJson: string, csrfToken: string) =>
+  request("/api/data/restore/preview", dataRestorePreviewSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: rawJson,
+  });
+
+export const applyDataRestore = (
+  rawJson: string,
+  inputHash: string,
+  mode: DataRestoreMode,
+  csrfToken: string,
+) =>
+  request("/api/data/restore/apply", dataRestoreApplyResponseSchema, {
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": csrfToken,
+      "X-Restore-Hash": inputHash,
+      "X-Restore-Mode": mode,
+    },
+    body: rawJson,
+  });

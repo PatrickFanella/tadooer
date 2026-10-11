@@ -1,13 +1,28 @@
 import { randomUUID } from "node:crypto";
-import type { PlannerResponse, DayPlanResponse } from "@suite/contracts";
+import type { PlannerResponse } from "@suite/contracts";
 import {
   plannerWindowSchema,
   planningPreferencesSchema,
 } from "@suite/contracts";
-import { buildCalmDay, zonedDayWindow } from "@suite/domain";
+import { planSortInstant, plannedWithinWindow } from "@suite/domain";
+import { readDayPlan } from "../day-plan.ts";
 import { sendJson, sendError, sameOrigin, readJson } from "../http-utils.ts";
 import type { RouteHandler } from "./shared.ts";
 import { taskResponse, calendarEventResponse } from "./shared.ts";
+
+const projectedEventTime = (value: string, allDay: boolean): string => {
+  const normalized =
+    allDay && /^\d{8}$/.test(value)
+      ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}T00:00:00.000Z`
+      : value;
+  return new Date(normalized).toISOString();
+};
+
+const eventIdentityKey = (
+  providerId: string,
+  calendarId: string,
+  href: string,
+): string => `${providerId}:${calendarId}:${href}`;
 
 export const handlePlanner: RouteHandler = async (
   request,
@@ -73,8 +88,14 @@ export const handlePlanner: RouteHandler = async (
             etag: resource.etag,
             rawIcs: resource.rawIcs,
             summary: resource.event.summary,
-            startsAt: new Date(resource.event.startsAt).toISOString(),
-            endsAt: new Date(resource.event.endsAt).toISOString(),
+            startsAt: projectedEventTime(
+              resource.event.startsAt,
+              resource.event.allDay,
+            ),
+            endsAt: projectedEventTime(
+              resource.event.endsAt,
+              resource.event.allDay,
+            ),
             allDay: resource.event.allDay,
             recurrence: "none" as const,
             freshness: "current" as const,
@@ -106,29 +127,36 @@ export const handlePlanner: RouteHandler = async (
       window.data.from,
       window.data.to,
     );
+    const linkedTaskIdByEvent = new Map(
+      database
+        .listActiveTaskCalendarEventLinks(session.owner.id)
+        .map((link) => [
+          eventIdentityKey(link.providerId, link.calendarId, link.eventHref),
+          link.taskId,
+        ]),
+    );
+    const { timeZone } = database.getPlanningPreferences(session.owner.id);
     const body: PlannerResponse = {
       window: window.data,
+      // Date-only tasks appear on each owner-zone day overlapping the window.
       tasks: database
         .listTasks(session.owner.id)
-        .filter(
-          (task) =>
-            task.plannedStart !== null &&
-            Date.parse(task.plannedStart) >= Date.parse(window.data.from) &&
-            Date.parse(task.plannedStart) < Date.parse(window.data.to),
+        .filter((task) => plannedWithinWindow(task, window.data, timeZone))
+        .toSorted(
+          (left, right) =>
+            planSortInstant(left, timeZone) -
+              planSortInstant(right, timeZone) ||
+            left.id.localeCompare(right.id),
         )
-        .toSorted((left, right) => {
-          const leftTime =
-            left.plannedStart === null
-              ? Number.POSITIVE_INFINITY
-              : Date.parse(left.plannedStart);
-          const rightTime =
-            right.plannedStart === null
-              ? Number.POSITIVE_INFINITY
-              : Date.parse(right.plannedStart);
-          return leftTime - rightTime || left.id.localeCompare(right.id);
-        })
         .map(taskResponse),
-      events: events.map(calendarEventResponse),
+      events: events.map((event) =>
+        calendarEventResponse(
+          event,
+          linkedTaskIdByEvent.get(
+            eventIdentityKey(event.providerId, event.calendarId, event.href),
+          ),
+        ),
+      ),
       freshness: fresh
         ? {
             state: "fresh",
@@ -165,71 +193,7 @@ export const handlePlanner: RouteHandler = async (
       );
       return true;
     }
-    const preferences = database.getPlanningPreferences(session.owner.id);
-    const dayWindow = zonedDayWindow(at.toISOString(), preferences.timeZone);
-    const tasks = database.listTasks(session.owner.id).map(taskResponse);
-    const events = database.listCalendarEvents(
-      session.owner.id,
-      dayWindow.from,
-      dayWindow.to,
-    );
-    const googleStatus = google.status(session.owner.id);
-    const baikalStatus = await connector.status(session.owner.id);
-    const providerFreshness: boolean[] = [];
-    if (baikalStatus.ok && baikalStatus.status.connected)
-      providerFreshness.push(true);
-    if (googleStatus.connected)
-      providerFreshness.push(
-        googleStatus.state === "connected" &&
-          googleStatus.freshness.every(({ state }) => state === "fresh"),
-      );
-    const calendarFresh =
-      providerFreshness.length > 0 && providerFreshness.every(Boolean);
-    const calm = buildCalmDay({
-      at: at.toISOString(),
-      tasks: tasks.map((task) => ({
-        id: task.id,
-        status: task.status,
-        plannedStart: task.plannedStart ?? null,
-      })),
-      busy: events.map(({ startsAt, endsAt }) => ({
-        startsAt,
-        endsAt,
-      })),
-      preferences,
-      calendarFresh,
-    });
-    const byId = new Map(tasks.map((task) => [task.id, task]));
-    const projectedAt = events.at(-1)?.projectedAt ?? null;
-    const body: DayPlanResponse = {
-      at: at.toISOString(),
-      state: calm.state,
-      preferences: {
-        ...preferences,
-        workingDays: [...preferences.workingDays],
-      },
-      orderedTasks: calm.orderedTaskIds.flatMap((id) => {
-        const task = byId.get(id);
-        return task === undefined ? [] : [task];
-      }),
-      nextTask:
-        calm.nextTaskId === null ? null : (byId.get(calm.nextTaskId) ?? null),
-      reminder: calm.reminder,
-      freshness: calendarFresh
-        ? {
-            state: "fresh",
-            projectedAt,
-            message: "Calendar projection is current",
-          }
-        : {
-            state: events.length === 0 ? "unavailable" : "stale",
-            projectedAt,
-            message:
-              events.length === 0
-                ? "Calendar projection is unavailable"
-                : "Showing the last safe calendar projection",
-          },
-    };
+    const body = await readDayPlan(ctx, session.owner.id, at);
     sendJson(response, 200, body);
     return true;
   }

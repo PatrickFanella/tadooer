@@ -16,14 +16,22 @@ import type {
   AutomationTokenScope,
   Project,
   Tag,
+  Note,
   Subtask,
   TemplateInstantiationResponse,
   ActiveSession as ContractActiveSession,
+  GoogleWriteRefusal,
 } from "@suite/contracts";
-import { automationCatalog } from "@suite/contracts";
+import {
+  automationCatalog,
+  automationTokenConfirmationPolicySchema,
+} from "@suite/contracts";
 import type {
   SuiteDatabase,
   TaskRecord,
+  ProjectRecord,
+  TagRecord,
+  NoteRecord,
   TemplateInstantiationResult,
   PlanningPlaceholderResolutionResult,
   PlanningPlaceholderResolutionRecord,
@@ -40,9 +48,15 @@ import {
 import type { AuthService } from "../auth.ts";
 import type { ServerConfig } from "../config.ts";
 import type { BaikalConnectorService, ConnectorFailure } from "../connector.ts";
-import type { GoogleConnectorService } from "../google-connector.ts";
 import type { IssueConnectorService } from "../issue-connector.ts";
+import type { GoogleConnectorService } from "../google-connector.ts";
+import type { CalendarSubscriptionService } from "../calendar-subscriptions.ts";
+import type { CalendarBridgeService } from "../calendar-bridge/service.ts";
+import type { CalendarBridgeWorker } from "../calendar-bridge/worker.ts";
+import type { ProviderThrottle } from "../calendar-bridge/throttle.ts";
 import type { NtfyPublisher } from "../notifications.ts";
+import type { LiveSyncService } from "../live-sync/service.ts";
+import type { HostedOAuthService } from "../hosted-oauth.ts";
 import { mimeTypes, securityHeaders } from "../http-utils.ts";
 
 export type RouteHandler = (
@@ -59,10 +73,22 @@ export interface RouteContext {
   readonly baikal: BaikalConnectorService;
   readonly google: GoogleConnectorService;
   readonly issues: IssueConnectorService;
+  /** Read-only iCal subscriptions (ADR 0032). */
+  readonly calendarSubscriptions: CalendarSubscriptionService;
+  /** Google-Baikal bridge (ADR 0041); passes run only when called. */
+  readonly calendarBridge: CalendarBridgeService;
+  /** ADR 0043 background worker; undefined when not configured. */
+  readonly calendarBridgeWorker?: CalendarBridgeWorker | undefined;
+  /** ADR 0043 Google cooldown shared by routes and the worker. */
+  readonly googleThrottle?: ProviderThrottle;
   readonly ntfy: NtfyPublisher | undefined;
   readonly sessionClock: SessionClock;
   readonly requestCounts: Map<number, number>;
   readonly triggerNotifications?: () => Promise<void>;
+  /** Live sync hint streams (ADR 0045). */
+  readonly liveSync: LiveSyncService;
+  /** ADR 0051 authorization server; absent keeps every endpoint disabled. */
+  readonly hostedOAuth?: HostedOAuthService;
 }
 
 export const automationTokenResponse = (token: {
@@ -74,11 +100,15 @@ export const automationTokenResponse = (token: {
   readonly lastUsedAt: string | null;
   readonly expiresAt: string | null;
   readonly revokedAt: string | null;
+  readonly confirmationPolicy: string;
 }) => ({
   id: token.id,
   ownerId: token.ownerId,
   label: token.label,
   scopes: token.scopes,
+  confirmationPolicy: automationTokenConfirmationPolicySchema.parse(
+    token.confirmationPolicy,
+  ),
   createdAt: token.createdAt,
   lastUsedAt: token.lastUsedAt,
   expiresAt: token.expiresAt ?? token.createdAt,
@@ -138,6 +168,19 @@ export const taskResponse = (task: TaskRecord): Task => ({
   completedAt: task.completedAt,
   deletedAt: task.deletedAt,
   plannedStart: task.plannedStart,
+  plannedDay: task.plannedDay ?? null,
+  // The database CHECK limits stored offsets to the contract values.
+  startReminder: (task.startReminder ?? { kind: "default" }) as NonNullable<
+    Task["startReminder"]
+  >,
+  deadlineReminder:
+    task.deadlineReminderMinutes == null
+      ? null
+      : {
+          minutes: task.deadlineReminderMinutes as NonNullable<
+            Task["deadlineReminder"]
+          >["minutes"],
+        },
   deadline:
     task.deadlineDate == null
       ? task.deadlineAt == null
@@ -147,10 +190,23 @@ export const taskResponse = (task: TaskRecord): Task => ({
   estimateMinutes: task.estimateMinutes,
   projectId: task.projectId ?? null,
   tagIds: [...(task.tagIds ?? [])],
+  parentId: task.parentId ?? null,
+  childPosition: task.childPosition ?? null,
+  // ADR 0022: only archived history carries archivedAt.
+  ...(task.archivedAt == null ? {} : { archivedAt: task.archivedAt }),
+  // ADR 0023: recurring instances name their series and occurrence date.
+  recurrence:
+    task.recurrence == null
+      ? null
+      : {
+          seriesId: task.recurrence.seriesId,
+          occurrenceDate: task.recurrence.occurrenceDate,
+        },
 });
 
 export const calendarEventResponse = (
   event: CalendarEventProjectionRecord,
+  linkedTaskId?: string,
 ): PlannerResponse["events"][number] => ({
   identity: {
     providerId: event.providerId,
@@ -164,6 +220,7 @@ export const calendarEventResponse = (
   startsAt: event.startsAt,
   endsAt: event.endsAt,
   allDay: event.allDay,
+  ...(linkedTaskId === undefined ? {} : { linkedTaskId }),
   recurrence: event.recurrence ?? "none",
   projectedAt: event.projectedAt,
   source: {
@@ -293,6 +350,93 @@ export const connectorStatus = (reason: ConnectorFailure): number =>
         ? 409
         : 502;
 
+/**
+ * One actionable, credential-free message per connector failure (ADR 0039).
+ * Messages name the next step and never echo the username, password,
+ * request body or a remote response body.
+ */
+export const describeConnectorFailure = (
+  reason: ConnectorFailure,
+): {
+  readonly status: number;
+  readonly code: string;
+  readonly message: string;
+} => {
+  const status = connectorStatus(reason);
+  switch (reason) {
+    case "authentication-required":
+      return {
+        status,
+        code: "BAIKAL_AUTHENTICATION_FAILED",
+        message:
+          "Baïkal rejected the username or password. Check the DAV user under Users and resources in Baïkal's admin interface; the admin account cannot sign in to CalDAV.",
+      };
+    case "authorization-denied":
+      return {
+        status,
+        code: "BAIKAL_PERMISSION_DENIED",
+        message:
+          "Baïkal accepted the sign-in but denied access to this account's calendars. Check the user's calendar permissions in Baïkal.",
+      };
+    case "not-found":
+      return {
+        status,
+        code: "BAIKAL_ENDPOINT_NOT_FOUND",
+        message:
+          "The configured Baïkal endpoint has no CalDAV principal for this user. Set BAIKAL_ENDPOINT to Baïkal's /dav.php/ address.",
+      };
+    case "remote-unavailable":
+      return {
+        status,
+        code: "BAIKAL_SERVER_ERROR",
+        message:
+          "Baïkal answered with a server error. Check that the Baïkal service is healthy, then try again.",
+      };
+    case "invalid-protocol":
+      return {
+        status,
+        code: "BAIKAL_NOT_CALDAV",
+        message:
+          "The configured endpoint did not answer as a CalDAV server. Set BAIKAL_ENDPOINT to Baïkal's /dav.php/ address, not the admin interface or site root.",
+      };
+    case "caldav-unsupported":
+      return {
+        status,
+        code: "BAIKAL_CALDAV_DISABLED",
+        message:
+          "The endpoint answered WebDAV requests but does not offer CalDAV calendars. Enable CalDAV in Baïkal's settings and check that BAIKAL_ENDPOINT ends in /dav.php/.",
+      };
+    case "unsafe-remote-url":
+      return {
+        status,
+        code: "BAIKAL_UNSAFE_URL",
+        message:
+          "Baïkal advertised an address outside the configured endpoint origin. Make Baïkal's public host and port match BAIKAL_ENDPOINT; Tadooer does not contact other hosts.",
+      };
+    case "redirected":
+      return {
+        status,
+        code: "BAIKAL_REDIRECTED",
+        message:
+          "The endpoint answered with a redirect, which Tadooer does not follow. Set BAIKAL_ENDPOINT to the final /dav.php/ address, including https:// when Baïkal requires TLS.",
+      };
+    case "transport-failed":
+      return {
+        status,
+        code: "BAIKAL_UNREACHABLE",
+        message:
+          "Tadooer could not reach the configured Baïkal endpoint. Check the hostname, port, network and TLS certificate; install a private certificate authority with NODE_EXTRA_CA_CERTS.",
+      };
+    case "credential-unavailable":
+      return {
+        status,
+        code: "BAIKAL_RECONNECT_REQUIRED",
+        message:
+          "The saved Baïkal credential no longer matches the configured endpoint or credential key. Connect again with the Baïkal username and password.",
+      };
+  }
+};
+
 export const sendEmpty = (response: ServerResponse, status: number): void => {
   response.writeHead(status, securityHeaders);
   response.end();
@@ -328,26 +472,24 @@ export const parseCursor = (
     : undefined;
 };
 
-export const projectResponse = (project: {
-  readonly id: string;
-  readonly ownerId: string;
-  readonly title: string;
-  readonly revision: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly archivedAt: string | null;
-}): Project => ({ ...project });
+export const projectResponse = (project: ProjectRecord): Project => ({
+  id: project.id,
+  ownerId: project.ownerId,
+  title: project.title,
+  revision: project.revision,
+  createdAt: project.createdAt,
+  updatedAt: project.updatedAt,
+  archivedAt: project.archivedAt,
+  color: project.color,
+  icon: project.icon,
+  position: project.position,
+  hiddenFromMenu: project.hiddenFromMenu,
+  completedAt: project.completedAt,
+  backlogEnabled: project.backlogEnabled,
+  backlogTaskIds: [...project.backlogTaskIds],
+});
 
-export const tagResponse = (tag: {
-  readonly id: string;
-  readonly ownerId: string;
-  readonly title: string;
-  readonly normalizedName: string;
-  readonly revision: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly archivedAt: string | null;
-}): Tag => ({
+export const tagResponse = (tag: TagRecord): Tag => ({
   id: tag.id,
   ownerId: tag.ownerId,
   displayName: tag.title,
@@ -356,7 +498,12 @@ export const tagResponse = (tag: {
   createdAt: tag.createdAt,
   updatedAt: tag.updatedAt,
   archivedAt: tag.archivedAt,
+  color: tag.color,
+  icon: tag.icon,
+  position: tag.position,
 });
+
+export const noteResponse = (note: NoteRecord): Note => ({ ...note });
 
 export const subtaskResponse = (subtask: {
   readonly id: string;
@@ -428,7 +575,7 @@ export const activeFromPersistence = (
     startedAt: interval.startedAt,
     endedAt: interval.endedAt,
     closedBy: interval.closedBy as
-      "pause" | "break" | "complete" | "takeover" | "expiry" | null,
+      "pause" | "break" | "complete" | "takeover" | "expiry" | "idle" | null,
   })),
   events: events.map((event) => ({
     revision: event.revision,
@@ -500,3 +647,49 @@ export const activeResponse = (
   currentIntervalId:
     session.intervals.find((interval) => interval.endedAt === null)?.id ?? null,
 });
+
+const googleWriteRefusalMessages: Record<GoogleWriteRefusal, string> = {
+  "not-connected": "Google Calendar is not connected",
+  "reconnect-required":
+    "Google authorization expired or was revoked; reconnect before changing events",
+  "consent-required":
+    "Allow event changes for Google Calendar before writing to it",
+  "scope-missing":
+    "Google no longer grants event changes; allow event changes again",
+  "role-unknown":
+    "This calendar's Google permissions are unknown; sync Google Calendar first",
+  "read-only-calendar": "This Google calendar is read-only for your account",
+};
+
+/**
+ * ADR 0040 write gate for route handlers. Returns the refusal to send for a
+ * write aimed at a Google calendar, or undefined for other providers. A Google
+ * calendar that passes the gate is still refused until the write adapter of
+ * #40 exists, so no reservation or provider call is ever made for it here.
+ */
+export const googleCalendarWriteRefusal = (
+  google: GoogleConnectorService,
+  ownerId: string,
+  calendar: { readonly id: string; readonly kind: string },
+):
+  | {
+      readonly status: number;
+      readonly code: string;
+      readonly message: string;
+    }
+  | undefined => {
+  if (calendar.kind !== "google") return undefined;
+  const capability = google.writeCapability(ownerId, calendar.id);
+  return capability.writable
+    ? {
+        status: 409,
+        code: "GOOGLE_WRITE_NOT_AVAILABLE",
+        message:
+          "Writing to Google calendars is not available yet; choose a Baïkal calendar",
+      }
+    : {
+        status: 403,
+        code: "GOOGLE_CALENDAR_NOT_WRITABLE",
+        message: googleWriteRefusalMessages[capability.reason],
+      };
+};

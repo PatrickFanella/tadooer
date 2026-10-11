@@ -20,24 +20,55 @@ export const superProductivitySections = {
   task: "applied",
   project: "applied",
   tag: "applied",
-  taskRepeatCfg: "parity",
-  archiveYoung: "parity",
-  archiveOld: "parity",
-  note: "blocked",
-  section: "blocked",
+  // Repeat configurations apply as recurring series since #42 (ADR 0023);
+  // their fields are classified in super-productivity-recurrence.ts.
+  taskRepeatCfg: "applied",
+  // Archived tasks apply as read-only history since #38 (ADR 0022); their
+  // timeTracking part applies since #41 (ADR 0024).
+  archiveYoung: "applied",
+  archiveOld: "applied",
+  // Notes and menu order apply since #28 (ADR 0019); menuTree folders apply
+  // since #63 (ADR 0028), with boards and sections. Their fields are in
+  // super-productivity-boards.ts.
+  note: "applied",
+  menuTree: "applied",
+  section: "applied",
   reminders: "blocked",
-  metric: "blocked",
-  timeTracking: "blocked",
-  pluginUserData: "blocked",
-  // Counter definitions are configuration; recorded values block (see preview).
-  simpleCounter: "blocked",
-  planner: "configuration",
-  boards: "configuration",
-  menuTree: "configuration",
-  globalConfig: "configuration",
+  // Metric days apply as daily evaluations since #64 (ADR 0025); their
+  // fields are classified in super-productivity-counters.ts.
+  metric: "applied",
+  // Work start/end and breaks per project, tag and day (ADR 0024).
+  timeTracking: "applied",
+  // Opaque plugin data and plugin enabled flags are kept as inert records
+  // since #66 (ADR 0026); their fields are in super-productivity-plugins.ts.
+  pluginUserData: "applied",
+  // Counters and their day values apply since #64 (ADR 0025).
+  simpleCounter: "applied",
+  // Planner day order applies as saved day orders since #98 (ADR 0027); its
+  // keys are classified in super-productivity-day-order.ts.
+  planner: "applied",
+  boards: "applied",
+  // Safe application, shortcut and planning settings apply since #67
+  // (ADR 0030); every section and field is classified in
+  // super-productivity-config.ts. Credentials are never read.
+  globalConfig: "applied",
+  // Provider configuration holds credentials. The importer reads only each
+  // provider's id and key (and a Gitea host and repository to rebuild issue
+  // addresses); nothing from this section is stored.
   issueProvider: "configuration",
-  pluginMetadata: "configuration",
+  pluginMetadata: "applied",
 } as const satisfies Record<string, SectionDisposition>;
+
+/**
+ * Keys of an archiveYoung/archiveOld section (ArchiveModel). `task` and
+ * `timeTracking` apply (ADR 0022, ADR 0024); flush timestamps are transient.
+ */
+export const superProductivityArchiveKeys = {
+  task: "applied",
+  timeTracking: "applied",
+  lastTimeTrackingFlush: "ignored",
+  lastFlush: "ignored",
+} as const satisfies Record<string, FieldDisposition>;
 
 export const superProductivityTaskFields = {
   id: "applied",
@@ -49,33 +80,48 @@ export const superProductivityTaskFields = {
   doneOn: "applied",
   created: "applied",
   dueWithTime: "applied",
+  // Date-only plan; superseded when dueWithTime is also set (ADR 0020).
+  dueDay: "applied",
   deadlineDay: "applied",
   deadlineWithTime: "applied",
   timeEstimate: "applied",
-  parentId: "parity",
-  subTaskIds: "parity",
-  repeatCfgId: "parity",
-  timeSpent: "parity",
-  timeSpentOnDay: "parity",
-  dueDay: "parity",
+  parentId: "applied",
+  subTaskIds: "applied",
+  // Links an instance to its series with its occurrence date (ADR 0023).
+  repeatCfgId: "applied",
+  // Daily work history (ADR 0024). timeSpentOnDay imports as daily time
+  // entries; timeSpent is the reconciliation total and stays in provenance.
+  timeSpent: "applied",
+  timeSpentOnDay: "applied",
   modified: "ignored",
   hasPlannedTime: "ignored",
   _hideSubTasksMode: "ignored",
-  remindAt: "blocked",
-  deadlineRemindAt: "blocked",
+  // Applied only when the absolute time is an exact supported offset before
+  // dueWithTime / deadlineWithTime; otherwise apply is blocked (ADR 0020).
+  remindAt: "applied",
+  deadlineRemindAt: "applied",
+  // Legacy link into the reminders section, which stays blocked.
   reminderId: "blocked",
-  attachments: "blocked",
-  issueId: "blocked",
-  issueProviderId: "blocked",
-  issueType: "blocked",
-  issueWasUpdated: "blocked",
-  issueLastUpdated: "blocked",
-  issueAttachmentNr: "blocked",
-  issueTimeTracked: "blocked",
-  issuePoints: "blocked",
-  issueLastSyncedValues: "blocked",
-  // Pre-v14 schedule; Super Productivity migrates it to dueWithTime on import.
-  plannedAt: "blocked",
+  // Linked issue and attachments (ADR 0021). Attachment records are reviewed
+  // in super-productivity-links.ts; local files and commands stay inert.
+  attachments: "applied",
+  issueId: "applied",
+  issueProviderId: "applied",
+  issueType: "applied",
+  issueLastUpdated: "applied",
+  // Last-synced provider state: kept as opaque link metadata and provenance,
+  // never refreshed without a new provider authorization.
+  issueWasUpdated: "retained",
+  issueAttachmentNr: "retained",
+  issueTimeTracked: "retained",
+  issuePoints: "retained",
+  issueLastSyncedValues: "retained",
+  // Pre-v14 schedule; Super Productivity reads it as dueWithTime when it
+  // loads an export, and so does this import on a live task without a
+  // dueWithTime (reported as schedule_migrated). A live task where both are
+  // set and differ blocks. On an archived task it is inert history and kept
+  // in provenance (ADR 0022).
+  plannedAt: "applied",
   // Leaked TaskWithSubTasks view copy; the children are exported as tasks.
   subTasks: "ignored",
 } as const satisfies Record<string, FieldDisposition>;
@@ -83,20 +129,25 @@ export const superProductivityTaskFields = {
 export const superProductivityProjectFields = {
   id: "applied",
   title: "applied",
-  created: "retained",
+  created: "applied",
   updated: "retained",
-  icon: "retained",
+  icon: "applied",
+  // Only a valid theme.primary becomes the project colour; the rest of the
+  // theme (backgrounds, hues, contrast) is provenance only.
   theme: "retained",
+  // Task order inside a project has no Tadooer equivalent yet.
   taskIds: "retained",
-  isHiddenFromMenu: "retained",
-  isEnableBacklog: "retained",
+  isHiddenFromMenu: "applied",
+  isEnableBacklog: "applied",
   advancedCfg: "retained",
-  backlogTaskIds: "blocked",
-  noteIds: "blocked",
+  backlogTaskIds: "applied",
+  // Orders the project's notes; note association comes from note.projectId.
+  noteIds: "applied",
+  // Legacy free-text project notes predate the note section.
   notes: "blocked",
-  isArchived: "blocked",
-  isDone: "blocked",
-  doneOn: "blocked",
+  isArchived: "applied",
+  isDone: "applied",
+  doneOn: "applied",
   // Legacy per-project provider configuration can hold credentials.
   issueIntegrationCfgs: "ignored",
 } as const satisfies Record<string, FieldDisposition>;
@@ -104,17 +155,43 @@ export const superProductivityProjectFields = {
 export const superProductivityTagFields = {
   id: "applied",
   title: "applied",
-  created: "retained",
+  created: "applied",
   updated: "retained",
   modified: "retained",
-  color: "retained",
-  icon: "retained",
+  color: "applied",
+  icon: "applied",
+  // theme.primary is the colour fallback when color is empty.
   theme: "retained",
   taskIds: "retained",
   advancedCfg: "retained",
   notes: "blocked",
-  isArchived: "blocked",
+  isArchived: "applied",
 } as const satisfies Record<string, FieldDisposition>;
+
+export const superProductivityNoteFields = {
+  id: "applied",
+  projectId: "applied",
+  content: "applied",
+  isPinnedToToday: "applied",
+  created: "applied",
+  modified: "retained",
+  isLock: "retained",
+  backgroundColor: "retained",
+  // Image notes reference files or URLs that the import cannot carry.
+  imgUrl: "blocked",
+} as const satisfies Record<string, FieldDisposition>;
+
+/**
+ * Super Productivity system tags. They are derived views or board markers,
+ * never ordinary imported tags: TODAY is the Today view (#29, ADR 0027) and
+ * the others are board markers on the task (#63, ADR 0028).
+ */
+export const superProductivitySystemTagIds = [
+  "TODAY",
+  "EM_URGENT",
+  "EM_IMPORTANT",
+  "KANBAN_IN_PROGRESS",
+] as const;
 
 /** False for absent, empty or default-off values that carry no user data. */
 export const populated = (value: unknown): boolean => {
