@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "version": "0.15.0-rc.3",
+  "createdAt": "2026-10-11T19:04:17Z",
+  "sourceCommit": "5660799987770a94698bdb4e44d8983aa72da498",
+  "image": "127.0.0.1:5000/subculture-collective/productivity-suite@sha256:10fa5a9362689e9ea23d9f6dd9403a94c6aeedbd03117ff5e0f58ae53354025c",
+  "publicOrigin": "https://tadooer.subcult.tv",
+  "status": "deployed"
+}
