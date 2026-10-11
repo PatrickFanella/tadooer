@@ -240,7 +240,9 @@ write-only publisher on NUC's private `management` network as documented in
 
 Build the Linux desktop bundle, its `tar.gz` and a SHA-256 file with
 `pnpm package:desktop`, and the unsigned macOS bundles (Apple silicon and
-Intel, one zip each) with `pnpm package:desktop:mac`; both run on Linux.
+Intel, one zip each) with `pnpm package:desktop:mac`; both run on Linux. On a
+Mac, `pnpm package:desktop:mac:universal` adds the universal bundle with an ad
+hoc signature, as a zip and a `.dmg`.
 `pnpm desktop:artifact` prints every artifact's name and checksum and the value
 for the release manifest. On first start the app asks for the server address
 and checks `/api/build` there before storing it; `SUITE_SERVER_URL` overrides

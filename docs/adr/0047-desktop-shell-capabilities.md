@@ -204,9 +204,11 @@ in `docs/operations/desktop.md`.
   `productivity-suite-desktop-<version>-darwin-arm64.zip` and `-darwin-x64.zip`,
   each a zip of `Productivity Suite.app` with a `.sha256` file, written by the
   same artifact script as the Linux tar.gz. A universal build was rejected for
-  now: it needs `lipo`, and `@electron/universal` refuses to run on any host
-  but macOS, while the build host is Linux. A Mac build step can add it later
-  without changing the two existing names.
+  the Linux host: it needs `lipo`, and `@electron/universal` refuses to run on
+  any host but macOS. Added 2026-10-11 as a Mac build step
+  (`package:desktop:mac:universal`): a third bundle, `-darwin-universal`, as a
+  zip and as a `.dmg`, signed ad hoc on the Mac. The two thin names are
+  unchanged.
 - **Bundle identifier `tv.subcult.tadooer`.** This is a proposal that the owner
   should confirm before the first signed release. macOS keys the login item,
   the notification and local-network permissions, the keychain entry and the
