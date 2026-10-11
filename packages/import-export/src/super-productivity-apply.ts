@@ -103,6 +103,11 @@ export interface TaskImportRecord {
 export const superProductivityNonBlockingIssueCodes: ReadonlySet<string> =
   new Set([
     "configuration_not_imported",
+    // A live task's estimate outside the bound: left empty, kept in
+    // provenance and flagged for review, never rounded.
+    "estimate_review",
+    // ADR 0020: a legacy plannedAt read as dueWithTime, as the source does.
+    "schedule_migrated",
     // ADR 0021: a link to a provider absent from the export is kept.
     "issue_provider_missing",
     // Stale sync metadata without an issue identity (kept in provenance).
@@ -329,9 +334,10 @@ export const prepareSuperProductivityImport = (
     sourceId: string,
     reason: TaskArchiveReviewReason,
     detail: string,
+    code: "history_review" | "estimate_review" = "history_review",
   ) => {
     reviewById.set(sourceId, [...(reviewById.get(sourceId) ?? []), reason]);
-    issues.push({ code: "history_review", sourceId, detail });
+    issues.push({ code, sourceId, detail });
   };
   const referencedTags = new Set(
     Object.values(liveTasks).flatMap((task) => strings(object(task).tagIds)),
@@ -411,11 +417,8 @@ export const prepareSuperProductivityImport = (
       }[kind];
       if (kind !== "task") reviewFields(kind, sourceId, source, fields);
       else {
-        // A legacy plannedAt on archived history has no live effect; it is
-        // kept in provenance rather than blocking (ADR 0022).
-        const blocked = fieldsWith(fields, "blocked").filter(
-          (field) =>
-            populated(source[field]) && !(archived && field === "plannedAt"),
+        const blocked = fieldsWith(fields, "blocked").filter((field) =>
+          populated(source[field]),
         );
         if (blocked.length > 0)
           problem(
@@ -507,19 +510,20 @@ export const prepareSuperProductivityImport = (
         true;
       const derivedEstimate = parentsWithChildren.has(sourceId);
       let estimate = derivedEstimate ? 0 : (task?.estimateMilliseconds ?? 0);
+      // An estimate outside the bound is never rounded. It is left empty,
+      // the source value stays in provenance and the task is flagged for
+      // review, so the owner sets it again by hand (ADR 0022 for history;
+      // the same disposition for a live task, reported separately).
       if (estimate % 60000 !== 0 || estimate > 720 * 60000) {
-        if (archived) {
-          estimate = 0;
-          flag(
-            sourceId,
-            "estimate_unrepresentable",
-            "Archived task estimate is not whole minutes up to 720; it is not applied, stays in import provenance and the task is flagged for review",
-          );
-        } else
-          problem(
-            sourceId,
-            "Estimate must fit whole minutes up to 720; no rounding is applied",
-          );
+        estimate = 0;
+        flag(
+          sourceId,
+          "estimate_unrepresentable",
+          archived
+            ? "Archived task estimate is not whole minutes up to 720; it is not applied, stays in import provenance and the task is flagged for review"
+            : "Estimate is not whole minutes up to 720 and is not rounded; it is not applied, stays in import provenance and the task is flagged for review",
+          archived ? "history_review" : "estimate_review",
+        );
       }
       for (const flag of [
         "isDone",

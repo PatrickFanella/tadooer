@@ -198,8 +198,8 @@ Storage: migration `0027_recurring_tasks` adds `recurring_series`,
   rule with no weekday, an unknown reminder option, an estimate that is not
   whole minutes up to 720, priority or board tags, missing projects or tags,
   malformed templates or dates, and unreviewed fields. `order` and
-  `disableAutoUpdateSubtasks` are retained in provenance; `quickSetting` is
-  ignored.
+  `disableAutoUpdateSubtasks` are retained in provenance; `quickSetting` and
+  the `modified` timestamp are ignored.
 - Series identity uses `task_import_sources` with entity kind `repeat_config`;
   a repeated import creates nothing, and a changed configuration fails with
   `IMPORT_SOURCE_CHANGED`.

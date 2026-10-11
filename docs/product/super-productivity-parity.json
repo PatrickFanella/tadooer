@@ -292,7 +292,8 @@
         "lastTaskCreation",
         "order",
         "disableAutoUpdateSubtasks",
-        "quickSetting"
+        "quickSetting",
+        "modified"
       ]
     },
     {

@@ -50,7 +50,8 @@ it("prepares exact core fields without retaining integration secrets", () => {
 });
 it("blocks unsupported workflows without rounding estimates or inventing dates", () => {
   for (const extra of [
-    { timeEstimate: 1 },
+    // A legacy plannedAt that disagrees with dueWithTime.
+    { plannedAt: 1700000000000, dueWithTime: 1700000060000 },
     // Reminders need an exact start; date-only plans have no reminder time.
     { dueDay: "2026-09-20", remindAt: 1700000000000 },
     { isDone: true },
@@ -325,9 +326,17 @@ it("reports every export section and blocks unreviewed or unsupported data", () 
   for (const task of [
     { deadlineRemindAt: 1700000000000 },
     { issueProviderId: "provider" },
-    { plannedAt: 1700000000000 },
   ])
     expect(prepare({}, task).canApply).toBe(false);
+  // A legacy plannedAt is read as dueWithTime, as the source does on load.
+  const migrated = prepare({}, { plannedAt: 1700000000000 });
+  expect(migrated.canApply).toBe(true);
+  expect(codes(migrated)).toContain("schedule_migrated");
+  expect(migrated.tasks[0]?.scheduledAt).toBe("2023-11-14T22:13:20.000Z");
+  expect(
+    prepare({}, { plannedAt: 1700000000000, dueWithTime: 1700000000000 })
+      .canApply,
+  ).toBe(true);
   expect(
     prepare({ tag: state({ x: { id: "x", title: "X", isDone: true } }) })
       .canApply,
@@ -351,6 +360,26 @@ it("applies tag colour while retaining reviewed fields in provenance", () => {
     color: "#abcdef",
   });
   expect(records[0]).toMatchObject({ color: "#abcdef", icon: null });
+});
+
+it("leaves an out-of-bound estimate empty and flags the live task for review", () => {
+  for (const timeEstimate of [1, 721 * 60000]) {
+    const { report, records } = prepareSuperProductivityImport(
+      JSON.stringify({
+        task: state({ t: { id: "t", title: "Task", timeEstimate } }),
+      }),
+    );
+    expect(report.canApply).toBe(true);
+    expect(report.issues.map(({ code }) => code)).toContain("estimate_review");
+    expect(report.issues.map(({ code }) => code)).not.toContain(
+      "history_review",
+    );
+    expect(records[0]?.estimateMinutes).toBeNull();
+    expect(records[0]?.review).toEqual(["estimate_unrepresentable"]);
+    expect(records[0]?.sourceJson).toContain(
+      `"timeEstimate":${String(timeEstimate)}`,
+    );
+  }
 });
 
 it("imports source children as ordered full tasks and keeps derived parent estimates in provenance", () => {
