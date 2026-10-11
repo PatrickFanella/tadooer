@@ -90,7 +90,7 @@ describe("History view", () => {
     expect(html).toContain("Created Dec 1, 2025 · completed Jan 2, 2026");
     expect(html).toContain("· Work");
     expect(html).toContain("Imported from Super Productivity (archiveOld)");
-    expect(html).toContain("Tag gone-tag: not in the source export");
+    expect(html).toContain("Tag: not in the source export (gone-tag…)");
     expect(html).toContain("Needs review");
     expect(html).toContain("Imported without a title");
     expect(html).toContain("Child tasks of Quarterly report");

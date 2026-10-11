@@ -76,7 +76,7 @@ import {
   getPlanner,
   getProjects,
   getRecoveryTasks,
-  getSubtasks,
+  getAllSubtasks,
   getTags,
   getTemplateLibrary,
   getTemplateSets,
@@ -657,13 +657,13 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         );
       }
       if (!isCurrent()) return;
-      const subtaskEntries = await Promise.all(
-        visibleTasks.map(
-          async (task) => [task.id, await getSubtasks(task.id)] as const,
+      const allSubtasks = await getAllSubtasks();
+      if (!isCurrent()) return;
+      setSubtasks(
+        Object.fromEntries(
+          visibleTasks.map((task) => [task.id, allSubtasks[task.id] ?? []]),
         ),
       );
-      if (!isCurrent()) return;
-      setSubtasks(Object.fromEntries(subtaskEntries));
       setState({
         kind: "authenticated",
         session,
@@ -2990,6 +2990,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           <PlannerPage
             planner={plannerView}
             timeZone={state.planningPreferences?.timeZone ?? "UTC"}
+            workdayStart={state.planningPreferences?.workdayStart}
             busy={busy}
             onLoadPlanner={loadPlanner}
             loading={plannerLoading}

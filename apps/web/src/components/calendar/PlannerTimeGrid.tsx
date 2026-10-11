@@ -1,6 +1,6 @@
 import type { CalendarEventProjection, Task } from "@suite/contracts";
 import { CalendarDaysIcon, CheckSquareIcon } from "lucide-react";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -11,6 +11,8 @@ import {
 import "./planner-time-grid.css";
 
 export interface PlannerTimeGridProps {
+  /** "HH:MM" in the owner's zone that a newly opened range scrolls to. */
+  readonly scrollToTime?: string | undefined;
   readonly view: CalendarView;
   readonly range: CalendarRange;
   readonly timeZone: string;
@@ -261,6 +263,7 @@ export function PlannerTimeGrid({
   tasks,
   onSelectEntry,
   dayOrders,
+  scrollToTime,
 }: PlannerTimeGridProps) {
   const [now, setNow] = useState(() => new Date());
   const days = plannerCalendarDays(range, view, timeZone);
@@ -271,6 +274,24 @@ export function PlannerTimeGrid({
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(interval);
   }, []);
+  // The grid is a full day tall; a new range opens with the working day in
+  // view instead of midnight. The page scrolls, not the grid.
+  const hoursRef = useRef<HTMLDivElement | null>(null);
+  const rangeKey = `${range.from}:${range.to}:${view}`;
+  useEffect(() => {
+    const hours = hoursRef.current;
+    if (hours === null || scrollToTime === undefined) return;
+    const [hour = Number.NaN, minute = 0] = scrollToTime.split(":").map(Number);
+    if (!Number.isFinite(hour)) return;
+    const fraction = (hour + minute / 60) / 24;
+    const top =
+      hours.getBoundingClientRect().top +
+      window.scrollY +
+      hours.offsetHeight * fraction -
+      Math.min(window.innerHeight * 0.2, 160);
+    window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+    // Runs once per opened range.
+  }, [rangeKey, scrollToTime]);
 
   return (
     <section
@@ -375,6 +396,7 @@ export function PlannerTimeGrid({
                 </div>
               </div>
               <div
+                ref={index === 0 ? hoursRef : undefined}
                 className="planner-time-grid__hours"
                 aria-label={`Timed schedule for ${day.longLabel}`}
               >
@@ -405,8 +427,12 @@ export function PlannerTimeGrid({
                     style={{
                       top: `${String(entry.top)}%`,
                       height: `${String(entry.height)}%`,
+                      // A later lane starts further right and runs to the
+                      // edge over the earlier ones, so each block keeps most
+                      // of the column instead of an equal sliver.
                       left: `calc(${String((entry.column / entry.columns) * 100)}% + 0.2rem)`,
-                      width: `calc(${String(100 / entry.columns)}% - 0.4rem)`,
+                      width: `calc(${String(100 - (entry.column / entry.columns) * 100)}% - 0.4rem)`,
+                      zIndex: 1 + entry.column,
                     }}
                     aria-label={`${entry.title}, ${timeLabel(entry.start, timeZone)} to ${timeLabel(entry.end, timeZone)}. ${entry.detail}`}
                     onClick={() => {

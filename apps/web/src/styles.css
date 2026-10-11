@@ -1053,7 +1053,33 @@
   }
   .task-capture [data-slot="card-content"] {
     display: grid;
-    gap: 0.875rem;
+    gap: 0.5rem;
+  }
+  /* One line to capture; everything else waits behind a disclosure. */
+  .capture-primary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: end;
+  }
+  .capture-more {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .capture-more > summary {
+    font-size: var(--text-xs);
+    color: var(--subtext);
+    width: fit-content;
+  }
+  .capture-more:not([open]) > summary {
+    margin-bottom: 0;
+  }
+  .today-section__more {
+    margin: 0.25rem 0 0;
+  }
+  .today-section__more button {
+    min-height: 0;
+    padding: 0;
   }
   .capture-paste {
     display: grid;

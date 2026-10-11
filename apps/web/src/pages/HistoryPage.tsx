@@ -49,7 +49,9 @@ const referenceLabel = (
     recurrence_unsupported: "imported before recurring series were supported",
     lifecycle_mismatch: "the parent was in the other of active and archived",
   }[reference.reason];
-  return `${what} ${reference.sourceId}: ${why}`;
+  // The source id is the only name left for a record that did not import;
+  // it stays, shortened, after the sentence.
+  return `${what}: ${why} (${reference.sourceId.slice(0, 8)}…)`;
 };
 
 const formatDate = (value: string | null | undefined, timeZone: string) =>
@@ -281,7 +283,7 @@ export const HistoryPage = ({
       return result.state;
     });
   return (
-    <section
+    <div
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="history-heading"
     >
@@ -336,6 +338,6 @@ export const HistoryPage = ({
         onRestore={restore}
         onLoadMore={() => void run(() => loadMoreHistory(api, state))}
       />
-    </section>
+    </div>
   );
 };

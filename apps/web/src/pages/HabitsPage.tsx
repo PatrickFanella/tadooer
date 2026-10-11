@@ -84,7 +84,7 @@ export const HabitsPage = ({
     if (saved) form.reset();
   };
   return (
-    <section
+    <div
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="habits-heading"
     >
@@ -308,6 +308,6 @@ export const HabitsPage = ({
           );
         })}
       </div>
-    </section>
+    </div>
   );
 };

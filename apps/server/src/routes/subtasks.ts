@@ -23,6 +23,18 @@ export const handleSubtasks: RouteHandler = async (
 ) => {
   const { stores: database, auth } = ctx;
   const method = request.method ?? "GET";
+  // One read for every checklist on startup instead of one per task.
+  if (method === "GET" && url.pathname === "/api/subtasks") {
+    const session = auth.authenticate(request, false);
+    if (session === undefined) {
+      sendError(response, 401, "AUTH_REQUIRED", "Authentication required");
+      return true;
+    }
+    sendJson(response, 200, {
+      subtasks: database.listAllSubtasks(session.owner.id).map(subtaskResponse),
+    });
+    return true;
+  }
   const taskMatch = /^\/api\/tasks\/([0-9a-f-]{36})\/subtasks$/.exec(
     url.pathname,
   );

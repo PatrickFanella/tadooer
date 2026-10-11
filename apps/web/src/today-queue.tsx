@@ -91,6 +91,9 @@ export const TodayQueue = ({
           const task = byId.get(id);
           return task === undefined ? [] : [task];
         });
+  const [expandedSections, setExpandedSections] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const overdue =
     queue?.overdueTaskIds.flatMap((id) => {
       const task = byId.get(id);
@@ -167,24 +170,57 @@ export const TodayQueue = ({
       />
     );
   };
+  // A section shows its first rows; the owner opens the rest. A planner with
+  // hundreds of overdue or unplanned tasks otherwise renders them all.
+  const sectionLimit = 12;
   const section = (
     title: string,
     className: string,
     listed: readonly Task[],
     state: "overdue" | "scheduled" | "planned-day" | "planning",
-  ) => (
-    <Card
-      className={`today-section ${className}`}
-      aria-labelledby={`${className}-title`}
-    >
-      <CardHeader>
-        <SectionHeading id={`${className}-title`} title={title} />
-      </CardHeader>
-      <CardContent>
-        <ul>{listed.map((task) => row(task, state))}</ul>
-      </CardContent>
-    </Card>
-  );
+  ) => {
+    const expanded = expandedSections.has(className);
+    const shown = expanded ? listed : listed.slice(0, sectionLimit);
+    const hidden = listed.length - shown.length;
+    return (
+      <Card
+        className={`today-section ${className}`}
+        aria-labelledby={`${className}-title`}
+      >
+        <CardHeader>
+          <SectionHeading
+            id={`${className}-title`}
+            title={
+              listed.length > sectionLimit
+                ? `${title} (${String(listed.length)})`
+                : title
+            }
+          />
+        </CardHeader>
+        <CardContent>
+          <ul>{shown.map((task) => row(task, state))}</ul>
+          {hidden > 0 || expanded ? (
+            <p className="today-section__more">
+              <Button
+                variant="link"
+                type="button"
+                onClick={() =>
+                  setExpandedSections((current) => {
+                    const next = new Set(current);
+                    if (next.has(className)) next.delete(className);
+                    else next.add(className);
+                    return next;
+                  })
+                }
+              >
+                {expanded ? "Show fewer" : `Show ${String(hidden)} more`}
+              </Button>
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="today-layout">
