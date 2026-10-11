@@ -4,7 +4,7 @@ Status: adopted 2026-09-23 for the web app; identity section added 2026-10-02.
 The stylesheet `apps/web/src/styles.css` is the source of truth for values;
 `tokens.css` beside this file restates them as plain custom properties, and
 `examples/01-specimen.html` shows them without the app. The Studio brand pack
-in `subcult-tv/studio/branding/library/brands/tadooer/` copies this directory
+in `subcult-tv/studio/brands/tadooer/` copies this directory
 with hashes and holds the promotional artwork; promotional layouts are edited
 there, interface rules here.
 
@@ -202,3 +202,20 @@ A light variant. Both source palettes are dark-first, and a Latte-style light
 theme would be a separate piece of work with its own contrast pass. The
 Studio pack's light and monochrome logo variants exist for print and foreign
 backgrounds, not for the app.
+
+## Directions considered
+
+`examples/directions.html` renders the same Today screen under three
+candidate systems, each with its colour roles, type and density:
+
+- **A, Planner night**: this system. Catppuccin Mocha surfaces, Dracula accents.
+  The Studio brand pack (`subcult-tv/studio/brands/tadooer/`) generates the
+  mark, icons and link preview from it.
+- **B, Terminal ledger**: the SUBCULT family look from the Subcult OS pack
+  (black canvas, Oswald capitals, Space Mono, purple and cyan, square corners).
+- **C, Paper desk**: a light direction from the Prichal and Dedhed paper
+  palettes with Tadooer's purple kept as the single action colour.
+
+A was applied on 2026-10-10 and the owner approved the Studio pack's artwork
+the same day. B and C are reference only; switching would mean new token
+values, new fonts, a contrast pass and regenerated brand assets.
