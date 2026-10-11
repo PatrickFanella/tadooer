@@ -37,54 +37,63 @@ export const TaskCaptureForm = ({
         <SectionHeading title="Capture a task" />
       </CardHeader>
       <CardContent>
-        <form onSubmit={(event) => void onSubmit(event)}>
-          <Field label="What needs doing?" name="title" autoComplete="off" />
-          <Field
-            label="Notes"
-            name="notes"
-            autoComplete="off"
-            required={false}
-          />
-          <label className="field">
-            <span>Estimate minutes</span>
-            <Input
-              name="estimateMinutes"
-              type="number"
-              min="1"
-              max="720"
-              key={defaultEstimateMinutes ?? "none"}
-              defaultValue={defaultEstimateMinutes ?? ""}
+        <form
+          className="capture-form"
+          onSubmit={(event) => void onSubmit(event)}
+        >
+          <div className="capture-primary">
+            <Field label="What needs doing?" name="title" autoComplete="off" />
+            <Button disabled={busy}>
+              {busy ? "Capturing…" : "Capture task"}
+            </Button>
+          </div>
+          <details className="capture-more">
+            <summary>More options</summary>
+            <Field
+              label="Notes"
+              name="notes"
+              autoComplete="off"
+              required={false}
             />
-          </label>
-          <label className="capture-option">
-            <Checkbox name="structured" />
-            Use capture markers (online)
-          </label>
-          <label className="capture-option">
-            <Checkbox name="createTags" />
-            Create unknown #tags with this task
-          </label>
-          <p className="capture-help">
-            Use +"Project name", #tag, 30m or 1h30m, @tomorrow (planned day),
-            @tomorrow 09:00 (planned time), @every monday, or !Friday. Web
-            addresses are attached as links per the setting below. Quote text or
-            escape a marker with a backslash to keep it literal. An unknown #tag
-            is created only when the box above is ticked. Dates use your
-            planning timezone.
-          </p>
-          <Button disabled={busy}>
-            {busy ? "Capturing…" : "Capture task"}
-          </Button>
+            <label className="field">
+              <span>Estimate minutes</span>
+              <Input
+                name="estimateMinutes"
+                type="number"
+                min="1"
+                max="720"
+                key={defaultEstimateMinutes ?? "none"}
+                defaultValue={defaultEstimateMinutes ?? ""}
+              />
+            </label>
+            <label className="capture-option">
+              <Checkbox name="structured" />
+              Use capture markers (online)
+            </label>
+            <label className="capture-option">
+              <Checkbox name="createTags" />
+              Create unknown #tags with this task
+            </label>
+            <p className="capture-help">
+              Use +"Project name", #tag, 30m or 1h30m, @tomorrow (planned day),
+              @tomorrow 09:00 (planned time), @every monday, or !Friday. Web
+              addresses are attached as links per the setting below. Quote text
+              or escape a marker with a backslash to keep it literal. An unknown
+              #tag is created only when the box above is ticked. Dates use your
+              planning timezone.
+            </p>
+          </details>
         </form>
         {csrfToken === undefined ? null : (
-          <>
+          <details className="capture-more">
+            <summary>Paste a list or set how links are kept</summary>
             <CaptureLinkPreference csrfToken={csrfToken} />
             <CapturePasteSection
               csrfToken={csrfToken}
               busy={busy}
               onTasksCreated={onTasksCreated}
             />
-          </>
+          </details>
         )}
       </CardContent>
     </Card>

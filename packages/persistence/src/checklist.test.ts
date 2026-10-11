@@ -135,6 +135,12 @@ it("keeps checklist changes and sync atomic, validates complete ordering and pro
       { id: first, revision: 1, completed: false, position: 0 },
       { id: second, revision: 1, position: 1 },
     ]);
+    // The owner-wide read returns the same items in task, then list order.
+    expect(db.listAllSubtasks(ownerId).map(({ id }) => id)).toEqual([
+      first,
+      second,
+    ]);
+    expect(db.listAllSubtasks(randomUUID())).toEqual([]);
     expect(db.getSyncState(ownerId)).toEqual(before);
     raw.exec("DROP TRIGGER fail_checklist_sync;");
     expect(

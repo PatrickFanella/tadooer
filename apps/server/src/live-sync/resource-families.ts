@@ -104,6 +104,7 @@ const routeRules: readonly RouteRule[] = [
   feed("*", `tasks/${uuid}/(children|move)`),
   feed("*", `tasks/${uuid}/subtasks`),
   feed("*", `subtasks/${uuid}`),
+  none("subtasks", readOnly),
   // Leaving a project also leaves its backlog, which is outside the feed.
   families("*", `tasks/${uuid}/project`, "organization"),
   feed("*", `tasks/${uuid}/tags`),

@@ -526,6 +526,20 @@ describe("Phase 2 HTTP integration", () => {
         const secondSubtask = (await secondSubtaskCreate.json()) as {
           subtask: { id: string; title: string; revision: number };
         };
+        const allSubtasks = await fetch(`${server.baseUrl}/api/subtasks`, {
+          headers: { Cookie: cookie },
+        });
+        expect(allSubtasks.status).toBe(200);
+        expect(
+          (
+            (await allSubtasks.json()) as { subtasks: { id: string }[] }
+          ).subtasks
+            .map(({ id }) => id)
+            .toSorted(),
+        ).toEqual([subtask.subtask.id, secondSubtask.subtask.id].toSorted());
+        expect((await fetch(`${server.baseUrl}/api/subtasks`)).status).toBe(
+          401,
+        );
         const reordered = await fetch(
           `${server.baseUrl}/api/tasks/${taskId}/subtasks`,
           {

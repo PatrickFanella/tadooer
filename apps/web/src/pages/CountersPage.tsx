@@ -518,7 +518,7 @@ export const CountersPage = ({
   };
 
   return (
-    <section
+    <div
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="counters-heading"
     >
@@ -1023,6 +1023,6 @@ export const CountersPage = ({
           </form>
         </CardContent>
       </Card>
-    </section>
+    </div>
   );
 };

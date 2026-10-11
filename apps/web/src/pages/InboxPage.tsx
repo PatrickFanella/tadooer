@@ -3,11 +3,12 @@ import type {
   BaikalStatusResponse,
   Task,
 } from "@suite/contracts";
-import type { SyntheticEvent } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { TaskCaptureForm } from "../components/tasks/TaskCaptureForm.tsx";
 import { TaskListItem } from "../components/tasks/TaskListItem.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
+import { Button } from "../components/ui/button.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 
@@ -46,6 +47,8 @@ export const InboxPage = ({
   onSubmitTimeBlock,
   onRemoveTimeBlock,
 }: InboxPageProps) => {
+  // The first dozen unplanned tasks; the owner opens the rest.
+  const [showAll, setShowAll] = useState(false);
   const inboxTasks = tasks.filter(
     (task) =>
       task.status === "open" &&
@@ -72,11 +75,14 @@ export const InboxPage = ({
           aria-labelledby="inbox-list-title"
         >
           <CardHeader>
-            <SectionHeading id="inbox-list-title" title="To plan" />
+            <SectionHeading
+              id="inbox-list-title"
+              title={`To plan (${String(inboxTasks.length)})`}
+            />
           </CardHeader>
           <CardContent>
             <ul>
-              {inboxTasks.map((task) => (
+              {(showAll ? inboxTasks : inboxTasks.slice(0, 12)).map((task) => (
                 <TaskListItem
                   key={task.id}
                   task={task}
@@ -97,6 +103,19 @@ export const InboxPage = ({
                 />
               ))}
             </ul>
+            {inboxTasks.length > 12 ? (
+              <p className="today-section__more">
+                <Button
+                  variant="link"
+                  type="button"
+                  onClick={() => setShowAll((current) => !current)}
+                >
+                  {showAll
+                    ? "Show fewer"
+                    : `Show ${String(inboxTasks.length - 12)} more`}
+                </Button>
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       )}

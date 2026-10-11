@@ -6148,6 +6148,26 @@ export class SuiteDatabase {
         record.updatedAt,
       );
   }
+  /** Every checklist item of the owner, grouped by task in list order. */
+  listAllSubtasks(ownerId: string): readonly SubtaskRecord[] {
+    return (
+      this.#database
+        .prepare(
+          "SELECT * FROM subtasks WHERE owner_id = ? ORDER BY task_id, position, id",
+        )
+        .all(ownerId) as unknown as readonly Record<string, string | number>[]
+    ).map((row) => ({
+      id: String(row.id),
+      ownerId: String(row.owner_id),
+      taskId: String(row.task_id),
+      title: String(row.title),
+      completed: Number(row.completed) === 1,
+      position: Number(row.position),
+      revision: Number(row.revision),
+      createdAt: String(row.created_at),
+      updatedAt: String(row.updated_at),
+    }));
+  }
   listSubtasks(ownerId: string, taskId: string): readonly SubtaskRecord[] {
     return (
       this.#database

@@ -1070,6 +1070,15 @@ export const assignTaskTags = (
     body: JSON.stringify(taskTagAssignmentSchema.parse({ tagIds })),
   });
 
+/** Every checklist item of the owner, keyed by task, in one request. */
+export const getAllSubtasks = (): Promise<Record<string, readonly Subtask[]>> =>
+  request("/api/subtasks", subtaskListResponseSchema).then(({ subtasks }) => {
+    const byTask: Record<string, Subtask[]> = {};
+    for (const subtask of subtasks)
+      (byTask[subtask.taskId] ??= []).push(subtask);
+    return byTask;
+  });
+
 export const getSubtasks = (taskId: string): Promise<readonly Subtask[]> =>
   request(`/api/tasks/${taskId}/subtasks`, subtaskListResponseSchema).then(
     ({ subtasks }) => subtasks,

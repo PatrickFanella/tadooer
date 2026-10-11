@@ -552,7 +552,7 @@ export const WorklogPage = ({
     );
   };
   return (
-    <section
+    <div
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="worklog-heading"
     >
@@ -711,6 +711,6 @@ export const WorklogPage = ({
           onDelete={remove}
         />
       )}
-    </section>
+    </div>
   );
 };

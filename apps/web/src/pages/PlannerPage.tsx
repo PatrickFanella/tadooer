@@ -46,6 +46,8 @@ import { useLiveRevision } from "../live-sync/views.ts";
 interface PlannerPageProps {
   readonly planner: PlannerResponse | null;
   readonly timeZone: string;
+  /** The owner's workday start, "HH:MM"; the grid opens there. */
+  readonly workdayStart?: string | undefined;
   readonly busy: boolean;
   readonly loading?: boolean;
   readonly error?: string | null;
@@ -96,6 +98,7 @@ const displayTime = (value: string, timeZone: string): string =>
 export const PlannerPage = ({
   planner,
   timeZone,
+  workdayStart,
   busy,
   loading = false,
   error = null,
@@ -277,6 +280,7 @@ export const PlannerPage = ({
                 view={view}
                 range={range}
                 timeZone={timeZone}
+                scrollToTime={workdayStart ?? "08:00"}
                 events={planner.events}
                 tasks={planner.tasks}
                 dayOrders={
