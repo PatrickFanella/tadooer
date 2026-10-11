@@ -50,6 +50,8 @@ import {
 } from "../components/tasks/TaskViews.tsx";
 
 export interface TasksPageProps extends TaskHierarchyActions {
+  readonly taskIdFilter?: string;
+  readonly onClearTaskIdFilter?: () => void;
   readonly tasks: readonly Task[];
   readonly visibleTasks: readonly Task[];
   readonly recovery: readonly Task[];
@@ -125,6 +127,8 @@ export interface TasksPageProps extends TaskHierarchyActions {
 }
 
 export const TasksPage = ({
+  taskIdFilter = "",
+  onClearTaskIdFilter,
   tasks,
   organization,
   visibleTasks,
@@ -667,6 +671,11 @@ export const TasksPage = ({
             busy={busy}
           />
         )}
+      {taskIdFilter !== "" && (
+        <Button type="button" onClick={onClearTaskIdFilter}>
+          Show all tasks
+        </Button>
+      )}
       <SectionHeading as="h2" title="Captured tasks" />
       {visibleTasks.length === 0 ||
       viewGroups.every((group) => group.tasks.length === 0) ? (

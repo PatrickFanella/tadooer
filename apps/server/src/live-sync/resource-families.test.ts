@@ -302,6 +302,25 @@ describe("live sync route classification (ADR 0045)", () => {
         );
   });
 
+  it("announces issue connector changes while keeping browse read-only", () => {
+    const id = "6f1c2c3e-4f0a-4d53-9d6e-0c3b2f6f8a10";
+    for (const [method, path] of [
+      ["POST", "/api/issue-connections"],
+      ["DELETE", "/api/issue-connections/shared-token"],
+      ["DELETE", `/api/issue-connections/${id}`],
+      ["POST", `/api/issue-connections/${id}/import`],
+      ["POST", `/api/issue-connections/${id}/sync`],
+    ] as const) {
+      expect(classifyLiveSyncRoute(method, path)).toEqual({
+        kind: "families",
+        families: ["connectors"],
+      });
+    }
+    expect(
+      classifyLiveSyncRoute("GET", `/api/issue-connections/${id}/browse`),
+    ).toBeUndefined();
+  });
+
   it("names the families of online-only records and leaves feed routes without one", () => {
     const id = "6f1c2c3e-4f0a-4d53-9d6e-0c3b2f6f8a10";
     // ADR 0046: notes are feed records; their family is retired and no

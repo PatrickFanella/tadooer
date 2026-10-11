@@ -7,6 +7,7 @@ import type {
 } from "@suite/contracts";
 import { GooglePlanning } from "../google-planning.tsx";
 import { CalendarMigration } from "../calendar-migration.tsx";
+import { IssueConnections } from "../components/IssueConnections.tsx";
 import { AssistantAccess } from "../components/AssistantAccess.tsx";
 import { SuperProductivityImport } from "../components/SuperProductivityImport.tsx";
 import { ImportedPluginData } from "../components/ImportedPluginData.tsx";
@@ -61,6 +62,7 @@ export const ConnectionsPage = ({
         description="Calendars, imports and assistant access."
       />
       <AssistantAccess csrfToken={csrfToken} />
+      <IssueConnections csrfToken={csrfToken} onTaskChange={onTaskImport} />
       <SuperProductivityImport
         csrfToken={csrfToken}
         onApplied={async () => {

@@ -470,6 +470,116 @@ export const taskSchema = z.object({
   recurrence: taskRecurrenceSchema.nullable().optional(),
 });
 
+export const issueConnectionInputSchema = z
+  .object({
+    provider: z.enum(["github", "gitea"]),
+    origin: z.url(),
+    repository: z
+      .string()
+      .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
+      .max(200),
+    token: z
+      .string()
+      .max(4096)
+      .refine((value) => !/[\r\n]/.test(value))
+      .default(""),
+    tokenScope: z.enum(["repository", "global"]).optional(),
+    writeBack: z.boolean().default(false),
+  })
+  .strict();
+export const issueConnectionSchema = issueConnectionInputSchema
+  .omit({ token: true })
+  .extend({
+    tokenScope: z.enum(["repository", "global"]).default("repository"),
+    id: entityIdSchema,
+    state: z.enum([
+      "connected",
+      "disconnected",
+      "authentication_required",
+      "unavailable",
+    ]),
+    lastSuccessfulSyncAt: z.iso.datetime().nullable(),
+  });
+export const externalIssueSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string().min(1).max(240),
+  notes: z.string().max(20_000),
+  state: z.enum(["open", "closed"]),
+  updatedAt: z.iso.datetime(),
+  url: z.url(),
+  labels: z.array(z.string()),
+  assignees: z.array(z.string()),
+});
+export const issueProviderPayloadSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string(),
+  body: z.string().nullable().optional(),
+  state: z.enum(["open", "closed"]),
+  updated_at: z.iso.datetime(),
+  pull_request: z.unknown().optional(),
+  labels: z
+    .array(z.union([z.string(), z.object({ name: z.string() })]))
+    .default([]),
+  assignees: z.array(z.object({ login: z.string() })).default([]),
+});
+export const issueLinkSchema = z.object({
+  id: entityIdSchema,
+  connectionId: entityIdSchema,
+  taskId: entityIdSchema,
+  issue: externalIssueSchema,
+  state: z.enum([
+    "synced",
+    "local_changes",
+    "conflict",
+    "uncertain",
+    "unavailable",
+    "task_deleted",
+  ]),
+  lastSuccessfulSyncAt: z.iso.datetime().nullable(),
+  message: z.string().nullable(),
+});
+export const issueConnectionsResponseSchema = z.object({
+  connections: z.array(issueConnectionSchema),
+  links: z.array(issueLinkSchema),
+  giteaOrigins: z.array(z.url()),
+  sharedTokens: z
+    .array(z.object({ provider: z.enum(["github", "gitea"]), origin: z.url() }))
+    .default([]),
+});
+export const issueSharedTokenRequestSchema = z
+  .object({ provider: z.enum(["github", "gitea"]), origin: z.url() })
+  .strict();
+export const issueBrowseResponseSchema = z.object({
+  issues: z.array(externalIssueSchema),
+});
+export const issueImportRequestSchema = z
+  .object({
+    numbers: z
+      .array(z.number().int().positive())
+      .min(1)
+      .max(100)
+      .refine((items) => new Set(items).size === items.length),
+    projectId: entityIdSchema.nullable().default(null),
+  })
+  .strict();
+export const issueSyncRequestSchema = z
+  .object({
+    resolution: z.enum(["accept_remote", "retry_local"]).optional(),
+    linkId: entityIdSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      (input.resolution === undefined) === (input.linkId === undefined),
+  );
+export type IssueConnectionInput = z.infer<typeof issueConnectionInputSchema>;
+export type IssueConnection = z.infer<typeof issueConnectionSchema>;
+export type ExternalIssue = z.infer<typeof externalIssueSchema>;
+export type IssueLink = z.infer<typeof issueLinkSchema>;
+export type IssueConnectionsResponse = z.infer<
+  typeof issueConnectionsResponseSchema
+>;
+
 export const createTaskRequestSchema = z.object({
   structured: z.boolean().optional(),
   estimateMinutes: z.number().int().min(1).max(720).nullable().optional(),

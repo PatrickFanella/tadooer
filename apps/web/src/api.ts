@@ -1,4 +1,7 @@
 import {
+  issueConnectionsResponseSchema,
+  issueBrowseResponseSchema,
+  type IssueConnectionInput,
   capturePreferencesResponseSchema,
   capturePreviewResponseSchema,
   taskBatchMutationResponseSchema,
@@ -347,6 +350,65 @@ const request = async <T>(
   }
   return schema.parse(body);
 };
+
+export const listIssueConnections = () =>
+  request("/api/issue-connections", issueConnectionsResponseSchema);
+export const saveIssueConnection = (
+  input: IssueConnectionInput,
+  csrfToken: string,
+) =>
+  request("/api/issue-connections", issueConnectionsResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify(input),
+  });
+export const browseIssues = (id: string) =>
+  request(`/api/issue-connections/${id}/browse`, issueBrowseResponseSchema);
+export const importIssues = (
+  id: string,
+  numbers: number[],
+  projectId: string | null,
+  csrfToken: string,
+) =>
+  request(
+    `/api/issue-connections/${id}/import`,
+    issueConnectionsResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ numbers, projectId }),
+    },
+  );
+export const syncIssues = (
+  id: string,
+  csrfToken: string,
+  resolution?: "accept_remote" | "retry_local",
+  linkId?: string,
+) =>
+  request(`/api/issue-connections/${id}/sync`, issueConnectionsResponseSchema, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken },
+    body: JSON.stringify({ resolution, linkId }),
+  });
+export const disconnectIssues = (id: string, csrfToken: string) =>
+  request(`/api/issue-connections/${id}`, issueConnectionsResponseSchema, {
+    method: "DELETE",
+    headers: { "X-CSRF-Token": csrfToken },
+  });
+export const removeSharedIssueToken = (
+  provider: "github" | "gitea",
+  origin: string,
+  csrfToken: string,
+) =>
+  request(
+    "/api/issue-connections/shared-token",
+    issueConnectionsResponseSchema,
+    {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify({ provider, origin }),
+    },
+  );
 
 const requestEmpty = async (
   path: string,

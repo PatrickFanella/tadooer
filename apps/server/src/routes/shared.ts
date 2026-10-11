@@ -48,6 +48,7 @@ import {
 import type { AuthService } from "../auth.ts";
 import type { ServerConfig } from "../config.ts";
 import type { BaikalConnectorService, ConnectorFailure } from "../connector.ts";
+import type { IssueConnectorService } from "../issue-connector.ts";
 import type { GoogleConnectorService } from "../google-connector.ts";
 import type { CalendarSubscriptionService } from "../calendar-subscriptions.ts";
 import type { CalendarBridgeService } from "../calendar-bridge/service.ts";
@@ -71,6 +72,7 @@ export interface RouteContext {
   readonly config: ServerConfig;
   readonly baikal: BaikalConnectorService;
   readonly google: GoogleConnectorService;
+  readonly issues: IssueConnectorService;
   /** Read-only iCal subscriptions (ADR 0032). */
   readonly calendarSubscriptions: CalendarSubscriptionService;
   /** Google-Baikal bridge (ADR 0041); passes run only when called. */

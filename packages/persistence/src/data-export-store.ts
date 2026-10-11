@@ -127,6 +127,10 @@ export const dataExportExcludedTables: readonly string[] = [
   "hosted_oauth_audit",
   "baikal_connectors",
   "google_connectors",
+  // Grants and pending provider-sync links belong to this installation.
+  "issue_connections",
+  "issue_shared_tokens",
+  "issue_links",
   "google_oauth_states",
   "google_calendar_sync",
   "google_calendar_capabilities",
@@ -163,6 +167,9 @@ export const dataExportExcludedTables: readonly string[] = [
 
 /** Owner-scoped runtime state cleared by a replace restore (not exported). */
 const replaceClearedTables: readonly string[] = [
+  // Remove connector links before replacing the tasks they reference;
+  // keep this installation's grants, as for the other connectors.
+  "issue_links",
   "active_sessions",
   "sync_operation_outcomes",
   "idempotency_records",

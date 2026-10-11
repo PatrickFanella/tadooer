@@ -42,3 +42,7 @@ The [design system](docs/design/README.md) describes the planner's visual rules.
 
 The repository is `subculture-collective/tadooer`. Workspace packages and the
 container image keep the historical `productivity-suite` name.
+
+GitHub and Gitea issue connections support selective task import, manual refresh,
+text conflict resolution, and optional close/reopen write-back. See
+[the setup and sync guide](docs/operations/issue-sync.md) for shared and repository-specific tokens.

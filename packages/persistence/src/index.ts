@@ -15,6 +15,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { SqliteIssueStore } from "./issue-store.js";
+export type { IssueConnectionRecord, IssueLinkRecord } from "./issue-store.js";
 import {
   hostedOAuthMigration,
   SqliteHostedOAuthStore,
@@ -1844,6 +1846,28 @@ const migrations: readonly Migration[] = [
             updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now');
     `,
   },
+  {
+    id: "0054_issue_connections",
+    sql: `CREATE TABLE issue_connections (
+      id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owner_accounts(id),
+      provider TEXT NOT NULL, origin TEXT NOT NULL, repository TEXT NOT NULL, record_json TEXT NOT NULL,
+      UNIQUE(owner_id,provider,origin,repository)
+    ) STRICT;
+    CREATE TABLE issue_links (
+      id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owner_accounts(id),
+      connection_id TEXT NOT NULL REFERENCES issue_connections(id), issue_number INTEGER NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id), record_json TEXT NOT NULL,
+      UNIQUE(connection_id,issue_number), UNIQUE(task_id)
+    ) STRICT;`,
+  },
+  {
+    id: "0055_issue_shared_tokens",
+    sql: `CREATE TABLE issue_shared_tokens (
+      owner_id TEXT NOT NULL REFERENCES owner_accounts(id), provider TEXT NOT NULL,
+      origin TEXT NOT NULL, credential TEXT NOT NULL,
+      PRIMARY KEY(owner_id,provider,origin)
+    ) STRICT;`,
+  },
 ];
 
 /**
@@ -1877,6 +1901,7 @@ const escapeSqliteString = (value: string): string =>
 
 export class SuiteDatabase {
   readonly #database: DatabaseSync;
+  readonly issues: SqliteIssueStore;
   readonly credentials: SqliteCredentialStore;
   readonly habits: SqliteHabitStore;
   readonly calendarProjections: SqliteCalendarProjectionStore;
@@ -1909,6 +1934,7 @@ export class SuiteDatabase {
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
+    this.issues = new SqliteIssueStore(database);
     this.hostedOAuth = new SqliteHostedOAuthStore(database);
     this.dataExport = new SqliteDataExportStore(database);
     this.deviceSessions = new SqliteDeviceSessionStore(database);

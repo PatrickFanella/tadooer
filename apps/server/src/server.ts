@@ -15,6 +15,8 @@ import { liveSyncPath } from "@suite/contracts";
 import { AuthService, sessionCookie } from "./auth.ts";
 import { sendError } from "./http-utils.ts";
 import { BaikalConnectorService } from "./connector.ts";
+import { IssueConnectorService } from "./issue-connector.ts";
+import { handleIssues } from "./routes/issues.ts";
 import { GoogleConnectorService } from "./google-connector.ts";
 import {
   CalendarSubscriptionService,
@@ -87,6 +89,7 @@ export interface RunningSuiteServer {
 export interface SuiteServerOptions {
   readonly connectorFetch?: typeof fetch;
   readonly googleFetch?: typeof fetch;
+  readonly issueFetch?: typeof fetch;
   /** iCal subscription fetches (ADR 0032); tests supply fakes. */
   readonly subscriptionFetch?: typeof fetch;
   readonly subscriptionLookup?: AddressLookup;
@@ -145,6 +148,12 @@ export const startSuiteServer = async (
     config.credentialKeyPath,
     config.googleOAuthConfigPath,
     googleThrottle.wrap(options.googleFetch ?? fetch),
+  );
+  const issues = new IssueConnectorService(
+    database,
+    config.credentialKeyPath,
+    config.giteaIssueOrigins ?? ["https://git.subcult.tv"],
+    options.issueFetch,
   );
   const calendarSubscriptions = new CalendarSubscriptionService(
     database,
@@ -450,6 +459,7 @@ export const startSuiteServer = async (
     config,
     baikal: connector,
     google,
+    issues,
     calendarSubscriptions,
     calendarBridge,
     calendarBridgeWorker,
@@ -467,6 +477,7 @@ export const startSuiteServer = async (
     handleHealth,
     handleAuthSetup,
     handleConnectors,
+    handleIssues,
     handleSync,
     handleActiveSession,
     handleCalendar,
