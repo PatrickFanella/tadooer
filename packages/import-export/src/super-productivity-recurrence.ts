@@ -50,6 +50,9 @@ export const superProductivityRepeatCfgFields = {
   disableAutoUpdateSubtasks: "retained",
   // Form preset derived from the pattern fields.
   quickSetting: "ignored",
+  // Last-write timestamp the source keeps for sync; derived bookkeeping, as
+  // on tasks.
+  modified: "ignored",
 } as const satisfies Record<string, FieldDisposition>;
 
 type Source = Readonly<Record<string, unknown>>;

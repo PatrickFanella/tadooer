@@ -607,7 +607,28 @@ export const inventorySuperProductivity = (
         trackedMilliseconds,
         daily: dailyValues,
       });
-      const scheduledAt = timestamp(task.dueWithTime, id, "dueWithTime");
+      let scheduledAt = timestamp(task.dueWithTime, id, "dueWithTime");
+      // The legacy field, written by versions before 14 and by the MCP
+      // bridge's make_planned_at. The source reads it as dueWithTime when
+      // the export is loaded; archived tasks keep it as inert provenance.
+      const legacyPlannedAt = source.archived
+        ? null
+        : timestamp(task.plannedAt, id, "plannedAt");
+      if (legacyPlannedAt !== null) {
+        if (scheduledAt === null) {
+          scheduledAt = legacyPlannedAt;
+          issue(
+            "schedule_migrated",
+            id,
+            "Legacy plannedAt is read as dueWithTime, as Super Productivity does when it loads this export",
+          );
+        } else if (scheduledAt !== legacyPlannedAt)
+          issue(
+            "unsupported_import_data",
+            id,
+            "plannedAt and dueWithTime differ; neither is chosen over the other",
+          );
+      }
       const deadlineAt = timestamp(
         task.deadlineWithTime,
         id,

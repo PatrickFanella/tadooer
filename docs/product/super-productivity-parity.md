@@ -97,8 +97,19 @@ no section is dropped without a report:
   applies per field since #65 and #67; see "Focus, idle and break settings" and
   "Application preferences" below.
 - **ignored**: derived or view-only task state (`modified`, `hasPlannedTime`,
-  `_hideSubTasksMode`, the leaked `subTasks` copy) and legacy project issue
-  configuration, which can hold credentials.
+  `_hideSubTasksMode`, the leaked `subTasks` copy), the same `modified`
+  timestamp on repeat configurations, and legacy project issue configuration,
+  which can hold credentials.
+
+Two live-task dispositions were reviewed on 2026-10-11 against the October 9
+backup. A live task's `plannedAt` (the pre-v14 schedule, still written by the
+MCP bridge's `make_planned_at`) is read as `dueWithTime` when `dueWithTime` is
+absent, as Super Productivity itself does when it loads the export; the
+preview reports `schedule_migrated`, and a live task whose two values differ
+blocks. A live task's estimate that is not whole minutes up to 720 is never
+rounded: it imports empty, the source value stays in provenance, and the task
+is flagged `estimate_unrepresentable` with a non-blocking `estimate_review`
+finding, the same disposition archived history already had.
 
 Since #28 (ADR 0019), `note` and `menuTree` apply. `menuTree` supplies project
 and tag order; since #63 (ADR 0028) its folders apply as sidebar folders, and
@@ -193,8 +204,8 @@ link to recurring series instead of staying historical references.
   is on; otherwise they are reported and kept in provenance.
 - `deletedInstanceDates` become deleted exceptions. `lastTaskCreationDay`, or
   the legacy `lastTaskCreation` read in the owner's zone, seeds the cursor.
-- `order` and `disableAutoUpdateSubtasks` are retained; `quickSetting` is
-  ignored.
+- `order` and `disableAutoUpdateSubtasks` are retained; `quickSetting` and
+  the `modified` timestamp are ignored.
 
 Live and archived tasks whose `repeatCfgId` names an exported configuration link
 to its series. The occurrence date comes from the deterministic

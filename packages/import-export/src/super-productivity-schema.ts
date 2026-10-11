@@ -116,9 +116,12 @@ export const superProductivityTaskFields = {
   issueTimeTracked: "retained",
   issuePoints: "retained",
   issueLastSyncedValues: "retained",
-  // Pre-v14 schedule; Super Productivity migrates it to dueWithTime on import.
-  // On an archived task it is inert history and kept in provenance (ADR 0022).
-  plannedAt: "blocked",
+  // Pre-v14 schedule; Super Productivity reads it as dueWithTime when it
+  // loads an export, and so does this import on a live task without a
+  // dueWithTime (reported as schedule_migrated). A live task where both are
+  // set and differ blocks. On an archived task it is inert history and kept
+  // in provenance (ADR 0022).
+  plannedAt: "applied",
   // Leaked TaskWithSubTasks view copy; the children are exported as tasks.
   subTasks: "ignored",
 } as const satisfies Record<string, FieldDisposition>;

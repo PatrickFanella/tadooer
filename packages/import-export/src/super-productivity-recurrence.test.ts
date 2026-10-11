@@ -28,6 +28,7 @@ const cfg = (id: string, overrides: Record<string, unknown> = {}) => ({
   order: 0,
   isPaused: false,
   quickSetting: "CUSTOM",
+  modified: 1700000000000,
   repeatCycle: "DAILY",
   startDate: "2026-01-01",
   repeatEvery: 1,
