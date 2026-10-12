@@ -48,6 +48,8 @@ importers:
         specifier: 43.3.0
         version: 43.3.0
 
+  apps/landing: {}
+
   apps/mcp-stdio:
     dependencies:
       '@suite/contracts':
