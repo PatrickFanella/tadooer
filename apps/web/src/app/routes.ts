@@ -20,5 +20,17 @@ export const routeFromPath = (path: string): WorkspaceRoute => {
   return workspaceRoutes.find((route) => route === candidate) ?? "today";
 };
 
+/** Issue #171: the Tasks page has two sections, the list and Organize. */
+export const tasksSections = ["list", "organize"] as const;
+export type TasksSection = (typeof tasksSections)[number];
+
+export const tasksSectionFromPath = (path: string): TasksSection => {
+  const [route, second] = path.replace(/^\//, "").split("/");
+  return route === "tasks" && second === "organize" ? "organize" : "list";
+};
+
+export const tasksSectionPath = (section: TasksSection): string =>
+  section === "organize" ? "/tasks/organize" : "/tasks";
+
 export const routeLabel = (route: WorkspaceRoute): string =>
   route === "reuse" ? "Reuse" : route.charAt(0).toUpperCase() + route.slice(1);

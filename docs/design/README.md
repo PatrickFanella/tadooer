@@ -185,6 +185,13 @@ cached or empty state rather than a placeholder that never resolves.
 - Use `Alert` for feedback and `Badge` for compact state labels. Preserve
   explicit status and alert roles where they convey asynchronous updates.
 - Task rows retain their workflow-specific layout and overdue/focus indicators.
+- The Tasks page has two sections selected by tabs in the page header and
+  kept in the URL (issue #171): **Tasks** (`/tasks`) holds the filter bar,
+  saved views, sections and the list, with recently deleted tasks behind a
+  disclosure; **Organize** (`/tasks/organize`) holds project and tag
+  creation, lifecycle and appearance, sidebar folders and recurring series.
+  Configuration never shares a scroll with the list. Settings stays for
+  owner preferences and connections, not for records.
 - The Planner uses a day, three-day, or week time grid with separate all-day
   rows and overlap lanes. Each day follows the selected timezone, including
   DST. Tasks without estimates show an explicit 30-minute placeholder.
