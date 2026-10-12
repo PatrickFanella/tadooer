@@ -69,8 +69,15 @@ interface PanelDraft {
 interface BoardDraft {
   readonly title: string;
   readonly columns: number;
+  readonly projectId: string | null;
   readonly panels: readonly PanelDraft[];
 }
+
+/** Issue #173: the project named by `?project=` when the page opens. */
+const requestedProjectId = (): string | null =>
+  typeof window === "undefined"
+    ? null
+    : new URLSearchParams(window.location.search).get("project");
 
 const markerLabel = (marker: string): string =>
   marker === "in_progress" ? "in progress" : marker;
@@ -425,7 +432,17 @@ export const BoardsPage = ({
   );
 
   useEffect(() => {
-    void loadBoards();
+    void loadBoards().then((list) => {
+      // Opened from a project's task list: select that project's first board.
+      const projectId = requestedProjectId();
+      if (projectId === null) return;
+      setSelectedId(
+        (current) =>
+          current ??
+          list.find((board) => board.projectId === projectId)?.id ??
+          null,
+      );
+    });
   }, [online, loadBoards]);
 
   useEffect(() => {
@@ -472,8 +489,22 @@ export const BoardsPage = ({
     const data = new FormData(event.currentTarget);
     const title = formString(data, "title");
     if (title === "") return;
+    const projectId = formString(data, "projectId");
     event.currentTarget.reset();
-    void create({ title, columns: 1, panels: [] });
+    void create({
+      title,
+      columns: 1,
+      panels: [],
+      projectId: projectId === "" ? null : projectId,
+    });
+  };
+  const projectTitle = (projectId: string | null): string | null => {
+    if (projectId === null) return null;
+    const project = projects.find(({ id }) => id === projectId);
+    if (project === undefined) return "an unavailable project";
+    return project.archivedAt === null
+      ? project.title
+      : `${project.title} (archived)`;
   };
 
   const selected = boards.find((board) => board.id === selectedId) ?? null;
@@ -483,6 +514,7 @@ export const BoardsPage = ({
     setDraft({
       title: selected.title,
       columns: selected.columns,
+      projectId: selected.projectId,
       panels: selected.panels.map((panel) => ({
         id: panel.id,
         title: panel.title,
@@ -500,6 +532,7 @@ export const BoardsPage = ({
           expectedRevision: selected.revision,
           title: draft.title,
           columns: draft.columns,
+          projectId: draft.projectId,
           panels: draft.panels.map((panel) => ({
             ...(panel.id === undefined ? {} : { id: panel.id }),
             title: panel.title,
@@ -637,6 +670,9 @@ export const BoardsPage = ({
                   >
                     {board.title}
                   </Button>
+                  {board.projectId !== null && (
+                    <small> · {projectTitle(board.projectId)}</small>
+                  )}
                 </li>
               ))}
             </ul>
@@ -657,10 +693,26 @@ export const BoardsPage = ({
               Add Kanban board
             </Button>
           </div>
-          <form onSubmit={submitNewBoard}>
+          <form onSubmit={submitNewBoard} className="task-actions">
             <label className="field">
               <span>New blank board</span>
               <Input name="title" autoComplete="off" required maxLength={240} />
+            </label>
+            <label className="field">
+              <span>Project</span>
+              <NativeSelect
+                name="projectId"
+                defaultValue={requestedProjectId() ?? ""}
+              >
+                <option value="">No project</option>
+                {projects
+                  .filter((project) => project.archivedAt === null)
+                  .map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+              </NativeSelect>
             </label>
             <Button disabled={busy || !online}>Add board</Button>
           </form>
@@ -679,6 +731,8 @@ export const BoardsPage = ({
                   {String(selected.columns)}{" "}
                   {selected.columns === 1 ? "column" : "columns"} · revision{" "}
                   {String(selected.revision)}
+                  {selected.projectId !== null &&
+                    ` · project ${projectTitle(selected.projectId) ?? ""}`}
                 </small>
               </p>
             </SectionHeading>
@@ -883,6 +937,36 @@ export const BoardsPage = ({
                 />
               </label>
               <label className="field">
+                <span>Project</span>
+                <NativeSelect
+                  value={draft.projectId ?? ""}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      projectId:
+                        event.currentTarget.value === ""
+                          ? null
+                          : event.currentTarget.value,
+                    })
+                  }
+                >
+                  <option value="">No project</option>
+                  {projects
+                    .filter(
+                      (project) =>
+                        project.archivedAt === null ||
+                        project.id === draft.projectId,
+                    )
+                    .map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.archivedAt === null
+                          ? project.title
+                          : `${project.title} (archived)`}
+                      </option>
+                    ))}
+                </NativeSelect>
+              </label>
+              <label className="field">
                 <span>Columns</span>
                 <Input
                   type="number"
@@ -945,7 +1029,15 @@ export const BoardsPage = ({
                         ...draft.panels,
                         {
                           title: `Panel ${String(draft.panels.length + 1)}`,
-                          filter: emptyFilter,
+                          // Issue #173: a new panel of an attached board
+                          // starts scoped to the board's project.
+                          filter:
+                            draft.projectId === null
+                              ? emptyFilter
+                              : {
+                                  ...emptyFilter,
+                                  projectIds: [draft.projectId],
+                                },
                         },
                       ],
                     })

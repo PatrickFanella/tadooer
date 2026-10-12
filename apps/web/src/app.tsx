@@ -3110,6 +3110,15 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           <TasksPage
             section={tasksSection}
             onSectionChange={changeTasksSection}
+            onOpenProjectBoards={(projectId) => {
+              if (typeof history !== "undefined")
+                history.pushState(
+                  {},
+                  "",
+                  `/boards?project=${encodeURIComponent(projectId)}`,
+                );
+              setRoute("boards");
+            }}
             taskIdFilter={taskIdFilter}
             onClearTaskIdFilter={() => {
               setTaskIdFilter("");

@@ -91,6 +91,13 @@ export const boardSchema = z
     id,
     title: z.string().trim().min(1).max(240),
     columns: z.number().int().min(1).max(boardMaxColumns),
+    /**
+     * Issue #173: the project a board belongs to, or null for a board that
+     * spans projects. New panels of an attached board default their filter
+     * to it; an archived project keeps its boards, shown as archived.
+     * Absent in records cached before the field existed.
+     */
+    projectId: id.nullable().default(null),
     position: z.number().int().nonnegative(),
     revision,
     createdAt: z.iso.datetime(),
@@ -133,9 +140,15 @@ export const boardCreateRequestSchema = z
         title: z.string().trim().min(1).max(240),
         columns: z.number().int().min(1).max(boardMaxColumns).default(1),
         panels: z.array(boardPanelInputSchema).max(boardMaxPanels).default([]),
+        projectId: id.nullable().optional(),
       })
       .strict(),
-    z.object({ template: boardTemplateSchema }).strict(),
+    z
+      .object({
+        template: boardTemplateSchema,
+        projectId: id.nullable().optional(),
+      })
+      .strict(),
   ])
   .describe("A board configuration or a default template");
 
@@ -146,6 +159,8 @@ export const boardUpdateRequestSchema = z
     title: z.string().trim().min(1).max(240),
     columns: z.number().int().min(1).max(boardMaxColumns),
     panels: z.array(boardPanelInputSchema).max(boardMaxPanels),
+    /** Omitted or null detaches the board from its project. */
+    projectId: id.nullable().default(null),
   })
   .strict()
   .refine(

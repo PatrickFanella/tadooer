@@ -133,6 +133,8 @@ export interface TasksPageProps extends TaskHierarchyActions {
    */
   readonly section?: TasksSection;
   readonly onSectionChange?: (section: TasksSection) => void;
+  /** Issue #173: opens the Boards page scoped to the filtered project. */
+  readonly onOpenProjectBoards?: (projectId: string) => void;
 }
 
 export const TasksPage = ({
@@ -176,6 +178,7 @@ export const TasksPage = ({
   onMoveTask,
   section = "list",
   onSectionChange,
+  onOpenProjectBoards,
 }: TasksPageProps) => {
   // ADR 0030: task notes use the same safe Markdown subset as notes.
   const { markdownInNotes } = useApplicationPreferences().snapshot.preferences;
@@ -717,6 +720,15 @@ export const TasksPage = ({
           {taskIdFilter !== "" && (
             <Button type="button" onClick={onClearTaskIdFilter}>
               Show all tasks
+            </Button>
+          )}
+          {taskProjectFilter !== "" && onOpenProjectBoards !== undefined && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenProjectBoards(taskProjectFilter)}
+            >
+              Boards for this project
             </Button>
           )}
           <SectionHeading as="h2" title="Captured tasks" />

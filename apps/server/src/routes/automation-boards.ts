@@ -81,6 +81,17 @@ const invalid = (message: string, status = 400): BoardPreview => ({
 const quoted = (value: string): string =>
   `"${value.length > 40 ? `${value.slice(0, 37)}...` : value}"`;
 
+/** Issue #173: the title of a board's project for a summary. */
+const boardProjectName = (
+  database: SuiteDatabase,
+  ownerId: string,
+  projectId: string,
+): string =>
+  quoted(
+    database.listProjects(ownerId).find(({ id }) => id === projectId)?.title ??
+      "an unavailable project",
+  );
+
 /** Human-readable change list for a panel move. */
 export const describeMoveChanges = (
   database: SuiteDatabase,
@@ -142,9 +153,13 @@ export const previewBoardCommand = (
         "template" in input.board
           ? `the default ${input.board.template} board`
           : `board ${quoted(input.board.title)} with ${String(input.board.panels.length)} ${input.board.panels.length === 1 ? "panel" : "panels"}`;
+      const project =
+        input.board.projectId == null
+          ? ""
+          : ` in project ${boardProjectName(database, ownerId, input.board.projectId)}`;
       return {
         ok: true,
-        summary: `Create ${title}`,
+        summary: `Create ${title}${project}`,
         affected: [],
         baseRevisions: [],
       };
@@ -168,7 +183,7 @@ export const previewBoardCommand = (
       case "update":
         return {
           ok: true,
-          summary: `Replace the configuration of board ${quoted(board.title)}: title ${quoted(input.board.title)}, ${String(input.board.columns)} columns, ${String(input.board.panels.length)} panels`,
+          summary: `Replace the configuration of board ${quoted(board.title)}: title ${quoted(input.board.title)}, ${String(input.board.columns)} columns, ${String(input.board.panels.length)} panels, ${input.board.projectId == null ? "no project" : `project ${boardProjectName(database, ownerId, input.board.projectId)}`}`,
           affected,
           baseRevisions: base,
         };
