@@ -403,6 +403,26 @@ describe("live sync route classification (ADR 0045)", () => {
     expect(classifyLiveSyncRoute("POST", "/api/not-a-route")).toBeUndefined();
   });
 
+  it("keeps focus preferences feed-backed without changing other focus commands", () => {
+    expect(
+      classifyLiveSyncRoute("GET", "/api/focus/preferences"),
+    ).toBeUndefined();
+    expect(classifyLiveSyncRoute("PUT", "/api/focus/preferences")).toEqual({
+      kind: "feed",
+    });
+    expect(automationOperationFamilies["focus.update_preferences"]).toEqual([]);
+    for (const path of [
+      "/api/focus/plan",
+      "/api/focus/idle",
+      "/api/focus/break-reminder/snooze",
+    ]) {
+      expect(classifyLiveSyncRoute("POST", path)).toEqual({
+        kind: "families",
+        families: ["focus", "time_entries"],
+      });
+    }
+  });
+
   it("fails for a route that has no rule", () => {
     // The expander and the classifier together detect an unknown path.
     expect(expandPattern("/api/widgets/([0-9a-f-]{36})(?:/(a|b))?")).toEqual([
