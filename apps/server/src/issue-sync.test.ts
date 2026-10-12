@@ -129,10 +129,17 @@ describe.each(["github", "gitea"] as const)("%s issue sync", (provider) => {
           token: "",
         }),
       ).rejects.toThrow("Reconnect");
+      await service.saveSharedToken(owner.id, {
+        provider,
+        origin: input.origin,
+        token: "synthetic-global-one",
+      });
+      expect(authorizations).toEqual([]);
+      expect(service.overview(owner.id).connections).toEqual([]);
       await service.connect(owner.id, {
         ...input,
         tokenScope: "global",
-        token: "synthetic-global-one",
+        token: "",
       });
       await service.connect(owner.id, {
         ...input,
@@ -585,7 +592,27 @@ it("requires owner authentication, same-origin CSRF, allowed hosts, and atomic i
       const cookie = required(
         required(login.headers.get("set-cookie")).split(";")[0],
       );
-      const { csrfToken } = (await login.json()) as { csrfToken: string };
+      const { csrfToken: originalCsrf } = (await login.json()) as {
+        csrfToken: string;
+      };
+      const resumed = await request(
+        "/api/auth/session",
+        "GET",
+        undefined,
+        cookie,
+      );
+      const { csrfToken } = (await resumed.json()) as { csrfToken: string };
+      expect(
+        (
+          await request(
+            "/api/issue-connections",
+            "POST",
+            connectionInput("gitea"),
+            cookie,
+            originalCsrf,
+          )
+        ).status,
+      ).toBe(403);
       expect(
         (
           await request(
@@ -610,10 +637,64 @@ it("requires owner authentication, same-origin CSRF, allowed hosts, and atomic i
           )
         ).status,
       ).toBe(409);
+      const sharedInput = {
+        provider: "gitea",
+        origin: "https://git.subcult.tv",
+        token: "synthetic-shared-token",
+      };
+      expect(
+        (
+          await request(
+            "/api/issue-connections/shared-token",
+            "POST",
+            sharedInput,
+            cookie,
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await request(
+            "/api/issue-connections/shared-token",
+            "POST",
+            { ...sharedInput, origin: "https://untrusted.example" },
+            cookie,
+            csrfToken,
+          )
+        ).status,
+      ).toBe(409);
+      const sharedSaved = await request(
+        "/api/issue-connections/shared-token",
+        "POST",
+        sharedInput,
+        cookie,
+        csrfToken,
+      );
+      expect(sharedSaved.status).toBe(200);
+      const sharedText = await sharedSaved.text();
+      expect(sharedText).not.toContain(sharedInput.token);
+      const sharedOverview = issueConnectionsResponseSchema.parse(
+        JSON.parse(sharedText),
+      );
+      expect(sharedOverview.connections).toEqual([]);
+      expect(sharedOverview.sharedTokens).toEqual([
+        { provider: "gitea", origin: sharedInput.origin },
+      ]);
+      expect(
+        (
+          await request(
+            "/api/issue-connections/shared-token",
+            "POST",
+            { ...sharedInput, token: "" },
+            cookie,
+            csrfToken,
+          )
+        ).status,
+      ).toBe(409);
       const saved = await request(
         "/api/issue-connections",
         "POST",
-        connectionInput("gitea"),
+        { ...connectionInput("gitea"), token: "", tokenScope: "global" },
         cookie,
         csrfToken,
       );

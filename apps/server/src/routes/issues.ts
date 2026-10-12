@@ -3,6 +3,7 @@ import {
   issueImportRequestSchema,
   issueSyncRequestSchema,
   issueSharedTokenRequestSchema,
+  issueSharedTokenSaveRequestSchema,
 } from "@suite/contracts";
 import { StructuredCaptureError } from "@suite/domain";
 import { readJson, sameOrigin, sendError, sendJson } from "../http-utils.ts";
@@ -50,7 +51,14 @@ export const handleIssues: RouteHandler = async (
       sendJson(response, 200, ctx.issues.overview(ownerId));
       return true;
     }
-    if (method === "POST" && id === undefined) {
+    if (method === "POST" && id === "shared-token" && action === undefined) {
+      const parsed = issueSharedTokenSaveRequestSchema.safeParse(
+        await readJson(request, 16_384),
+      );
+      if (!parsed.success)
+        throw new IssueSyncError("Shared token input is invalid.");
+      await ctx.issues.saveSharedToken(ownerId, parsed.data);
+    } else if (method === "POST" && id === undefined) {
       const parsed = issueConnectionInputSchema.safeParse(
         await readJson(request, 16_384),
       );
