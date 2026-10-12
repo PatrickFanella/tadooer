@@ -99,3 +99,71 @@ describe("TodayQueue", () => {
     expect(markup).toContain("Today is clear.");
   });
 });
+
+describe("TodayQueue inline edit and child tasks (issue #170)", () => {
+  const parent = task("parent", "Plan trip", null);
+  const child: Task = {
+    ...task("child", "Book train", null),
+    parentId: "parent",
+    childPosition: 1024,
+  };
+  const renderWith = (extra: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      <TodayQueue
+        at="2026-08-10T15:00:00.000Z"
+        preferences={preferences}
+        tasks={[parent, child]}
+        activeSession={null}
+        calendars={[]}
+        busy={false}
+        calendarActionsAvailable={false}
+        focusActionsAvailable={false}
+        onStartFocus={() => undefined}
+        onChangeTaskStatus={async () => await Promise.resolve(true)}
+        onSubmitTimeBlock={async () => await Promise.resolve()}
+        onRemoveTimeBlock={async () => await Promise.resolve()}
+        onViewTasks={() => undefined}
+        {...extra}
+      />,
+    );
+
+  it("nests a child under its listed parent instead of listing it twice", () => {
+    const markup = renderWith({ onCreateChildTask: () => Promise.resolve() });
+    expect(markup).toContain('aria-label="Child tasks of “Plan trip”"');
+    expect(markup).toContain("1 of 1 child task open");
+    expect(markup).toContain('aria-label="Complete “Book train”"');
+    expect(markup).not.toContain('aria-label="Start focus on “Book train”"');
+    expect(markup).toContain('aria-label="Add a child task to Plan trip"');
+  });
+
+  it("offers an inline editor only when an edit handler is given", () => {
+    expect(renderWith({})).not.toContain('aria-label="Edit “Plan trip”"');
+    const markup = renderWith({ onSubmitTaskEdit: () => Promise.resolve() });
+    expect(markup).toContain('aria-label="Edit “Plan trip”"');
+    expect(markup).toContain('value="Plan trip"');
+    expect(markup).toContain("Save task");
+  });
+
+  it("lists a child as its own row when its parent is not in the queue", () => {
+    const markup = renderToStaticMarkup(
+      <TodayQueue
+        at="2026-08-10T15:00:00.000Z"
+        preferences={preferences}
+        tasks={[{ ...parent, status: "completed" }, child]}
+        activeSession={null}
+        calendars={[]}
+        busy={false}
+        calendarActionsAvailable={false}
+        focusActionsAvailable={false}
+        onStartFocus={() => undefined}
+        onChangeTaskStatus={async () => await Promise.resolve(true)}
+        onSubmitTimeBlock={async () => await Promise.resolve()}
+        onRemoveTimeBlock={async () => await Promise.resolve()}
+        onViewTasks={() => undefined}
+        onCreateChildTask={() => Promise.resolve()}
+      />,
+    );
+    expect(markup).toContain('aria-label="Start focus on “Book train”"');
+    expect(markup).not.toContain("Child tasks of");
+  });
+});

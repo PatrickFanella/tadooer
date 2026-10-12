@@ -1185,10 +1185,8 @@
     list-style: none;
   }
   .today-task-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
+    display: grid;
+    gap: 0.5rem;
     padding: 0.55rem 0.75rem;
     border-radius: var(--radius-md);
     background: var(--surface-0);
@@ -1201,9 +1199,46 @@
     background: var(--surface-1);
     border-color: var(--line-strong);
   }
-  .today-task-row > div:first-child {
+  .today-task-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .today-task-main > div:first-child {
     min-width: 0;
     flex: 1;
+  }
+  /* Issue #170: child tasks under a Today row, and the inline editor. */
+  .today-task-children > summary {
+    font-size: var(--text-xs);
+    color: var(--subtext-2);
+    width: fit-content;
+  }
+  .today-task-children .task-children {
+    margin-left: 0.25rem;
+  }
+  .today-task-children .task-children__list {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0;
+    list-style: none;
+  }
+  .today-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: var(--text-sm);
+  }
+  .today-child--done > span {
+    color: var(--subtext-2);
+    text-decoration: line-through;
+  }
+  .today-task-edit .task-edit {
+    display: grid;
+    gap: 0.5rem;
+    min-width: min(100%, 22rem);
   }
   .today-task-row strong {
     font-size: var(--text-base);
@@ -2094,7 +2129,7 @@
     .planner-grid {
       grid-template-columns: 1fr;
     }
-    .today-task-row {
+    .today-task-main {
       flex-direction: column;
     }
     .today-task-actions {
