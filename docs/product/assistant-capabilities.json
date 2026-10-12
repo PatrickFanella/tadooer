@@ -775,8 +775,7 @@
         "importIssues",
         "syncIssues",
         "disconnectIssues",
-        "removeSharedIssueToken",
-        "saveSharedIssueToken"
+        "removeSharedIssueToken"
       ],
       "catalog": [],
       "status": "owner-only",

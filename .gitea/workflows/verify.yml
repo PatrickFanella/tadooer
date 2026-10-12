@@ -13,6 +13,9 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    container:
+      image: docker.gitea.com/runner-images:ubuntu-24.04
+      options: --shm-size=512m
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -35,4 +38,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify
+        env:
+          # SQLite fixtures are disposable. Keep fsync off the shared runner disk.
+          TMPDIR: /dev/shm
+          # Match the job's CPU quota instead of the VM's visible CPU count.
+          VITEST_MAX_WORKERS: "2"
         run: pnpm verify
