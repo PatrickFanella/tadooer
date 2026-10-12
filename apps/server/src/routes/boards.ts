@@ -19,8 +19,8 @@ import {
 import { sendEmpty, type RouteHandler } from "./shared.ts";
 
 /**
- * Boards with filtered panels (issue #63, ADR 0028). Online-only: boards are
- * not in the sync change feed or the offline cache.
+ * Boards with filtered panels (issue #63, ADR 0028). Read-only offline feed records
+ * (ADR 0053); structural edits remain online.
  *
  * - GET    /api/boards                       every board's configuration
  * - POST   /api/boards                       create from a configuration or template

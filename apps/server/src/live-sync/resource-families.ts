@@ -100,22 +100,24 @@ const routeRules: readonly RouteRule[] = [
   feed("*", "tasks/batch"),
   none("tasks/capture-preview", preview),
   none("tasks/(recovery|history)", readOnly),
-  families("*", `tasks/${uuid}/(archive|unarchive)`, "archive"),
+  feed("*", `tasks/${uuid}/(archive|unarchive)`),
   feed("*", `tasks/${uuid}/(children|move)`),
   feed("*", `tasks/${uuid}/subtasks`),
   feed("*", `subtasks/${uuid}`),
   none("subtasks", readOnly),
-  // Leaving a project also leaves its backlog, which is outside the feed.
-  families("*", `tasks/${uuid}/project`, "organization"),
+  // Backlog membership now travels as board task facts (ADR 0053).
+  feed("*", `tasks/${uuid}/project`),
   feed("*", `tasks/${uuid}/tags`),
-  families(
+  feed(
     "*",
     `tasks/${uuid}/(links|attachments|attachments/${uuid}|issue-link/${uuid})`,
-    "task_links",
   ),
-  families("*", "capture-preferences", "capture_preferences"),
+  feed("*", "capture-preferences"),
 
-  // Projects and tags: order, backlog and menu visibility are online-only.
+  // Backlog facts are now feed records; other project/tag order and visibility
+  // behavior keeps its existing organization hint.
+  feed("*", `projects/${uuid}/backlog`),
+  // Projects and tags: order and menu visibility are online-only.
   families(
     "*",
     `(projects|tags)(/order|/${uuid}|/${uuid}/backlog)?`,
@@ -149,13 +151,9 @@ const routeRules: readonly RouteRule[] = [
   // from session intervals and is not in the feed.
   feed("*", `time/entries(/${uuid})?`),
   none("time/report", readOnly),
-  families("*", `counters(/${uuid}(/days/${date}|/stopwatch)?)?`, "counters"),
-  families("*", `evaluations(/${date})?`, "evaluations"),
-  families(
-    "*",
-    `recurring-series(/${uuid}(/state|/occurrences/[0-9-]{10})?)?`,
-    "recurrence",
-  ),
+  feed("*", `counters(/${uuid}(/days/${date}|/stopwatch)?)?`),
+  feed("*", `evaluations(/${date})?`),
+  feed("*", `recurring-series(/${uuid}(/state|/occurrences/[0-9-]{10})?)?`),
 
   // ADR 0050: saved day orders are feed records; the `day_orders` family is
   // retired. Planning tasks for a date also changes their planned day, which
@@ -163,18 +161,14 @@ const routeRules: readonly RouteRule[] = [
   feed("*", `day-orders(/${date})?`),
   families("*", `day-orders/${date}/tasks`, "task_planning"),
   // Boards, sections, saved views and menu folders.
-  families(
-    "*",
-    `boards(/order|/${uuid}(/panels/${uuid}/(order|tasks))?)?`,
-    "boards",
-  ),
-  families("*", `(sections|task-views)(/order|/${uuid})?`, "boards"),
-  families("*", `menu-folders(/order|/${uuid})?`, "boards", "organization"),
+  feed("*", `boards(/order|/${uuid}(/panels/${uuid}/(order|tasks))?)?`),
+  feed("*", `(sections|task-views)(/order|/${uuid})?`),
+  feed("*", `menu-folders(/order|/${uuid})?`),
 
   // Preferences.
-  families("*", "application/preferences", "application_preferences"),
-  families("*", "planning/preferences", "planning_preferences"),
-  families("*", "notifications/preferences", "notification_preferences"),
+  feed("*", "application/preferences"),
+  feed("*", "planning/preferences"),
+  feed("*", "notifications/preferences"),
   families("*", "notifications/test", "notification_preferences"),
   none("notifications/status", readOnly),
   none("(planner|day-plan)", readOnly),
@@ -280,19 +274,19 @@ const feedOnly: readonly LiveSyncResourceFamily[] = [];
 export const automationOperationFamilies: Readonly<
   Record<AutomationOperation, readonly LiveSyncResourceFamily[]>
 > = {
-  "planning.update_preferences": ["planning_preferences"],
-  "application.update_preferences": ["application_preferences"],
+  "planning.update_preferences": feedOnly,
+  "application.update_preferences": feedOnly,
   "notifications.send_test": ["notification_preferences"],
-  "notifications.update_preferences": ["notification_preferences"],
+  "notifications.update_preferences": feedOnly,
   "subtasks.mutate": feedOnly,
   "projects.mutate": ["organization"],
   "projects.reorder": ["organization"],
-  "projects.set_backlog": ["organization"],
+  "projects.set_backlog": feedOnly,
   "tags.mutate": ["organization"],
   "tags.reorder": ["organization"],
   "notes.mutate": feedOnly,
-  "task_links.mutate": ["task_links"],
-  "tasks.assign_project": ["organization"],
+  "task_links.mutate": feedOnly,
+  "tasks.assign_project": feedOnly,
   "tasks.set_tags": feedOnly,
   "tasks.hierarchy": feedOnly,
   "tasks.create": feedOnly,
@@ -301,21 +295,21 @@ export const automationOperationFamilies: Readonly<
   "tasks.set_completed": feedOnly,
   "tasks.delete": feedOnly,
   "tasks.restore": feedOnly,
-  "tasks.archive": ["archive"],
-  "tasks.unarchive": ["archive"],
-  "recurrence.create": ["recurrence"],
-  "recurrence.update": ["recurrence"],
-  "recurrence.set_state": ["recurrence"],
-  "recurrence.occurrence": ["recurrence"],
+  "tasks.archive": feedOnly,
+  "tasks.unarchive": feedOnly,
+  "recurrence.create": feedOnly,
+  "recurrence.update": feedOnly,
+  "recurrence.set_state": feedOnly,
+  "recurrence.occurrence": feedOnly,
   "time_entries.mutate": feedOnly,
-  "counters.mutate": ["counters"],
-  "counters.record": ["counters"],
-  "evaluations.write": ["evaluations"],
+  "counters.mutate": feedOnly,
+  "counters.record": feedOnly,
+  "evaluations.write": feedOnly,
   "day_order.reorder": feedOnly,
-  "boards.mutate": ["boards"],
-  "sections.mutate": ["boards"],
-  "task_views.set": ["boards"],
-  "menu_folders.mutate": ["boards", "organization"],
+  "boards.mutate": feedOnly,
+  "sections.mutate": feedOnly,
+  "task_views.set": feedOnly,
+  "menu_folders.mutate": feedOnly,
   "calendar_subscriptions.refresh": ["calendar_subscriptions", "calendar"],
   "calendar_subscriptions.convert_event": [
     "calendar_subscriptions",

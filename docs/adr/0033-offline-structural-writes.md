@@ -146,3 +146,10 @@ import qualification (#47) are recorded separately from this implementation.
   `projects`, `tags`, `planning` and `offline-writes` describe the new
   offline policy; `assistant-capabilities.json` no longer lists offline
   structural writes as a remaining parity action.
+
+> Note, 2026-10-12: [ADR 0053](0053-complete-offline-feed-coverage.md)
+> moves boards, sections, saved views, folders, backlog facts, all remaining
+> owner preferences, counters/evaluations, links/attachments, archive history
+> and recurrence into the read-only offline feed. Their writes remain online;
+> no additional conflict rule or outbox operation is introduced. Provider
+> projections, connectors, bridge state and automation tokens remain online.

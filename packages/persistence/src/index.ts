@@ -1,4 +1,8 @@
 import {
+  ReadonlyFeedStore,
+  completeReadonlyFeedMigration,
+} from "./readonly-feed.ts";
+import {
   planningPreferencesSchema,
   notificationPreferencesSchema,
   checklistCommandSchema,
@@ -1868,6 +1872,7 @@ const migrations: readonly Migration[] = [
       PRIMARY KEY(owner_id,provider,origin)
     ) STRICT;`,
   },
+  completeReadonlyFeedMigration,
 ];
 
 /**
@@ -1902,6 +1907,7 @@ const escapeSqliteString = (value: string): string =>
 export class SuiteDatabase {
   readonly #database: DatabaseSync;
   readonly issues: SqliteIssueStore;
+  readonly readonlyFeed: ReadonlyFeedStore;
   readonly credentials: SqliteCredentialStore;
   readonly habits: SqliteHabitStore;
   readonly calendarProjections: SqliteCalendarProjectionStore;
@@ -1934,6 +1940,7 @@ export class SuiteDatabase {
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
+    this.readonlyFeed = new ReadonlyFeedStore(database);
     this.issues = new SqliteIssueStore(database);
     this.hostedOAuth = new SqliteHostedOAuthStore(database);
     this.dataExport = new SqliteDataExportStore(database);

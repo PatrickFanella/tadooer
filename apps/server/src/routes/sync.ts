@@ -1,4 +1,9 @@
 import {
+  readonlyFeedSnapshotBuilders,
+  readonlyFeedSnapshot,
+} from "../readonly-feed.ts";
+import { readonlyFeedKinds, type ReadonlyFeedKind } from "@suite/contracts";
+import {
   coreTaskFieldSchema,
   isHabitSyncOperation,
   habitCommandSchema,
@@ -371,6 +376,11 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
       // reads (field versions, blueprints, pool items) are the larger cost
       // and a client pages through the list 200 at a time.
       const allSnapshots = [
+        ...readonlyFeedSnapshotBuilders(
+          database,
+          session.owner.id,
+          ctx.sessionClock.now(),
+        ),
         ...database.habits
           .list(session.owner.id)
           .map((value) => () => ({ entityKind: "habit" as const, value })),
@@ -856,6 +866,27 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
             entityKind: change.entityType,
             entityId: change.entityId,
             kind: "upsert" as const,
+            entityRevision: change.revision,
+            changedAt: change.createdAt,
+            snapshot,
+          };
+        }
+        if (
+          (readonlyFeedKinds as readonly string[]).includes(change.entityType)
+        ) {
+          const snapshot = readonlyFeedSnapshot(
+            database,
+            session.owner.id,
+            change.entityType as ReadonlyFeedKind,
+            change.entityId,
+            new Date(),
+          );
+          return {
+            sequence: change.sequence,
+            entityKind: change.entityType as ReadonlyFeedKind,
+            entityId: change.entityId,
+            kind:
+              snapshot === null ? ("deleted" as const) : ("upsert" as const),
             entityRevision: change.revision,
             changedAt: change.createdAt,
             snapshot,

@@ -341,7 +341,7 @@ describe("live sync hint stream (ADR 0045)", () => {
     });
   });
 
-  it("hints online-only records with their family and the source client", async () => {
+  it("announces feed preferences and keeps online-only families separate", async () => {
     await withTemporaryDirectory(async (directory) => {
       const server = await start(directory);
       try {
@@ -351,7 +351,7 @@ describe("live sync hint stream (ADR 0045)", () => {
         const phoneStream = await stream(phone);
         expect((await phoneStream.event())?.event).toBe("hello");
 
-        // Planning preferences are outside the feed. The laptop saves them
+        // Planning preferences now enter the feed. The laptop saves them
         // with its client proof.
         const preferences = (await (
           await call("/api/planning/preferences", "GET")
@@ -360,12 +360,8 @@ describe("live sync hint stream (ADR 0045)", () => {
           (await call("/api/planning/preferences", "PUT", preferences, laptop))
             .status,
         ).toBe(200);
-        expect(await phoneStream.event(1000)).toEqual({
-          event: "resources",
-          data: {
-            families: ["planning_preferences"],
-            sourceClientId: laptop["X-Suite-Client-Id"],
-          },
+        expect(await phoneStream.event(1000)).toMatchObject({
+          event: "changes",
         });
 
         // Without a client proof, and with a wrong credential, the source is
@@ -378,9 +374,8 @@ describe("live sync hint stream (ADR 0045)", () => {
             })
           ).status,
         ).toBe(200);
-        expect(await phoneStream.event(1000)).toEqual({
-          event: "resources",
-          data: { families: ["planning_preferences"], sourceClientId: null },
+        expect(await phoneStream.event(1000)).toMatchObject({
+          event: "changes",
         });
 
         // A rejected mutation sends nothing.
@@ -465,7 +460,7 @@ describe("live sync hint stream (ADR 0045)", () => {
           await fetch(`${server.baseUrl}/api/metrics`)
         ).text();
         expect(metrics).toContain(
-          'suite_live_sync_hints_total{event="resources"} 4',
+          'suite_live_sync_hints_total{event="resources"} 2',
         );
         expect(metrics).toContain(
           "suite_live_sync_unclassified_mutations_total 0",

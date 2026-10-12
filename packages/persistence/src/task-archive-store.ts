@@ -141,6 +141,17 @@ export class SqliteTaskArchiveStore {
     private readonly deps: TaskArchiveDependencies,
   ) {}
 
+  /** A single archived record, including child records, for the read-only feed. */
+  readArchived(
+    ownerId: string,
+    taskId: string,
+  ): ArchivedTaskRecord | undefined {
+    const task = this.deps.getTask(ownerId, taskId, true);
+    return task?.archivedAt != null && task.deletedAt === null
+      ? { task, provenance: this.provenance(ownerId, taskId) }
+      : undefined;
+  }
+
   /**
    * Archives a top-level task and its active children in one transaction.
    * Deleted children stay deleted. A running focus session or a calendar

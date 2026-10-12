@@ -22,8 +22,8 @@ import {
  * per counter and owner-zone day: a count, or milliseconds for a stopwatch.
  * `daily_evaluations` holds one revisioned evaluation per owner and day.
  *
- * All three are online HTTP records, outside the sync change feed and the
- * offline cache. Streaks are derived on read. Mutations use savepoints so
+ * All three are read-only offline feed records (ADR 0053); mutations remain
+ * online HTTP writes. Streaks are derived on read. Mutations use savepoints so
  * they nest inside automation confirmation and import transactions.
  */
 export const countersMigration = {

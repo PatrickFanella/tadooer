@@ -325,7 +325,7 @@
       "catalog": ["task_links.get", "task_links.mutate"],
       "status": "covered",
       "issue": 30,
-      "authority": "Dedicated task_links read/write scopes; owner-checked task, attachment and issue-link revisions with atomic audit/replay. Only http(s) links without credentials are stored as openable. Previews name hosts, not full addresses. No operation contacts an issue provider; refresh or write-back needs a fresh provider authorization that does not exist yet. Online-only.",
+      "authority": "Dedicated task_links read/write scopes; owner-checked task, attachment and issue-link revisions with atomic audit/replay. Only http(s) links without credentials are stored as openable. Previews name hosts, not full addresses. No operation contacts an issue provider; refresh or write-back needs a fresh provider authorization that does not exist yet. Reads use the offline feed; writes remain online (ADR 0053).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -424,7 +424,7 @@
       ],
       "status": "covered",
       "issue": 42,
-      "authority": "tasks:read for the owner-scoped series list with upcoming dates and exceptions; tasks:write for series and occurrence changes. Each preview freezes the series revision, and deleting an instance also freezes that task's revision. Generated instances are ordinary tasks changed with the task tools. Online-only in the browser (ADR 0023).",
+      "authority": "tasks:read for the owner-scoped series list with upcoming dates and exceptions; tasks:write for series and occurrence changes. Each preview freezes the series revision, and deleting an instance also freezes that task's revision. Generated instances are ordinary tasks changed with the task tools. Reads use the offline feed; writes remain online (ADRs 0023 and 0053).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -456,7 +456,7 @@
       "catalog": ["counters.history", "counters.mutate", "counters.record"],
       "status": "covered",
       "issue": 64,
-      "authority": "metrics:read for owner-zone counter history (at most 366 days); metrics:write for writes. Day writes name the day revision read (0 when empty) and are rechecked at confirmation; definition edits, deletes and stopwatch start/stop freeze the counter revision. Deleting removes the counter's recorded days. Online-only in the browser (ADR 0025).",
+      "authority": "metrics:read for owner-zone counter history (at most 366 days); metrics:write for writes. Day writes name the day revision read (0 when empty) and are rechecked at confirmation; definition edits, deletes and stopwatch start/stop freeze the counter revision. Deleting removes the counter's recorded days. Reads use the offline feed; writes and stopwatch control remain online (ADRs 0025 and 0053).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -495,7 +495,7 @@
       "catalog": ["boards.list", "boards.mutate"],
       "status": "covered",
       "issue": 63,
-      "authority": "tasks:read for boards and their computed membership; tasks:write for every board mutation. The preview freezes the board revision (and the task revision for a move) and names the tag, marker, done, project, planned-day and backlog changes a move applies; confirmation repeats the checks inside its transaction. Online-only in the browser (ADR 0028).",
+      "authority": "tasks:read for boards and their computed membership; tasks:write for every board mutation. The preview freezes the board revision (and the task revision for a move) and names the tag, marker, done, project, planned-day and backlog changes a move applies; confirmation repeats the checks inside its transaction. Reads use the offline feed; structural writes remain online (ADRs 0028 and 0053).",
       "source": "apps/web/src/api.ts"
     },
     {
@@ -775,8 +775,7 @@
         "importIssues",
         "syncIssues",
         "disconnectIssues",
-        "removeSharedIssueToken",
-        "saveSharedIssueToken"
+        "removeSharedIssueToken"
       ],
       "catalog": [],
       "status": "owner-only",

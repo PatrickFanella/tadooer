@@ -38,3 +38,15 @@ sessions, phase 3 HTTP, Google write consent, Google protocol adapters, and
 session recovery. Full repository and startup regressions accompany the
 startup extraction. CI bypass was authorized by the owner; local checks and
 live qualification are reported separately.
+
+## October 12 follow-up
+
+PR #165 completes the session-recovery slice of #75 with generation-bound
+request failures, browser evidence and exact-head hosted verification; #75 is
+closed. Further controller extractions can remain separate bounded work.
+The owner-authorized current-calendar fixture qualified #36's refreshed grant,
+writable capability, conditional create/update/delete and cleanup without
+changing existing events; #36 is closed. Broader provider qualification #50 stays
+open. ADR 0053 completes #114's remaining read-only feed families; its closure
+requires the full-wave PR and hosted verification. Deployment and multi-device
+qualification are separate gates.

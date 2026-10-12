@@ -1,3 +1,17 @@
+import {
+  boardSchema,
+  boardMarkerSchema,
+  sectionSchema,
+  taskViewSchema,
+  menuFolderSchema,
+} from "./boards.ts";
+import {
+  counterSchema,
+  counterDayValueSchema,
+  dailyEvaluationSchema,
+} from "./counters.ts";
+import { recurringSeriesSchema } from "./recurrence.ts";
+import { capturePreferencesResponseSchema } from "./capture.ts";
 export { superProductivityImportLimits } from "./import-limits.ts";
 export * from "./organization.ts";
 export * from "./calendar-bridge.ts";
@@ -206,7 +220,29 @@ export const entityIdSchema = z.uuid();
  * ADR 0050: the identity of a sync feed record. Most kinds use a UUID; a
  * saved day order is keyed by its calendar date.
  */
-export const syncEntityKeySchema = z.union([entityIdSchema, z.iso.date()]);
+export const readonlyCompositeKeySchema = z.string().refine(
+  (key) => {
+    const [kind, first, second] = key.split(":");
+    if (kind === "counter-day")
+      return (
+        entityIdSchema.safeParse(first).success &&
+        z.iso.date().safeParse(second).success &&
+        key.split(":").length === 3
+      );
+    if (kind === "all" || kind === "today") return key === kind + ":";
+    return (
+      (kind === "project" || kind === "tag") &&
+      entityIdSchema.safeParse(first).success &&
+      key.split(":").length === 2
+    );
+  },
+  { message: "Invalid composite feed key" },
+);
+export const syncEntityKeySchema = z.union([
+  entityIdSchema,
+  z.iso.date(),
+  readonlyCompositeKeySchema,
+]);
 export const quotedRevisionEtagSchema = z.string().regex(/^"[1-9][0-9]*"$/);
 export const strongDavEtagSchema = z.string().regex(/^"[^"\r\n]+"$/);
 
@@ -1718,6 +1754,25 @@ const syncPatchBaseVersionsSchema = z
   })
   .strict();
 
+export const readonlyFeedKinds = [
+  "board",
+  "board_task",
+  "section",
+  "task_view",
+  "menu_folder",
+  "application_preferences",
+  "planning_preferences",
+  "notification_preferences",
+  "capture_preferences",
+  "counter",
+  "counter_day",
+  "evaluation",
+  "task_links",
+  "archived_task",
+  "recurring_series",
+] as const;
+export type ReadonlyFeedKind = (typeof readonlyFeedKinds)[number];
+// Outbox conflict kinds stay separate from the broader read-only feed.
 const syncEntityKindSchema = z.enum([
   "task",
   "project",
@@ -2081,7 +2136,82 @@ export const syncPlanningPlaceholderSnapshotSchema = z.object({
   resolution: planningPlaceholderResolutionSchema.nullable(),
 });
 
+export const readonlyFeedSnapshotSchema = z.discriminatedUnion("entityKind", [
+  z.object({
+    entityKind: z.literal("board"),
+    value: boardSchema.extend({
+      manualOrder: z.record(entityIdSchema, z.array(entityIdSchema)),
+    }),
+  }),
+  z.object({
+    entityKind: z.literal("board_task"),
+    value: z
+      .object({
+        id: entityIdSchema,
+        markers: z.array(boardMarkerSchema.exclude(["today"])),
+        inBacklog: z.boolean(),
+      })
+      .strict(),
+  }),
+  z.object({ entityKind: z.literal("section"), value: sectionSchema }),
+  z.object({
+    entityKind: z.literal("task_view"),
+    value: taskViewSchema.safeExtend({ id: readonlyCompositeKeySchema }),
+  }),
+  z.object({ entityKind: z.literal("menu_folder"), value: menuFolderSchema }),
+  z.object({
+    entityKind: z.literal("application_preferences"),
+    value: applicationPreferenceSnapshotSchema.extend({ id: entityIdSchema }),
+  }),
+  z.object({
+    entityKind: z.literal("planning_preferences"),
+    value: z
+      .object({
+        id: entityIdSchema,
+        revision: z.number().int().nonnegative(),
+        preferences: planningPreferencesSchema,
+      })
+      .strict(),
+  }),
+  z.object({
+    entityKind: z.literal("notification_preferences"),
+    value: z
+      .object({
+        id: entityIdSchema,
+        revision: z.number().int().nonnegative(),
+        preferences: notificationPreferencesSchema,
+      })
+      .strict(),
+  }),
+  z.object({
+    entityKind: z.literal("capture_preferences"),
+    value: capturePreferencesResponseSchema.extend({ id: entityIdSchema }),
+  }),
+  z.object({ entityKind: z.literal("counter"), value: counterSchema }),
+  z.object({
+    entityKind: z.literal("counter_day"),
+    value: counterDayValueSchema.extend({ id: readonlyCompositeKeySchema }),
+  }),
+  z.object({
+    entityKind: z.literal("evaluation"),
+    value: dailyEvaluationSchema,
+  }),
+  z.object({
+    entityKind: z.literal("task_links"),
+    value: taskLinksResponseSchema.extend({ id: entityIdSchema }),
+  }),
+  z.object({
+    entityKind: z.literal("archived_task"),
+    value: archivedTaskSchema.extend({ id: entityIdSchema }),
+  }),
+  z.object({
+    entityKind: z.literal("recurring_series"),
+    value: recurringSeriesSchema,
+  }),
+]);
+export type ReadonlyFeedSnapshot = z.infer<typeof readonlyFeedSnapshotSchema>;
 export const syncEntitySnapshotSchema = z.discriminatedUnion("entityKind", [
+  ...readonlyFeedSnapshotSchema.options,
   z.object({ entityKind: z.literal("habit"), value: habitSchema }),
   z.object({
     entityKind: z.literal("habit_occurrence"),
@@ -2127,6 +2257,7 @@ export const syncEntitySnapshotSchema = z.discriminatedUnion("entityKind", [
 export const syncChangeSchema = z.object({
   sequence: revisionSchema,
   entityKind: z.enum([
+    ...readonlyFeedKinds,
     "habit",
     "habit_occurrence",
     "task",
