@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>Tadooer: a private planner for one owner</title>
+    <meta
+      name="description"
+      content="Tadooer is a private, self-hosted task and calendar planner for one owner. Tasks beside the calendar on one grid, one focus session at a time, on your own server."
+    />
+    <meta property="og:title" content="Tadooer" />
+    <meta
+      property="og:description"
+      content="The plan, and the one thing now. A private, self-hosted planner for one owner."
+    />
+    <meta property="og:image" content="assets/og.png" />
+    <meta name="theme-color" content="#11111b" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="masthead">
+      <a class="wordmark" href="#top" aria-label="Tadooer, top of page">
+        <img src="assets/suite-icon.svg" alt="" width="28" height="28" />
+        Tadooer
+      </a>
+      <nav aria-label="Page sections">
+        <a href="#day">The day</a>
+        <a href="#focus">Focus</a>
+        <a href="#calendars">Calendars</a>
+        <a href="#yours">Your server</a>
+        <a href="#setup">Setup</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Private planner · self-hosted · one owner</p>
+          <h1 id="hero-title">The plan, and the one thing now.</h1>
+          <p class="lede">
+            Here is the day. Your tasks sit beside the calendar. Choose one to
+            work on. The rest can wait in the list.
+          </p>
+          <p class="hero-note">
+            Tadooer is a planner you run on your own server, for one person.
+            There is no hosted service and no sign-up. The source is open.
+          </p>
+          <p class="actions">
+            <a
+              class="button"
+              href="https://git.subcult.tv/subculture-collective/tadooer"
+              >Read the source</a
+            >
+            <a class="button button-quiet" href="#setup">How to run it</a>
+          </p>
+        </div>
+        <figure class="hero-shot">
+          <img
+            src="assets/today-1280.png"
+            width="1280"
+            height="800"
+            alt="Tadooer's Today view: a sidebar with Today, Inbox, Planner, Tasks, Boards and Habits, a capture box, and a Planning list with two sample tasks."
+          />
+          <figcaption>
+            Today, with sample tasks. Captured 2026-10-12.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="band" id="day" aria-labelledby="day-title">
+        <p class="eyebrow">The day</p>
+        <h2 id="day-title">Capture a task. Give it a place.</h2>
+        <div class="grid three">
+          <article>
+            <h3>Capture</h3>
+            <p>
+              Type what needs doing. Give it a project or a tag, an estimate, a
+              day or a time. The inbox keeps what is not placed yet.
+            </p>
+          </article>
+          <article>
+            <h3>Planner</h3>
+            <p>
+              Calendar events and planned tasks share one time grid, by day,
+              three days or week. Unplanned tasks sit in a drawer beside it and
+              can be dragged onto a day.
+            </p>
+          </article>
+          <article>
+            <h3>Boards</h3>
+            <p>
+              Panels are filters you choose: tags, markers, project, state. A
+              board can belong to a project. Moving a task shows the change list
+              before it applies.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="band alt" id="focus" aria-labelledby="focus-title">
+        <div class="split">
+          <div>
+            <p class="eyebrow">The one thing now</p>
+            <h2 id="focus-title">One focus session at a time.</h2>
+            <p>
+              Start focus from a task. One device controls the session; another
+              can follow it or explicitly take over. When you come back from
+              idle, the session asks what that time was and adds nothing on its
+              own.
+            </p>
+            <p>
+              Time lands in the worklog by day, task and project. Habits and
+              counters keep their own history in your time zone.
+            </p>
+          </div>
+          <figure class="phone-shot">
+            <img
+              src="assets/tasks-phone.png"
+              width="390"
+              height="844"
+              alt="Tadooer's Tasks view at phone width: filter bar, a saved-view disclosure and two task cards with Edit, Complete and Archive buttons."
+            />
+            <figcaption>Tasks at 390 pixels wide.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="band" id="calendars" aria-labelledby="calendars-title">
+        <p class="eyebrow">Your calendars</p>
+        <h2 id="calendars-title">The calendar stays the authority.</h2>
+        <div class="grid three">
+          <article>
+            <h3>Baikal</h3>
+            <p>
+              A Baikal CalDAV server is the calendar hub. Run the bundled one
+              beside Tadooer or point it at the Baikal you already have.
+            </p>
+          </article>
+          <article>
+            <h3>Google Calendar</h3>
+            <p>
+              Connects as a second source. Events show which calendar they came
+              from and how fresh the projection is.
+            </p>
+          </article>
+          <article>
+            <h3>Conflicts ask</h3>
+            <p>
+              When a block changed elsewhere, Tadooer says so and waits for a
+              decision. Nothing is overwritten quietly.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="band alt" id="yours" aria-labelledby="yours-title">
+        <p class="eyebrow">Your server</p>
+        <h2 id="yours-title">Yours to run, yours to keep.</h2>
+        <div class="grid two">
+          <article>
+            <h3>One owner</h3>
+            <p>
+              The first visit creates the owner account. There is no second
+              account, no team plan and no public address to share.
+            </p>
+          </article>
+          <article>
+            <h3>Plain storage</h3>
+            <p>
+              SQLite on your server. Connector passwords are stored encrypted.
+              Backup, restore and rollback are documented and rehearsed.
+            </p>
+          </article>
+          <article>
+            <h3>Works through a dropped connection</h3>
+            <p>
+              Task edits queue in the browser and sync when the server is back.
+              Calendar and focus controls wait for a connection.
+            </p>
+          </article>
+          <article>
+            <h3>Connected, on your terms</h3>
+            <p>
+              Reminders go through your own ntfy. GitHub and Gitea issues import
+              as tasks with optional close and reopen write-back. An assistant
+              can act only behind explicit approval.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="band" id="setup" aria-labelledby="setup-title">
+        <p class="eyebrow">Setup</p>
+        <h2 id="setup-title">Three steps, then it is yours.</h2>
+        <ol class="steps">
+          <li>
+            <h3>Run the server</h3>
+            <p>
+              Docker Compose with the bundled Baikal, or an existing Baikal.
+              <a
+                href="https://git.subcult.tv/subculture-collective/tadooer/src/branch/main/docs/operations/baikal-setup.md"
+                >Baikal setup</a
+              >
+              and
+              <a
+                href="https://git.subcult.tv/subculture-collective/tadooer/src/branch/main/docs/operations/tadooer-production.md"
+                >production notes</a
+              >
+              are in the repository.
+            </p>
+          </li>
+          <li>
+            <h3>Create the owner</h3>
+            <p>
+              Open the address you chose. The first screen creates the one owner
+              and connects Baikal.
+            </p>
+          </li>
+          <li>
+            <h3>Open it where you work</h3>
+            <p>
+              The web app, the Linux desktop client and your phone open the same
+              planner. An Android shell exists in source; no built app is
+              offered yet.
+              <a
+                href="https://git.subcult.tv/subculture-collective/tadooer/src/branch/main/DEVELOPMENT.md"
+                >Development notes</a
+              >
+              cover the rest.
+            </p>
+          </li>
+        </ol>
+      </section>
+
+      <section class="band alt" id="origin" aria-labelledby="origin-title">
+        <p class="eyebrow">Where it comes from</p>
+        <h2 id="origin-title">It began as a port.</h2>
+        <p class="prose">
+          Tadooer started as a port of Super Productivity and imports its
+          backups: projects, tags, tasks and tracked time. It has since grown a
+          server of its own, live sync between devices, a calendar hub and
+          boards. Claims on this page match the main branch on the date in the
+          footer.
+        </p>
+      </section>
+    </main>
+
+    <footer class="colophon">
+      <p>
+        Tadooer is made by
+        <a href="https://subcult.tv">SUBCULT</a>. Source:
+        <a href="https://git.subcult.tv/subculture-collective/tadooer"
+          >git.subcult.tv/subculture-collective/tadooer</a
+        >. Page revised 2026-10-12.
+      </p>
+    </footer>
+  </body>
+</html>

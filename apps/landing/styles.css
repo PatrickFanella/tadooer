@@ -1,0 +1,312 @@
+/*
+  Tadooer landing page. Tokens restate docs/design/tokens.css; the page is
+  dark only, like the app. No build step: open index.html or serve the folder.
+*/
+:root {
+  --crust: #11111b;
+  --mantle: #181825;
+  --base: #1e1e2e;
+  --surface-0: #252538;
+  --surface-1: #313244;
+  --text: #e2e6f6;
+  --subtext: #a6adc8;
+  --subtext-2: #7f849c;
+  --line: #2e2e44;
+  --line-strong: #3a3a54;
+  --purple: #bd93f9;
+  --pink: #ff79c6;
+  --cyan: #8be9fd;
+  --teal: #94e2d5;
+  --radius: 0.75rem;
+  --radius-sm: 0.375rem;
+  --measure: 68rem;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+html {
+  background: var(--base);
+  color: var(--text);
+  font:
+    400 1rem/1.55 Inter,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+a {
+  color: var(--cyan);
+  text-underline-offset: 0.15em;
+}
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+h1,
+h2,
+h3 {
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.015em;
+  font-weight: 650;
+  line-height: 1.15;
+}
+h1 {
+  font-size: clamp(2rem, 1.2rem + 3.5vw, 3.5rem);
+}
+h2 {
+  font-size: clamp(1.4rem, 1rem + 1.6vw, 2rem);
+}
+h3 {
+  font-size: 1.05rem;
+}
+p {
+  margin: 0 0 0.75rem;
+}
+
+.skip {
+  position: absolute;
+  left: -200vw;
+  top: 0.5rem;
+  background: var(--surface-1);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+}
+.skip:focus {
+  left: 0.5rem;
+}
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem clamp(1rem, 4vw, 2.5rem);
+  background: color-mix(in srgb, var(--mantle) 88%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+.wordmark img {
+  border-radius: 7px;
+}
+.masthead nav {
+  display: flex;
+  gap: 0.25rem 1rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  font-size: 0.9rem;
+}
+.masthead nav a {
+  color: var(--subtext);
+  text-decoration: none;
+  padding: 0.25rem 0;
+}
+.masthead nav a:hover {
+  color: var(--text);
+}
+
+.hero {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vw, 5rem) clamp(1rem, 4vw, 2.5rem) 2rem;
+}
+.hero-copy {
+  max-width: 36rem;
+}
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--purple);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.lede {
+  font-size: clamp(1.1rem, 1rem + 0.6vw, 1.35rem);
+  color: var(--text);
+}
+.hero-note {
+  color: var(--subtext);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--purple);
+  color: var(--crust);
+  font-weight: 600;
+  text-decoration: none;
+}
+.button-quiet {
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+}
+.hero-shot {
+  margin: 0;
+}
+.hero-shot img,
+.phone-shot img {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--crust);
+}
+figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--subtext-2);
+}
+
+.band {
+  padding: clamp(2rem, 5vw, 4rem) clamp(1rem, 4vw, 2.5rem);
+}
+.band > * {
+  max-width: var(--measure);
+  margin-left: auto;
+  margin-right: auto;
+}
+.band.alt {
+  background: var(--mantle);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.grid article {
+  padding: 1.1rem 1.2rem;
+  background: var(--surface-0);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.grid article p {
+  color: var(--subtext);
+  margin: 0;
+}
+.split {
+  display: grid;
+  gap: 2rem;
+  align-items: start;
+}
+.split p {
+  color: var(--subtext);
+}
+.phone-shot {
+  margin: 0;
+  max-width: 18rem;
+}
+.steps {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem auto 0;
+  display: grid;
+  gap: 1rem;
+}
+.steps li {
+  position: relative;
+  padding: 1.1rem 1.2rem 1.1rem 3.4rem;
+  background: var(--surface-0);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.steps li::before {
+  counter-increment: step;
+  content: counter(step);
+  position: absolute;
+  left: 1.1rem;
+  top: 1.05rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--purple);
+  color: var(--crust);
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: grid;
+  place-items: center;
+}
+.steps p {
+  color: var(--subtext);
+  margin: 0;
+}
+.prose {
+  color: var(--subtext);
+  max-width: 44rem;
+}
+.colophon {
+  padding: 2rem clamp(1rem, 4vw, 2.5rem)
+    calc(2rem + env(safe-area-inset-bottom, 0px));
+  color: var(--subtext-2);
+  font-size: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+.colophon p {
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+@media (min-width: 48rem) {
+  .grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .grid.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .split {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+  }
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 64rem) {
+  .hero {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: center;
+  }
+}
