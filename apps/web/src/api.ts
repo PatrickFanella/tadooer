@@ -266,7 +266,7 @@ import {
 } from "@suite/contracts";
 import { z } from "zod";
 import { liveSyncPath } from "@suite/contracts";
-import { reportSessionFailure } from "./session-recovery.ts";
+import { captureSessionFailureReporter } from "./session-recovery.ts";
 import { requestReauthentication } from "./reauthentication.ts";
 import type { LocalClientIdentity } from "./local-store.ts";
 import {
@@ -322,6 +322,7 @@ const request = async <T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> => {
+  const reportFailure = captureSessionFailureReporter();
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (
@@ -345,7 +346,7 @@ const request = async <T>(
         ? error.data.message
         : "The server returned an invalid response",
     );
-    reportSessionFailure(failure);
+    reportFailure(failure);
     throw failure;
   }
   return schema.parse(body);
@@ -427,6 +428,7 @@ const requestEmpty = async (
   path: string,
   init?: RequestInit,
 ): Promise<void> => {
+  const reportFailure = captureSessionFailureReporter();
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   const response = await ownerFetch(path, { ...init, headers });
@@ -440,7 +442,7 @@ const requestEmpty = async (
       ? error.data.message
       : "The server returned an invalid response",
   );
-  reportSessionFailure(failure);
+  reportFailure(failure);
   throw failure;
 };
 
@@ -2413,6 +2415,7 @@ export const downloadDataExport = async (): Promise<{
   readonly filename: string;
   readonly text: string;
 }> => {
+  const reportFailure = captureSessionFailureReporter();
   const response = await ownerFetch("/api/data/export", {
     headers: { Accept: "application/json" },
   });
@@ -2426,7 +2429,7 @@ export const downloadDataExport = async (): Promise<{
         ? error.data.message
         : "The server returned an invalid response",
     );
-    reportSessionFailure(failure);
+    reportFailure(failure);
     throw failure;
   }
   const disposition = response.headers.get("content-disposition") ?? "";

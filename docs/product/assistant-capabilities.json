@@ -774,12 +774,13 @@
         "importIssues",
         "syncIssues",
         "disconnectIssues",
-        "removeSharedIssueToken"
+        "removeSharedIssueToken",
+        "saveSharedIssueToken"
       ],
       "catalog": [],
       "status": "owner-only",
       "issue": 30,
-      "authority": "Fresh provider token entry and enabling remote write-back require the interactive owner session. Issue import and sync currently have no delegated automation scope or confirmation contract.",
+      "authority": "Owner session and CSRF; repository credentials and shared provider tokens remain owner-only and are never exposed to the assistant catalog.",
       "source": "apps/server/src/routes/issues.ts"
     }
   ]
