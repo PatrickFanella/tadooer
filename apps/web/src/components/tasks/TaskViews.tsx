@@ -280,14 +280,12 @@ export const TaskViewControls = ({
         ? `project ${projects.find(({ id }) => id === view.contextId)?.title ?? ""}`
         : `tag ${tags.find(({ id }) => id === view.contextId)?.displayName ?? ""}`;
   return (
-    <Card className="task-view-controls" aria-label="Saved view">
-      <CardContent className="flex flex-wrap items-end gap-2 pt-4">
-        <p className="w-full">
-          <small>
-            Saved view for {contextLabel}
-            {!online && " (needs a connection to change)"}
-          </small>
-        </p>
+    <details className="task-view-controls" aria-label="Saved view">
+      <summary>
+        Saved view for {contextLabel}
+        {!online && " (needs a connection to change)"}
+      </summary>
+      <div className="flex flex-wrap items-end gap-2 pt-2">
         <label>
           Sort
           <NativeSelect
@@ -406,8 +404,8 @@ export const TaskViewControls = ({
             {message}
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </details>
   );
 };
 

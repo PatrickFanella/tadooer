@@ -896,6 +896,37 @@
     color: var(--purple);
   }
 
+  /* Issue #175: Records and Setup groups. */
+  .sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 0.5rem;
+  }
+  /* Outranks the (0,1,1) global button:not([data-slot]) rule. */
+  .sidebar-nav .sidebar-group-toggle {
+    justify-content: flex-start;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--subtext-2);
+  }
+  .sidebar-group-toggle .sidebar-group-chevron {
+    transition: transform var(--motion-fast) var(--ease-out);
+  }
+  .sidebar-group[data-open="true"] .sidebar-group-chevron {
+    transform: rotate(90deg);
+  }
+  .sidebar-group-items {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .sidebar-group[data-open="false"] .sidebar-group-items {
+    display: none;
+  }
+
   .sidebar-status {
     border-top: 1px solid var(--line);
     padding: 0.625rem 0.5rem 0;
@@ -1363,11 +1394,34 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    align-items: end;
+    /* The Card is a column; "end" would push the content to the right. */
+    align-items: stretch;
     padding: 0.625rem 0.75rem;
     background: var(--mantle);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
+  }
+  /* Issue #175: the card content spans the bar instead of hugging the right. */
+  .task-filter-bar > * {
+    padding-top: 0;
+  }
+  .task-view-controls {
+    padding: 0.625rem 0.75rem;
+    background: var(--mantle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .task-view-controls > summary {
+    font-size: var(--text-xs);
+    color: var(--subtext-2);
+    cursor: pointer;
+    width: fit-content;
+  }
+  .task-children-disclosure > summary {
+    font-size: var(--text-xs);
+    color: var(--subtext-2);
+    cursor: pointer;
+    width: fit-content;
   }
   .task-filter-bar label {
     display: grid;
@@ -2211,6 +2265,17 @@
     }
     .sidebar-nav a[aria-current="page"]::before {
       display: none;
+    }
+    /* Phones flatten the groups into the scrolling row. */
+    .sidebar-group,
+    .sidebar-group-items {
+      display: contents;
+    }
+    .sidebar-nav .sidebar-group-toggle {
+      display: none;
+    }
+    .sidebar-group[data-open="false"] .sidebar-group-items {
+      display: contents;
     }
     .sidebar-status {
       display: none;

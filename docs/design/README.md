@@ -192,6 +192,12 @@ cached or empty state rather than a placeholder that never resolves.
   creation, lifecycle and appearance, sidebar folders and recurring series.
   Configuration never shares a scroll with the list. Settings stays for
   owner preferences and connections, not for records.
+- The sidebar (issue #175) lists the daily views flat and keeps Records
+  (History, Worklog, Counters, Reuse) and Setup (Connections, Settings) in
+  collapsible groups that open while their view is current. Empty Today
+  sections are omitted, and the Tasks list keeps the saved view and each
+  row's child-task form behind disclosures. The route audit and screenshots
+  are in [information-architecture.md](information-architecture.md).
 - Drag-and-drop (issue #172) uses the native HTML drag API with a private
   data type, no library: the unplanned-tasks drawer's rows are draggable,
   planner days and board panels are drop targets with a dashed purple
