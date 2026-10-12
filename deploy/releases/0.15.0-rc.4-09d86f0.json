@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "version": "0.15.0-rc.4",
+  "createdAt": "2026-10-11T23:21:54Z",
+  "deployedAt": "2026-10-11T23:25:11Z",
+  "sourceCommit": "09d86f0c8afc33540f9096df26b78fd10602d9a7",
+  "image": "127.0.0.1:5000/subculture-collective/productivity-suite@sha256:17ce97bbc39a86c279d7d7288fba98042cdc214ac8da036a3f4be2e0ef04692c",
+  "publicOrigin": "https://tadooer.subcult.tv",
+  "status": "superseded",
+  "migrationCount": 49,
+  "reason": "PR 161: GitHub/Gitea issue task sync; recorded after the fact from nuc tadooer-release.json"
+}
