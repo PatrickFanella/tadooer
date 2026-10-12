@@ -1,6 +1,16 @@
 import type { CalendarEventProjection, Task } from "@suite/contracts";
 import { CalendarDaysIcon, CheckSquareIcon } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+} from "react";
+import {
+  acceptsTaskDrag,
+  draggedTaskId,
+} from "@/components/tasks/UnplannedTasksDrawer";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -21,6 +31,8 @@ export interface PlannerTimeGridProps {
   readonly onSelectEntry?: (entry: PlannerGridEntry) => void;
   /** ADR 0027: saved order of each date's date-only tasks. */
   readonly dayOrders?: ReadonlyMap<string, readonly string[]> | undefined;
+  /** Issue #172: a task dragged from the drawer onto a day. */
+  readonly onDropTask?: ((taskId: string, date: string) => void) | undefined;
 }
 
 export type PlannerGridEntry =
@@ -264,8 +276,36 @@ export function PlannerTimeGrid({
   onSelectEntry,
   dayOrders,
   scrollToTime,
+  onDropTask,
 }: PlannerTimeGridProps) {
   const [now, setNow] = useState(() => new Date());
+  const [dropDay, setDropDay] = useState<string | null>(null);
+  const dropHandlers = (dayKey: string) =>
+    onDropTask === undefined
+      ? {}
+      : {
+          onDragOver: (event: DragEvent) => {
+            if (!acceptsTaskDrag(event)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            if (dropDay !== dayKey) setDropDay(dayKey);
+          },
+          onDragLeave: (event: DragEvent) => {
+            if (
+              event.relatedTarget instanceof Node &&
+              event.currentTarget.contains(event.relatedTarget)
+            )
+              return;
+            setDropDay((current) => (current === dayKey ? null : current));
+          },
+          onDrop: (event: DragEvent) => {
+            const taskId = draggedTaskId(event);
+            setDropDay(null);
+            if (taskId === null) return;
+            event.preventDefault();
+            onDropTask(taskId, dayKey);
+          },
+        };
   const days = plannerCalendarDays(range, view, timeZone);
   const entries = entriesFor(events, tasks);
   const hasItems = events.length > 0 || tasks.length > 0;
@@ -349,6 +389,8 @@ export function PlannerTimeGrid({
               className="planner-time-grid__day"
               key={day.key}
               aria-labelledby={`planner-day-${day.key}`}
+              data-drop-active={dropDay === day.key ? "true" : undefined}
+              {...dropHandlers(day.key)}
             >
               <header className="planner-time-grid__day-header">
                 <h3 id={`planner-day-${day.key}`}>{day.label}</h3>

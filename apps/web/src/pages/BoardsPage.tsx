@@ -1,4 +1,16 @@
-import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type DragEvent,
+  type SyntheticEvent,
+} from "react";
+import {
+  UnplannedTasksDrawer,
+  acceptsTaskDrag,
+  draggedTaskId,
+  useDrawerOpen,
+} from "../components/tasks/UnplannedTasksDrawer.tsx";
 import {
   ApiRequestError,
   boardMarkerSchema,
@@ -392,6 +404,36 @@ export const BoardsPage = ({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [moveTargets, setMoveTargets] = useState<Record<string, string>>({});
+  // Issue #172: the unplanned-tasks drawer; a drop runs the same previewed
+  // move as the Move button.
+  const [drawerOpen, setDrawerOpen] = useDrawerOpen("boards");
+  const [dropPanel, setDropPanel] = useState<string | null>(null);
+  const dropHandlers = (panelId: string) =>
+    !online
+      ? {}
+      : {
+          onDragOver: (event: DragEvent) => {
+            if (!acceptsTaskDrag(event)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            if (dropPanel !== panelId) setDropPanel(panelId);
+          },
+          onDragLeave: (event: DragEvent) => {
+            if (
+              event.relatedTarget instanceof Node &&
+              event.currentTarget.contains(event.relatedTarget)
+            )
+              return;
+            setDropPanel((current) => (current === panelId ? null : current));
+          },
+          onDrop: (event: DragEvent) => {
+            const taskId = draggedTaskId(event);
+            setDropPanel(null);
+            if (taskId === null) return;
+            event.preventDefault();
+            move(taskId, panelId);
+          },
+        };
 
   const names = {
     tag: (id: string) =>
@@ -598,10 +640,21 @@ export const BoardsPage = ({
   };
 
   return (
-    <>
+    <div className={drawerOpen ? "page-with-drawer" : "contents"}>
       <PageHeader
         title="Boards"
         description="Filtered panels with an optional manual order. Moving a task into a panel changes its tags, markers, state or project; the change list is shown first."
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-pressed={drawerOpen}
+            onClick={() => setDrawerOpen(!drawerOpen)}
+          >
+            Unplanned tasks
+          </Button>
+        }
       />
       {!online && (
         <Alert>
@@ -737,6 +790,10 @@ export const BoardsPage = ({
                       key={panel.id}
                       className="board-panel"
                       aria-labelledby={`panel-${panel.id}`}
+                      data-drop-active={
+                        dropPanel === panel.id ? "true" : undefined
+                      }
+                      {...dropHandlers(panel.id)}
                     >
                       <h3 id={`panel-${panel.id}`}>
                         {panel.title} <small>({String(members.length)})</small>
@@ -966,6 +1023,25 @@ export const BoardsPage = ({
           </CardContent>
         </Card>
       )}
-    </>
+      {drawerOpen && (
+        <UnplannedTasksDrawer
+          tasks={tasks}
+          targets={
+            selected === null
+              ? []
+              : selected.panels.map((panel) => ({
+                  id: panel.id,
+                  label: panel.title,
+                }))
+          }
+          targetLabel="Panel"
+          placeLabel="Move"
+          available={online && selected !== null}
+          busy={busy}
+          onPlace={(task, panelId) => move(task.id, panelId)}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
+    </div>
   );
 };

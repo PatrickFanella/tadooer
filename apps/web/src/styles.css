@@ -1544,6 +1544,87 @@
     color: var(--subtext-2);
   }
 
+  /* Issue #172: a page with the unplanned-tasks drawer beside it. */
+  .page-with-drawer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    grid-auto-rows: max-content;
+    column-gap: var(--spacing-element);
+    row-gap: var(--spacing-section);
+  }
+  .page-with-drawer > :not(.unplanned-drawer) {
+    grid-column: 1;
+  }
+  .page-with-drawer > .unplanned-drawer {
+    grid-column: 2;
+    grid-row: 1 / span 40;
+    align-self: start;
+    position: sticky;
+    top: 0.75rem;
+  }
+  .unplanned-drawer {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface-0);
+    max-height: calc(100dvh - 1.5rem);
+    overflow: auto;
+  }
+  .unplanned-drawer__list {
+    display: grid;
+    gap: 0.375rem;
+    padding: 0;
+    list-style: none;
+  }
+  .unplanned-drawer__task {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--mantle);
+  }
+  .unplanned-drawer__task[draggable="true"] {
+    cursor: grab;
+  }
+  .unplanned-drawer__task strong {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+  .unplanned-drawer__task small {
+    color: var(--subtext-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+  }
+  .unplanned-drawer__place {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+  }
+  .unplanned-drawer__place select {
+    min-width: 0;
+    flex: 1;
+  }
+  .board-panel[data-drop-active] {
+    outline: 2px dashed var(--purple);
+    outline-offset: 2px;
+    background: color-mix(in srgb, var(--purple) 8%, var(--surface-0));
+  }
+  @media (max-width: 64rem) {
+    .page-with-drawer {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page-with-drawer > .unplanned-drawer {
+      grid-column: 1;
+      grid-row: auto;
+      position: static;
+      max-height: none;
+    }
+  }
+
   /* ── 13. Timeline and planner ──────────────────────────────────── */
 
   .week-plan {
