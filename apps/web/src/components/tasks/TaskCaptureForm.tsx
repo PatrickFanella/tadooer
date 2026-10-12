@@ -47,6 +47,14 @@ export const TaskCaptureForm = ({
               {busy ? "Capturing…" : "Capture task"}
             </Button>
           </div>
+          <p className="capture-help">
+            Use +"Project name", #tag, 30m or 1h30m, @tomorrow (planned day),
+            @tomorrow 09:00 (planned time), @every monday, or !Friday. Web
+            addresses are attached as links per the setting below. Quote text or
+            escape a marker with a backslash to keep it literal. An unknown #tag
+            is created only when “Create unknown #tags with this task” is ticked
+            under More options. Dates use your planning timezone.
+          </p>
           <details className="capture-more">
             <summary>More options</summary>
             <Field
@@ -74,14 +82,6 @@ export const TaskCaptureForm = ({
               <Checkbox name="createTags" />
               Create unknown #tags with this task
             </label>
-            <p className="capture-help">
-              Use +"Project name", #tag, 30m or 1h30m, @tomorrow (planned day),
-              @tomorrow 09:00 (planned time), @every monday, or !Friday. Web
-              addresses are attached as links per the setting below. Quote text
-              or escape a marker with a backslash to keep it literal. An unknown
-              #tag is created only when the box above is ticked. Dates use your
-              planning timezone.
-            </p>
           </details>
         </form>
         {csrfToken === undefined ? null : (
