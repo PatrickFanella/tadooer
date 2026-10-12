@@ -40,6 +40,7 @@ import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
+import { SectionHeading } from "../components/ui/section-heading.tsx";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.tsx";
 import { useLiveRevision } from "../live-sync/views.ts";
 
@@ -307,9 +308,12 @@ export const PlannerPage = ({
       {orderedDays.length > 0 ? (
         <Card aria-labelledby="planner-day-order-title">
           <CardHeader>
-            <h2 id="planner-day-order-title" className="text-base font-medium">
-              Day order
-            </h2>
+            <SectionHeading
+              id="planner-day-order-title"
+              as="h2"
+              eyebrow="Planned tasks"
+              title="Day order"
+            />
           </CardHeader>
           <CardContent className="grid gap-3">
             {!dayOrders.enabled ? (
@@ -324,7 +328,9 @@ export const PlannerPage = ({
             ) : null}
             {orderedDays.map(({ date, items }) => (
               <section key={date} aria-label={`Order for ${date}`}>
-                <h3 className="text-sm font-medium">{date}</h3>
+                <h3 className="text-2xs font-semibold tracking-[0.09em] text-subtext-2 uppercase">
+                  {date}
+                </h3>
                 <DayOrderList
                   label={`Tasks planned for ${date}`}
                   items={items}
