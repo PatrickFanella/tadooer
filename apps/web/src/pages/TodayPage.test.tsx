@@ -68,3 +68,39 @@ describe("pinned notes (ADR 0046)", () => {
     );
   });
 });
+
+describe("week plan loading (issue #169)", () => {
+  const props: TodayPageProps = {
+    dayPlan: undefined,
+    planningPreferences: undefined,
+    tasks: [],
+    activeSession: null,
+    clientId: null,
+    syncStatus: "online",
+    planner: null,
+    baikalCalendars: [],
+    calendarActionsAvailable: false,
+    focusActionsAvailable: false,
+    busy: false,
+    onFocusCommand: () => undefined,
+    onSubmitTask: () => Promise.resolve(),
+    onChangeTaskStatus: () => Promise.resolve(false),
+    onSubmitTimeBlock: () => Promise.resolve(),
+    onRemoveTimeBlock: () => Promise.resolve(),
+    onViewTasks: () => undefined,
+  };
+
+  it("holds the week plan with placeholder rows until the planner loads", () => {
+    const html = renderToStaticMarkup(<TodayPage {...props} />);
+    expect(html).toContain("Loading the week plan");
+    expect(html).not.toContain("No supported events in this week.");
+  });
+
+  it("shows the empty state offline instead of a placeholder that never resolves", () => {
+    const html = renderToStaticMarkup(
+      <TodayPage {...props} syncStatus="offline" />,
+    );
+    expect(html).not.toContain("Loading the week plan");
+    expect(html).toContain("No supported events in this week.");
+  });
+});

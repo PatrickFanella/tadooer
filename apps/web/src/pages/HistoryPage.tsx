@@ -10,6 +10,7 @@ import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
+import { LoadingList } from "../components/ui/loading-list.tsx";
 import { Input } from "../components/ui/input.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
 import {
@@ -153,6 +154,8 @@ export const HistoryList = ({
 }: HistoryListProps) => {
   const projectTitle = (id: string | null | undefined) =>
     projects.find((project) => project.id === id)?.title;
+  if (state.entries.length === 0 && busy)
+    return <LoadingList label="Loading archived tasks" />;
   if (state.entries.length === 0)
     return (
       <EmptyState

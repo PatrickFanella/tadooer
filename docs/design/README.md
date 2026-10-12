@@ -156,6 +156,23 @@ Radius is 5px on controls, 8px on rows and nested panels, 12px on cards. Under
 a coarse pointer, controls grow to a 44px minimum and form text to 16px (the
 touch block at the end of the stylesheet, issue #117).
 
+## Motion
+
+Motion is restrained: it confirms that something happened and nothing more.
+Two durations, `--motion-fast` (120ms) for disclosures and hover, and
+`--motion-base` (180ms) for rows and dialogs, with one easing `--ease-out`.
+Task rows, board items, history entries and opened `details` content use the
+`enter-fade` keyframe (opacity and a 2px rise). Dialogs use the shadcn
+fade and zoom. The `prefers-reduced-motion: reduce` rule in section 4 of the
+stylesheet shortens every animation and transition to effectively zero, so
+nothing here needs its own override.
+
+Loading uses `LoadingList` from `components/ui`: placeholder rows that hold
+the layout until data arrives, with a visually hidden label as a polite
+status region. Show it only while a request is in flight and the list is
+empty; an empty result keeps `EmptyState`, and an offline page shows its
+cached or empty state rather than a placeholder that never resolves.
+
 ## Component rules
 
 - Pages use `PageHeader`, `Card`, `SectionHeading`, and `EmptyState`; controls

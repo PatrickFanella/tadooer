@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
+import { LoadingList } from "../components/ui/loading-list.tsx";
 import { NativeSelect } from "../components/ui/native-select.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
@@ -702,7 +703,21 @@ export const BoardsPage = ({
               </Button>
             </div>
             {view === null ? (
-              <p>Loading the board…</p>
+              <div
+                role="status"
+                aria-live="polite"
+                className="board-grid"
+                style={{
+                  display: "grid",
+                  gap: "1rem",
+                  gridTemplateColumns: `repeat(${String(selected.columns)}, minmax(0, 1fr))`,
+                }}
+              >
+                <span className="sr-only">Loading the board</span>
+                {Array.from({ length: selected.columns }, (_, index) => (
+                  <LoadingList key={index} />
+                ))}
+              </div>
             ) : (
               <div
                 className="board-grid"
