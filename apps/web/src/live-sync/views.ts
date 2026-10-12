@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { LiveSyncResourceFamily } from "@suite/contracts";
+import type {
+  LiveSyncResourceFamily,
+  ReadonlyFeedKind,
+} from "@suite/contracts";
 import { noteBackgroundReads } from "../api.ts";
 
 /**
@@ -65,6 +68,27 @@ export const liveViews = [
   "choicePools",
 ] as const;
 export type LiveView = (typeof liveViews)[number];
+
+/** Feed changes replace the retired resource hints for these loaded views. */
+export const readonlyFeedKindViews: Readonly<
+  Record<ReadonlyFeedKind, readonly LiveView[]>
+> = {
+  board: ["boards"],
+  board_task: ["boards"],
+  section: ["sections"],
+  task_view: ["taskViews"],
+  menu_folder: ["menuFolders"],
+  application_preferences: ["applicationPreferences"],
+  planning_preferences: ["planningPreferences", "dayPlan", "planner"],
+  notification_preferences: ["notificationPreferences"],
+  capture_preferences: ["capturePreferences"],
+  counter: ["counters"],
+  counter_day: ["counters"],
+  evaluation: ["counters"],
+  task_links: ["taskLinks"],
+  archived_task: ["history"],
+  recurring_series: ["recurringSeries"],
+};
 
 /**
  * Which views each resource family refetches. Every family of the contract

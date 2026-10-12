@@ -48,7 +48,7 @@ export const archiveViolationError = (
     },
   })[code];
 
-const archivedTask = (record: ArchivedTaskRecord): ArchivedTask => ({
+export const archivedTask = (record: ArchivedTaskRecord): ArchivedTask => ({
   task: taskResponse(record.task),
   provenance:
     record.provenance === null

@@ -370,8 +370,7 @@ describe("live sync route classification (ADR 0045)", () => {
       classifyLiveSyncRoute("POST", "/api/active-session/command"),
     ).toEqual({ kind: "families", families: ["focus", "time_entries"] });
     expect(classifyLiveSyncRoute("PUT", `/api/boards/${id}`)).toEqual({
-      kind: "families",
-      families: ["boards"],
+      kind: "feed",
     });
     expect(classifyLiveSyncRoute("POST", "/api/data/restore/apply")).toEqual({
       kind: "families",
@@ -433,5 +432,53 @@ describe("live sync route classification (ADR 0045)", () => {
     expect(
       classifyLiveSyncRoute("POST", `/api/widgets/${"0".repeat(36)}/a`),
     ).toBeUndefined();
+  });
+});
+
+it("retires resource hints for the completed feed families while keeping provider and delivery status separate", () => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  for (const path of [
+    "/api/boards",
+    `/api/sections/${id}`,
+    "/api/task-views",
+    "/api/menu-folders",
+    "/api/application/preferences",
+    "/api/planning/preferences",
+    "/api/notifications/preferences",
+    "/api/capture-preferences",
+    `/api/tasks/${id}/attachments`,
+    `/api/tasks/${id}/archive`,
+    `/api/counters/${id}/days/2026-10-02`,
+    "/api/evaluations/2026-10-02",
+    `/api/recurring-series/${id}/state`,
+  ])
+    expect(classifyLiveSyncRoute("POST", path), path).toEqual({ kind: "feed" });
+  for (const op of [
+    "boards.mutate",
+    "sections.mutate",
+    "menu_folders.mutate",
+    "task_views.set",
+    "task_links.mutate",
+    "tasks.archive",
+    "tasks.unarchive",
+    "recurrence.create",
+    "recurrence.update",
+    "recurrence.set_state",
+    "recurrence.occurrence",
+    "counters.mutate",
+    "counters.record",
+    "evaluations.write",
+    "planning.update_preferences",
+    "application.update_preferences",
+    "notifications.update_preferences",
+  ] as const)
+    expect(automationOperationFamilies[op], op).toEqual([]);
+  expect(classifyLiveSyncRoute("POST", "/api/notifications/test")).toEqual({
+    kind: "families",
+    families: ["notification_preferences"],
+  });
+  expect(classifyLiveSyncRoute("POST", "/api/connectors/google/sync")).toEqual({
+    kind: "families",
+    families: ["connectors", "calendar"],
   });
 });

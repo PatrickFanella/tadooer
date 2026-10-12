@@ -402,31 +402,33 @@ export const BoardsPage = ({
 
   const loadBoards = useCallback(async () => {
     try {
-      const list = await getBoards();
+      const list = await getBoards(!online);
       setBoards(list);
       return list;
     } catch (error) {
       setMessage(failure(error, "Boards could not be loaded."));
       return [];
     }
-  }, []);
+  }, [online]);
 
-  const loadView = useCallback(async (boardId: string) => {
-    try {
-      setView(await getBoardView(boardId));
-    } catch (error) {
-      setMessage(failure(error, "The board could not be loaded."));
-      setView(null);
-    }
-  }, []);
+  const loadView = useCallback(
+    async (boardId: string) => {
+      try {
+        setView(await getBoardView(boardId, !online));
+      } catch (error) {
+        setMessage(failure(error, "The board could not be loaded."));
+        setView(null);
+      }
+    },
+    [online],
+  );
 
   useEffect(() => {
-    if (!online) return;
     void loadBoards();
   }, [online, loadBoards]);
 
   useEffect(() => {
-    if (selectedId === null || !online) {
+    if (selectedId === null) {
       setView(null);
       return;
     }
@@ -603,7 +605,7 @@ export const BoardsPage = ({
       {!online && (
         <Alert>
           <AlertDescription>
-            Boards need a connection. They are not cached offline.
+            Saved boards are read-only offline. Connect to edit or move tasks.
           </AlertDescription>
         </Alert>
       )}

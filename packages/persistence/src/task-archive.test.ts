@@ -243,9 +243,11 @@ it("emits sync changes, rejects offline edits to archived tasks and pages histor
       db.getSyncState("owner").epoch,
       before,
     );
-    expect(changes.map(({ kind, entityId }) => [kind, entityId])).toEqual(
-      taskIds.map((id) => ["archived", id]),
-    );
+    expect(
+      changes
+        .filter((change) => change.entityType === "task")
+        .map(({ kind, entityId }) => [kind, entityId]),
+    ).toEqual(taskIds.map((id) => ["archived", id]));
     // A patch queued offline before the archive conflicts, replay-stably.
     const patch = {
       ownerId: "owner",

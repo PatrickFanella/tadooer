@@ -1,3 +1,4 @@
+import { readCachedFeedResponse } from "./readonly-feed.ts";
 import {
   issueConnectionsResponseSchema,
   issueBrowseResponseSchema,
@@ -321,6 +322,7 @@ const request = async <T>(
   path: string,
   schema: z.ZodType<T>,
   init?: RequestInit,
+  preferCached = false,
 ): Promise<T> => {
   const reportFailure = captureSessionFailureReporter();
   const headers = new Headers(init?.headers);
@@ -332,10 +334,30 @@ const request = async <T>(
   )
     headers.set(liveSyncTriggerHeader, liveSyncPushTrigger);
   if (init?.body !== undefined) headers.set("Content-Type", "application/json");
-  const response = await ownerFetch(path, {
-    ...init,
-    headers,
-  });
+  const isRead = (init?.method ?? "GET") === "GET";
+  const cachedRead = async (): Promise<T | undefined> => {
+    if (!isRead || typeof indexedDB === "undefined") return undefined;
+    const cached = await readCachedFeedResponse(path);
+    return cached === undefined ? undefined : schema.parse(cached);
+  };
+  if (
+    isRead &&
+    (preferCached ||
+      (typeof navigator !== "undefined" &&
+        Reflect.has(navigator, "onLine") &&
+        !navigator.onLine))
+  ) {
+    const cached = await cachedRead();
+    if (cached !== undefined) return cached;
+  }
+  const response = await ownerFetch(path, { ...init, headers }).catch(
+    async (error: unknown) => {
+      const cached = await cachedRead();
+      if (cached !== undefined)
+        return new Response(JSON.stringify(cached), { status: 200 });
+      throw error;
+    },
+  );
   const body: unknown = await response.json();
   if (!response.ok) {
     const error = apiErrorSchema.safeParse(body);
@@ -645,7 +667,7 @@ export const updatePlanningPreferences = (
     body: JSON.stringify(planningPreferencesSchema.parse(input)),
   });
 
-/** Application preferences and shortcuts (ADR 0030); online-only. */
+/** Application preferences and shortcuts (ADR 0030); read-only offline (ADR 0053). */
 export const getApplicationPreferences =
   (): Promise<ApplicationPreferenceSnapshot> =>
     request(
@@ -1565,10 +1587,11 @@ export const deleteTaskIssueLink = (
     method: "DELETE",
     headers: conditionalHeaders(revision, csrfToken),
   });
-// ADR 0022 archived history. Online-only: archive state is not a sync v2
-// operation, so the browser never queues archive or restore offline.
+// ADR 0022 archived history is read-only offline (ADR 0053). Archive and
+// restore are not outbox operations and still require a connection.
 export const getTaskHistory = (
   input: { readonly query?: string; readonly cursor?: string | null } = {},
+  offline = false,
 ): Promise<TaskHistoryResponse> => {
   const params = new URLSearchParams();
   if (input.query !== undefined && input.query.trim() !== "")
@@ -1578,6 +1601,8 @@ export const getTaskHistory = (
   return request(
     `/api/tasks/history${query === "" ? "" : `?${query}`}`,
     taskHistoryResponseSchema,
+    undefined,
+    offline,
   );
 };
 
@@ -1732,14 +1757,17 @@ export const deleteTimeEntry = (
     },
   );
 
-// Counters and daily evaluations (ADR 0025) are online-only HTTP records.
+// Counters and daily evaluations (ADR 0025) are read-only offline (ADR 0053).
 export const getCounterHistory = (
   from: string,
   to: string,
+  offline = false,
 ): Promise<CounterHistory> =>
   request(
     `/api/counters?${new URLSearchParams({ from, to }).toString()}`,
     counterHistoryResponseSchema,
+    undefined,
+    offline,
   );
 
 export const createCounter = (
@@ -1814,10 +1842,13 @@ export const controlCounterStopwatch = (
 export const getEvaluations = (
   from: string,
   to: string,
+  offline = false,
 ): Promise<EvaluationList> =>
   request(
     `/api/evaluations?${new URLSearchParams({ from, to }).toString()}`,
     evaluationListResponseSchema,
+    undefined,
+    offline,
   );
 
 export const saveEvaluation = (
@@ -1867,15 +1898,22 @@ export const deletePluginMetadata = (
     headers: conditionalHeaders(revision, csrfToken),
   });
 // Boards, sections, saved task views and sidebar folders (issue #63, ADR
-// 0028). Online-only HTTP records with revisions; nothing here is cached.
+// 0028). Read-only offline feed records (ADR 0053); writes require revisions.
 
-export const getBoards = (): Promise<readonly Board[]> =>
-  request("/api/boards", boardListResponseSchema).then(({ boards }) => boards);
+export const getBoards = (offline = false): Promise<readonly Board[]> =>
+  request("/api/boards", boardListResponseSchema, undefined, offline).then(
+    ({ boards }) => boards,
+  );
 
-export const getBoardView = (boardId: string): Promise<BoardView> =>
+export const getBoardView = (
+  boardId: string,
+  offline = false,
+): Promise<BoardView> =>
   request(
     `/api/boards/${encodeURIComponent(boardId)}`,
     boardViewResponseSchema,
+    undefined,
+    offline,
   ).then(({ view }) => view);
 
 export const createBoard = (

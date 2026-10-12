@@ -367,11 +367,20 @@ export const CountersPage = ({
   csrfToken,
   online,
   timeZone = "UTC",
-  api = defaultApi,
+  api: suppliedApi,
   initialState,
   newId = () => crypto.randomUUID(),
 }: CountersPageProps) => {
   const today = zonedCalendarDate(new Date(), timeZone);
+  const api =
+    suppliedApi ??
+    (online
+      ? defaultApi
+      : {
+          ...defaultApi,
+          getCounterHistory: (from, to) => getCounterHistory(from, to, true),
+          getEvaluations: (from, to) => getEvaluations(from, to, true),
+        });
   const [state, setState] = useState<CountersState>(
     initialState ?? initialCounters(today),
   );
@@ -395,7 +404,7 @@ export const CountersPage = ({
   };
   const load = (anchor: string) => void run(() => loadCounters(api, anchor));
   useEffect(() => {
-    if (!online || initialState !== undefined) return;
+    if (initialState !== undefined) return;
     load(state.anchor);
     // Load once per connection; later loads are explicit.
   }, [online]);
@@ -530,7 +539,7 @@ export const CountersPage = ({
       {!online && (
         <Alert variant="warning" role="status">
           <AlertDescription>
-            Counters need a connection. Their values are not kept offline.
+            Saved counters are read-only offline. Connect to record values.
           </AlertDescription>
         </Alert>
       )}
@@ -552,7 +561,7 @@ export const CountersPage = ({
             <Button
               type="button"
               variant="outline"
-              disabled={disabled}
+              disabled={busy}
               onClick={() => load(history.today)}
             >
               Back to this week
@@ -595,7 +604,7 @@ export const CountersPage = ({
             <Button
               type="button"
               variant="outline"
-              disabled={disabled}
+              disabled={busy}
               onClick={() => load(addCalendarDays(range.from, -7))}
             >
               Previous week
@@ -606,7 +615,7 @@ export const CountersPage = ({
             <Button
               type="button"
               variant="outline"
-              disabled={disabled}
+              disabled={busy}
               onClick={() => load(addCalendarDays(range.from, 7))}
             >
               Next week
@@ -765,7 +774,9 @@ export const CountersPage = ({
             <p className="hint">
               Focus in Tadooer this day:{" "}
               {focus === undefined
-                ? "none"
+                ? online
+                  ? "none"
+                  : "unavailable offline"
                 : `${formatClockDuration(focus.ms)} in ${String(focus.intervals)} interval${focus.intervals === 1 ? "" : "s"}`}
               .
               {evaluation !== undefined &&

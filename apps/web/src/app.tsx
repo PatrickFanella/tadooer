@@ -1,3 +1,6 @@
+import { readonlyFeedKindViews } from "./live-sync/views.ts";
+import { readonlyFeedKinds } from "@suite/contracts";
+import { OfflineLibrary } from "./pages/OfflineLibrary.tsx";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { usePlannerLoader } from "./use-planner-loader.ts";
@@ -328,6 +331,9 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   const [cachedFocusPreferences, setCachedFocusPreferences] = useState<
     FocusPreferencesResponse | undefined
   >();
+  const readonlyFeedMarks = useRef<
+    Partial<Record<(typeof readonlyFeedKinds)[number], string>> | undefined
+  >(undefined);
   const timeEntryFeedMark = useRef<string | null | undefined>(undefined);
   const pinnedNotes = notes.filter(({ pinnedToToday }) => pinnedToToday);
   const [subtasks, setSubtasks] = useState<
@@ -484,6 +490,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         cachedTimeEntries,
         focusPreferences,
         feedMark,
+        readonlyMarks,
       ] = await Promise.all([
         localStore.loadCachedProjects(),
         localStore.loadCachedTags(),
@@ -493,6 +500,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         localStore.loadCachedTimeEntries(),
         localStore.loadCachedFocusPreferences(),
         localStore.loadTimeEntryFeedMark(),
+        localStore.loadReadonlyFeedMarks(),
       ]);
       if (!isCurrent()) return;
       setProjects(cachedProjects);
@@ -510,6 +518,17 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       )
         liveViewRegistry.refetchViews(["worklog", "timeSpent"]);
       timeEntryFeedMark.current = feedMark;
+      if (readonlyFeedMarks.current !== undefined) {
+        const previous = readonlyFeedMarks.current;
+        liveViewRegistry.refetchViews([
+          ...new Set(
+            readonlyFeedKinds
+              .filter((kind) => previous[kind] !== readonlyMarks[kind])
+              .flatMap((kind) => readonlyFeedKindViews[kind]),
+          ),
+        ]);
+      }
+      readonlyFeedMarks.current = readonlyMarks;
       setSubtasks(
         cachedSubtasks.reduce<Record<string, Subtask[]>>((grouped, subtask) => {
           (grouped[subtask.taskId] ??= []).push(subtask);
@@ -2536,26 +2555,75 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           busy={busy}
           onResolve={resolveConflict}
         />
-        <TodayPage
-          dayPlan={undefined}
-          planningPreferences={renderedOfflineState.planningPreferences}
-          tasks={renderedOfflineState.tasks}
-          activeSession={null}
-          clientId={null}
-          syncStatus="offline"
-          planner={null}
-          baikalCalendars={[]}
-          calendarActionsAvailable={false}
-          focusActionsAvailable={false}
-          busy={busy}
-          onFocusCommand={() => undefined}
-          onSubmitTask={submitTask}
-          onChangeTaskStatus={changeTaskStatus}
-          onSubmitTimeBlock={submitTimeBlock}
-          onRemoveTimeBlock={removeTimeBlock}
-          onViewTasks={() => navigate("tasks")}
-          pinnedNotes={pinnedNotes}
-        />
+        <nav aria-label="Offline views">
+          {["today", "boards", "counters", "history", "settings"].map(
+            (item) => (
+              <a
+                key={item}
+                href={`/${item}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(item as typeof route);
+                }}
+                aria-current={route === item ? "page" : undefined}
+              >
+                {item === "settings"
+                  ? "Saved workspace"
+                  : item.charAt(0).toUpperCase() + item.slice(1)}
+              </a>
+            ),
+          )}
+        </nav>
+        {route === "boards" ? (
+          <BoardsPage
+            csrfToken=""
+            online={false}
+            tasks={renderedOfflineState.tasks}
+            projects={projects}
+            tags={tags}
+          />
+        ) : route === "counters" ? (
+          <CountersPage
+            csrfToken=""
+            online={false}
+            timeZone={
+              renderedOfflineState.planningPreferences?.timeZone ?? "UTC"
+            }
+          />
+        ) : route === "history" ? (
+          <HistoryPage
+            csrfToken=""
+            online={false}
+            timeZone={
+              renderedOfflineState.planningPreferences?.timeZone ?? "UTC"
+            }
+            projects={projects}
+            onRestored={syncNow}
+          />
+        ) : route === "settings" ? (
+          <OfflineLibrary />
+        ) : (
+          <TodayPage
+            dayPlan={undefined}
+            planningPreferences={renderedOfflineState.planningPreferences}
+            tasks={renderedOfflineState.tasks}
+            activeSession={null}
+            clientId={null}
+            syncStatus="offline"
+            planner={null}
+            baikalCalendars={[]}
+            calendarActionsAvailable={false}
+            focusActionsAvailable={false}
+            busy={busy}
+            onFocusCommand={() => undefined}
+            onSubmitTask={submitTask}
+            onChangeTaskStatus={changeTaskStatus}
+            onSubmitTimeBlock={submitTimeBlock}
+            onRemoveTimeBlock={removeTimeBlock}
+            onViewTasks={() => navigate("tasks")}
+            pinnedNotes={pinnedNotes}
+          />
+        )}
         <section aria-label="Offline sync status">
           <p>Visible sync conflicts: {renderedOfflineState.conflictCount}</p>
           {formError !== null ? (

@@ -161,8 +161,9 @@ it("archives, searches and restores task families over HTTP, removes them from s
       );
       expect(active.tasks.map(({ id }) => id)).toEqual([kept.id]);
       const changes = await round(cursor);
-      const removed = changes.changes.filter(({ entityId }) =>
-        [parent.id, child.id].includes(entityId),
+      const removed = changes.changes.filter(
+        ({ entityKind, entityId }) =>
+          entityKind === "task" && [parent.id, child.id].includes(entityId),
       );
       expect(removed.map(({ kind, snapshot }) => [kind, snapshot])).toEqual([
         ["deleted", null],

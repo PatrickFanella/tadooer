@@ -120,7 +120,7 @@ describe("History view", () => {
         initialState={state}
       />,
     );
-    expect(offline).toContain("History needs a connection");
+    expect(offline).toContain("Saved history is read-only offline");
     expect(offline).toContain('disabled="">Restore to Tasks');
   });
 });

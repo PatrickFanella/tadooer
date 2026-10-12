@@ -1,5 +1,8 @@
 import {
   syncDiagnosticManifestSchema,
+  type ReadonlyFeedKind,
+  readonlyFeedSnapshotSchema,
+  readonlyFeedKinds,
   isHabitSyncOperation,
   habitListResponseSchema,
   type HabitCommand,
@@ -71,6 +74,7 @@ const conflictStore = "conflicts";
 const diagnosticStore = "diagnostics";
 
 export type CachedEntityKind =
+  | ReadonlyFeedKind
   | "habit"
   | "habit_occurrence"
   | "task"
@@ -243,6 +247,7 @@ interface LocalMetadata extends LocalClientIdentity {
    * report reload when it changes.
    */
   readonly timeEntryFeedMark?: string;
+  readonly readonlyFeedMarks?: Partial<Record<ReadonlyFeedKind, string>>;
 }
 
 /** What a sync round or snapshot skipped while it was read (ADR 0050). */
@@ -602,6 +607,18 @@ export class LocalStore {
   }
 
   async loadPlanningPreferences(): Promise<PlanningPreferences | undefined> {
+    const feed = (await this.loadCachedEntities()).find(
+      (record) => record.entityKind === "planning_preferences",
+    );
+    if (feed !== undefined) {
+      const snapshot = readonlyFeedSnapshotSchema.parse({
+        entityKind: "planning_preferences",
+        value: feed.value,
+      });
+      if (snapshot.entityKind === "planning_preferences")
+        return snapshot.value.preferences;
+    }
+
     const database = await this.#open();
     const transaction = database.transaction(metadataStore, "readonly");
     const value: unknown = await requestResult<unknown>(
@@ -775,6 +792,12 @@ export class LocalStore {
    * ADR 0050: changes when a sync round delivered a time entry change of
    * any date, including one outside the cached window.
    */
+  async loadReadonlyFeedMarks(): Promise<
+    Partial<Record<ReadonlyFeedKind, string>>
+  > {
+    return (await this.#metadata())?.readonlyFeedMarks ?? {};
+  }
+
   async loadTimeEntryFeedMark(): Promise<string | null> {
     return (await this.#metadata())?.timeEntryFeedMark ?? null;
   }
@@ -1707,6 +1730,18 @@ export class LocalStore {
       {
         ...metadata,
         cursor: response.nextCursor,
+        readonlyFeedMarks: {
+          ...metadata.readonlyFeedMarks,
+          ...Object.fromEntries(
+            response.changes
+              .filter((change) =>
+                readonlyFeedKinds.includes(
+                  change.entityKind as ReadonlyFeedKind,
+                ),
+              )
+              .map((change) => [change.entityKind, response.nextCursor]),
+          ),
+        },
         ...(timeEntryIds.size === 0
           ? {}
           : { timeEntryFeedMark: response.nextCursor }),
@@ -1969,6 +2004,9 @@ export class LocalStore {
         skippedUnknownKinds: response.skippedUnknownKinds ?? 0,
         skippedByKinds: syncEntityKindsSignature,
         timeEntryFeedMark: response.nextCursor,
+        readonlyFeedMarks: Object.fromEntries(
+          readonlyFeedKinds.map((kind) => [kind, response.nextCursor]),
+        ),
       },
       metadataKey,
     );

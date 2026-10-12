@@ -1,0 +1,531 @@
+{
+  "client": {
+    "protocolVersion": 2,
+    "client": {
+      "id": "cf0800f6-4651-4efb-9595-450b4a64d7f4",
+      "ownerId": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0",
+      "label": "Disposable regression fixture",
+      "createdAt": "2026-10-12T17:27:11.961Z",
+      "lastSeenAt": "2026-10-12T17:27:11.961Z",
+      "revokedAt": null
+    },
+    "clientCredential": "offline-fixture-credential-not-a-live-token",
+    "initialCursor": "e53d84bc-8c07-4daa-b8a7-8fa82b75faa6.0"
+  },
+  "snapshots": [
+    {
+      "entityKind": "application_preferences",
+      "value": {
+        "revision": 1,
+        "preferences": {
+          "theme": "dark",
+          "language": "en",
+          "dateTimeLocale": "en-US",
+          "firstDayOfWeek": 1,
+          "defaultStartPage": "today",
+          "defaultProjectId": null,
+          "confirmBeforeDelete": true,
+          "markdownInNotes": true,
+          "autoMarkParentDone": false,
+          "autoAddWorkedOnToToday": true,
+          "defaultEstimateMinutes": null,
+          "defaultChildEstimateMinutes": null,
+          "notifyWhenEstimateExceeded": true,
+          "defaultTaskReminder": {
+            "kind": "default"
+          },
+          "notifyOnDueDate": true,
+          "dueDateNotificationHour": 9,
+          "dailySummaryNote": "",
+          "shortcuts": {}
+        },
+        "id": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0"
+      }
+    },
+    {
+      "entityKind": "archived_task",
+      "value": {
+        "task": {
+          "id": "c3a71e5b-e9b0-4c63-b81c-e69a00095936",
+          "title": "Archived fixture",
+          "notes": "",
+          "status": "open",
+          "revision": 2,
+          "createdAt": "2026-10-12T17:27:11.971Z",
+          "updatedAt": "2026-10-12T17:27:12.011Z",
+          "completedAt": null,
+          "deletedAt": null,
+          "plannedStart": null,
+          "plannedDay": null,
+          "startReminder": {
+            "kind": "default"
+          },
+          "deadlineReminder": null,
+          "deadline": null,
+          "estimateMinutes": null,
+          "projectId": null,
+          "tagIds": [],
+          "parentId": null,
+          "childPosition": null,
+          "archivedAt": "2026-10-12T17:27:12.011Z",
+          "recurrence": null
+        },
+        "provenance": null,
+        "id": "c3a71e5b-e9b0-4c63-b81c-e69a00095936"
+      }
+    },
+    {
+      "entityKind": "board",
+      "value": {
+        "id": "fd848f4c-1fcf-4a5b-acdc-6961f145d351",
+        "title": "Kanban",
+        "columns": 3,
+        "position": 0,
+        "revision": 2,
+        "createdAt": "2026-10-12T17:27:11.983Z",
+        "updatedAt": "2026-10-12T17:27:11.987Z",
+        "panels": [
+          {
+            "id": "fd949749-1fca-4070-883b-448df02948d0",
+            "title": "To do",
+            "filter": {
+              "includedTagIds": [],
+              "includedTagsMatch": "all",
+              "excludedTagIds": [],
+              "excludedTagsMatch": "any",
+              "includedMarkers": [],
+              "excludedMarkers": ["in_progress"],
+              "projectIds": [],
+              "doneState": "open",
+              "scheduledState": "all",
+              "backlogState": "no_backlog",
+              "parentsOnly": false,
+              "sortBy": null,
+              "sortDir": "asc"
+            }
+          },
+          {
+            "id": "69c2ccd1-bc83-468c-b60d-a59c024f504d",
+            "title": "In progress",
+            "filter": {
+              "includedTagIds": [],
+              "includedTagsMatch": "all",
+              "excludedTagIds": [],
+              "excludedTagsMatch": "any",
+              "includedMarkers": ["in_progress"],
+              "excludedMarkers": [],
+              "projectIds": [],
+              "doneState": "open",
+              "scheduledState": "all",
+              "backlogState": "no_backlog",
+              "parentsOnly": false,
+              "sortBy": null,
+              "sortDir": "asc"
+            }
+          },
+          {
+            "id": "3e1c2e4f-8f48-40ee-947f-d402c472aaaf",
+            "title": "Done",
+            "filter": {
+              "includedTagIds": [],
+              "includedTagsMatch": "all",
+              "excludedTagIds": [],
+              "excludedTagsMatch": "any",
+              "includedMarkers": [],
+              "excludedMarkers": [],
+              "projectIds": [],
+              "doneState": "done",
+              "scheduledState": "all",
+              "backlogState": "no_backlog",
+              "parentsOnly": false,
+              "sortBy": null,
+              "sortDir": "asc"
+            }
+          }
+        ],
+        "manualOrder": {
+          "69c2ccd1-bc83-468c-b60d-a59c024f504d": [
+            "6b3323e9-608b-434e-a030-e4a5bf9bc475"
+          ]
+        }
+      }
+    },
+    {
+      "entityKind": "board_task",
+      "value": {
+        "id": "6b3323e9-608b-434e-a030-e4a5bf9bc475",
+        "markers": ["in_progress"],
+        "inBacklog": false
+      }
+    },
+    {
+      "entityKind": "capture_preferences",
+      "value": {
+        "preferences": {
+          "urlBehavior": "extract"
+        },
+        "revision": 1,
+        "id": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0"
+      }
+    },
+    {
+      "entityKind": "counter",
+      "value": {
+        "id": "5d1bcb56-ee9b-4fd5-98ec-8c13d8ce6e19",
+        "title": "Fixture count",
+        "kind": "click",
+        "icon": null,
+        "enabled": true,
+        "hidden": false,
+        "position": 0,
+        "streak": {
+          "enabled": false,
+          "minValue": 1,
+          "mode": "weekdays",
+          "weekdays": [1, 2, 3, 4, 5],
+          "weeklyFrequency": 3
+        },
+        "countdownMs": null,
+        "runningSince": null,
+        "currentStreak": null,
+        "revision": 1,
+        "createdAt": "2026-10-02T12:00:00.000Z",
+        "updatedAt": "2026-10-02T12:00:00.000Z",
+        "deletedAt": null,
+        "provenance": null
+      }
+    },
+    {
+      "entityKind": "counter_day",
+      "value": {
+        "counterId": "5d1bcb56-ee9b-4fd5-98ec-8c13d8ce6e19",
+        "day": "2026-10-02",
+        "value": 3,
+        "revision": 1,
+        "updatedAt": "2026-10-02T12:00:00.000Z",
+        "importedValue": null,
+        "id": "counter-day:5d1bcb56-ee9b-4fd5-98ec-8c13d8ce6e19:2026-10-02"
+      }
+    },
+    {
+      "entityKind": "evaluation",
+      "value": {
+        "id": "e775bd31-20a9-4e1b-bc07-81ecf99664f9",
+        "day": "2026-10-02",
+        "notes": "Fixture reflection",
+        "reflection": "",
+        "impact": null,
+        "energy": null,
+        "remindTomorrow": false,
+        "importedFocusSessionsMs": [],
+        "revision": 1,
+        "createdAt": "2026-10-02T12:00:00.000Z",
+        "updatedAt": "2026-10-02T12:00:00.000Z",
+        "provenance": null
+      }
+    },
+    {
+      "entityKind": "menu_folder",
+      "value": {
+        "id": "ff413269-b4ae-437f-9937-17e5b2bbf885",
+        "kind": "tag",
+        "parentId": null,
+        "title": "Folder fixture",
+        "expanded": true,
+        "position": 0,
+        "revision": 1,
+        "createdAt": "2026-10-12T17:27:11.993Z",
+        "updatedAt": "2026-10-12T17:27:11.993Z",
+        "itemIds": ["5fcd7990-247e-46ed-aee9-9d7571b05aac"]
+      }
+    },
+    {
+      "entityKind": "notification_preferences",
+      "value": {
+        "id": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0",
+        "revision": 1,
+        "preferences": {
+          "enabled": false,
+          "leadReminderEnabled": true,
+          "atStartReminderEnabled": true,
+          "detailedContentEnabled": true
+        }
+      }
+    },
+    {
+      "entityKind": "planning_preferences",
+      "value": {
+        "id": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0",
+        "revision": 1,
+        "preferences": {
+          "workingDays": [1, 2, 3, 4, 5],
+          "workdayStart": "09:00",
+          "workdayEnd": "17:00",
+          "breakStart": "12:00",
+          "breakEnd": "12:30",
+          "timeZone": "America/Chicago",
+          "dayStartsAt": "00:00"
+        }
+      }
+    },
+    {
+      "entityKind": "recurring_series",
+      "value": {
+        "id": "ea18ba11-8dc9-43d8-ae79-f2cee2335733",
+        "title": "Recurring fixture",
+        "notes": "",
+        "projectId": null,
+        "tagIds": [],
+        "estimateMinutes": null,
+        "rule": {
+          "cycle": "daily",
+          "interval": 1
+        },
+        "startDate": "2026-10-02",
+        "endDate": null,
+        "startTime": null,
+        "startReminder": {
+          "kind": "default"
+        },
+        "anchor": "schedule",
+        "waitForCompletion": false,
+        "missedOccurrences": "latest",
+        "childTemplates": [],
+        "state": "active",
+        "anchorDate": "2026-10-02",
+        "cursorDate": "2026-10-02",
+        "floorDate": "2026-10-02",
+        "revision": 1,
+        "createdAt": "2026-10-02T12:00:00.000Z",
+        "updatedAt": "2026-10-02T12:00:00.000Z",
+        "pausedAt": null,
+        "endedAt": null,
+        "upcoming": [
+          {
+            "date": "2026-10-12",
+            "skipped": false
+          },
+          {
+            "date": "2026-10-13",
+            "skipped": false
+          },
+          {
+            "date": "2026-10-14",
+            "skipped": false
+          },
+          {
+            "date": "2026-10-15",
+            "skipped": false
+          },
+          {
+            "date": "2026-10-16",
+            "skipped": false
+          }
+        ],
+        "exceptions": [],
+        "instanceCount": 1,
+        "source": "tadooer"
+      }
+    },
+    {
+      "entityKind": "section",
+      "value": {
+        "id": "c8b352ba-1489-49c5-a677-537f66aa179e",
+        "contextKind": "tag",
+        "contextId": "5fcd7990-247e-46ed-aee9-9d7571b05aac",
+        "title": "Section fixture",
+        "expanded": true,
+        "position": 0,
+        "revision": 1,
+        "createdAt": "2026-10-12T17:27:11.990Z",
+        "updatedAt": "2026-10-12T17:27:11.990Z",
+        "taskIds": []
+      }
+    },
+    {
+      "entityKind": "task_links",
+      "value": {
+        "taskId": "6b3323e9-608b-434e-a030-e4a5bf9bc475",
+        "issueLink": null,
+        "attachments": [
+          {
+            "id": "e0614765-de68-443d-a64d-c7ac11e75e03",
+            "ownerId": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0",
+            "taskId": "6b3323e9-608b-434e-a030-e4a5bf9bc475",
+            "kind": "link",
+            "title": "Fixture reference",
+            "url": "https://example.test/reference",
+            "text": null,
+            "sourcePath": null,
+            "available": true,
+            "unavailableReason": null,
+            "source": "suite",
+            "position": 0,
+            "revision": 1,
+            "createdAt": "2026-10-12T17:27:12.009Z",
+            "updatedAt": "2026-10-12T17:27:12.009Z"
+          }
+        ],
+        "id": "6b3323e9-608b-434e-a030-e4a5bf9bc475"
+      }
+    },
+    {
+      "entityKind": "task_view",
+      "value": {
+        "contextKind": "all",
+        "contextId": "",
+        "sortBy": "name",
+        "sortDir": "asc",
+        "groupBy": null,
+        "filter": null,
+        "collapsedGroups": [],
+        "revision": 1,
+        "id": "all:"
+      }
+    },
+    {
+      "entityKind": "task",
+      "value": {
+        "task": {
+          "id": "6b3323e9-608b-434e-a030-e4a5bf9bc475",
+          "title": "Active fixture",
+          "notes": "",
+          "status": "open",
+          "revision": 1,
+          "createdAt": "2026-10-12T17:27:11.969Z",
+          "updatedAt": "2026-10-12T17:27:11.969Z",
+          "completedAt": null,
+          "deletedAt": null,
+          "plannedStart": null,
+          "plannedDay": null,
+          "startReminder": {
+            "kind": "default"
+          },
+          "deadlineReminder": null,
+          "deadline": null,
+          "estimateMinutes": null,
+          "projectId": null,
+          "tagIds": [],
+          "parentId": null,
+          "childPosition": null,
+          "recurrence": null
+        },
+        "fieldVersions": {
+          "title": 1,
+          "notes": 1,
+          "status": 1,
+          "estimateMinutes": 1,
+          "projectId": 1,
+          "tagIds": 1,
+          "deadline": 1,
+          "parent": 1,
+          "plannedStart": 1
+        },
+        "changeSequence": 1
+      }
+    },
+    {
+      "entityKind": "task",
+      "value": {
+        "task": {
+          "id": "7ecf562e-a287-4f3a-a0a4-9d4320eec088",
+          "title": "Recurring fixture",
+          "notes": "",
+          "status": "open",
+          "revision": 1,
+          "createdAt": "2026-10-02T12:00:00.000Z",
+          "updatedAt": "2026-10-02T12:00:00.000Z",
+          "completedAt": null,
+          "deletedAt": null,
+          "plannedStart": null,
+          "plannedDay": "2026-10-02",
+          "startReminder": {
+            "kind": "default"
+          },
+          "deadlineReminder": null,
+          "deadline": null,
+          "estimateMinutes": null,
+          "projectId": null,
+          "tagIds": [],
+          "parentId": null,
+          "childPosition": null,
+          "recurrence": {
+            "seriesId": "ea18ba11-8dc9-43d8-ae79-f2cee2335733",
+            "occurrenceDate": "2026-10-02"
+          }
+        },
+        "fieldVersions": {
+          "title": 1,
+          "notes": 1,
+          "status": 1,
+          "estimateMinutes": 1,
+          "projectId": 1,
+          "tagIds": 1,
+          "deadline": 1,
+          "parent": 1,
+          "plannedStart": 1
+        },
+        "changeSequence": 1
+      }
+    },
+    {
+      "entityKind": "tag",
+      "value": {
+        "id": "5fcd7990-247e-46ed-aee9-9d7571b05aac",
+        "ownerId": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0",
+        "displayName": "Fixture",
+        "normalizedName": "fixture",
+        "revision": 1,
+        "createdAt": "2026-10-12T17:27:11.973Z",
+        "updatedAt": "2026-10-12T17:27:11.973Z",
+        "archivedAt": null,
+        "color": null,
+        "icon": null,
+        "position": 0
+      }
+    },
+    {
+      "entityKind": "focus_preferences",
+      "value": {
+        "preferences": {
+          "defaultMode": "pomodoro",
+          "pomodoro": {
+            "workMinutes": 25,
+            "shortBreakMinutes": 5,
+            "longBreakMinutes": 15,
+            "cyclesBeforeLongBreak": 4
+          },
+          "flowtime": {
+            "breakEnabled": false,
+            "breakMode": "ratio",
+            "breakPercentage": 20,
+            "breakRules": []
+          },
+          "countdownMinutes": 25,
+          "autoStartFocusOnTracking": false,
+          "breakEndAlarm": false,
+          "idle": {
+            "enabled": true,
+            "minIdleMinutes": 5,
+            "onlyWithTask": true,
+            "suppressInFocus": false
+          },
+          "takeABreak": {
+            "enabled": true,
+            "minWorkingMinutes": 60,
+            "snoozeMinutes": 15,
+            "message": "You have been working for ${duration} without a break. Step away from the screen for a moment."
+          },
+          "trackingReminder": {
+            "enabled": false,
+            "minMinutes": 5
+          }
+        },
+        "revision": 0,
+        "imported": null,
+        "id": "0aa487be-08ff-494c-bf77-6f3b1f7b72f0"
+      }
+    }
+  ],
+  "cursor": "e53d84bc-8c07-4daa-b8a7-8fa82b75faa6.39"
+}

@@ -214,7 +214,7 @@ export const HistoryList = ({
         <Button
           type="button"
           variant="ghost"
-          disabled={busy || !online}
+          disabled={busy}
           onClick={onLoadMore}
         >
           Show more
@@ -244,9 +244,17 @@ export const HistoryPage = ({
   timeZone = "UTC",
   projects = [],
   onRestored,
-  api = defaultApi,
+  api: suppliedApi,
   initialState,
 }: HistoryPageProps) => {
+  const api =
+    suppliedApi ??
+    (online
+      ? defaultApi
+      : {
+          ...defaultApi,
+          getTaskHistory: (input) => getTaskHistory(input, true),
+        });
   const [state, setState] = useState<HistoryState>(
     initialState ?? emptyHistory,
   );
@@ -261,7 +269,7 @@ export const HistoryPage = ({
     }
   };
   useEffect(() => {
-    if (!online || initialState !== undefined) return;
+    if (initialState !== undefined) return;
     void run(() => searchHistory(api, ""));
     // Load once per connection; later searches are explicit.
   }, [online]);
@@ -295,7 +303,7 @@ export const HistoryPage = ({
       {!online && (
         <Alert variant="warning" role="status">
           <AlertDescription>
-            History needs a connection. Archived tasks are not kept offline.
+            Saved history is read-only offline. Connect to restore tasks.
           </AlertDescription>
         </Alert>
       )}
@@ -319,11 +327,10 @@ export const HistoryPage = ({
                 name="query"
                 maxLength={200}
                 value={draft}
-                disabled={!online}
                 onChange={(event) => setDraft(event.target.value)}
               />
             </label>
-            <Button type="submit" disabled={busy || !online}>
+            <Button type="submit" disabled={busy}>
               Search
             </Button>
           </form>

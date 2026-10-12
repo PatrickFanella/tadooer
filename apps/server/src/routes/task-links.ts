@@ -65,8 +65,8 @@ const attachmentPath = new RegExp(
 const issueLinkPath = new RegExp(`^/api/tasks/(${uuid})/issue-link/(${uuid})$`);
 
 /**
- * Online-only task attachments and imported issue links (ADR 0021). They are
- * not in the sync change feed. No route contacts an issue provider.
+ * Task attachments and imported issue links (ADR 0021) join the read-only
+ * offline feed (ADR 0053). Writes remain online. No route contacts an issue provider.
  */
 export const handleTaskLinks: RouteHandler = async (
   request,

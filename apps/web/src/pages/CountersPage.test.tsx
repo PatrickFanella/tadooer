@@ -287,7 +287,7 @@ describe("Counters view", () => {
         api={fakeApi()}
       />,
     );
-    expect(html).toContain("Counters need a connection");
+    expect(html).toContain("Saved counters are read-only offline");
     expect(html).toContain("Daily evaluation");
     // The form edits the owner's today inside the shown week.
     expect(html).toContain("Focus in Tadooer this day: 0:50 in 2 intervals");
