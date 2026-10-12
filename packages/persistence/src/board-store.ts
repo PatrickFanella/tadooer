@@ -46,6 +46,14 @@ import {
  * - A menu folder groups projects or tags in the sidebar; an item is in at
  *   most one folder.
  */
+/** Issue #173: a board may belong to one project. */
+export const boardProjectMigration = {
+  id: "0056_board_project",
+  sql: `
+      ALTER TABLE boards ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+  `,
+};
+
 export const boardsMigration = {
   id: "0032_boards_sections_views",
   sql: `
@@ -157,6 +165,8 @@ export interface BoardConfigInput {
   readonly title: string;
   readonly columns: number;
   readonly panels: readonly BoardPanelInput[];
+  /** Issue #173: absent or null for a board that spans projects. */
+  readonly projectId?: string | null | undefined;
 }
 
 export type BoardMutationResult =
@@ -393,6 +403,7 @@ export class SqliteBoardStore {
       id: String(row.id),
       title: String(row.title),
       columns: Number(row.columns),
+      projectId: row.project_id == null ? null : String(row.project_id),
       position: Number(row.position),
       revision: Number(row.revision),
       createdAt: String(row.created_at),
@@ -443,6 +454,21 @@ export class SqliteBoardStore {
     return row === undefined
       ? undefined
       : this.#boardFromRow(row, this.#panels([boardId]).get(boardId) ?? []);
+  }
+
+  /** Issue #173: a board's project must belong to the owner. */
+  #validateBoardProject(
+    ownerId: string,
+    projectId: string | null | undefined,
+  ): string | undefined {
+    if (projectId == null) return undefined;
+    return this.#one(
+      "SELECT 1 FROM projects WHERE owner_id = ? AND id = ?",
+      ownerId,
+      projectId,
+    ) === undefined
+      ? "The board names a project you do not own"
+      : undefined;
   }
 
   /** Validates that every referenced tag and project belongs to the owner. */
@@ -551,15 +577,29 @@ export class SqliteBoardStore {
 
   createBoard(
     ownerId: string,
-    input: BoardConfigInput | { readonly template: "eisenhower" | "kanban" },
+    input:
+      | BoardConfigInput
+      | {
+          readonly template: "eisenhower" | "kanban";
+          readonly projectId?: string | null | undefined;
+        },
     newId: () => string,
     now: string,
   ): BoardMutationResult {
     const config: BoardConfigInput =
       "template" in input
-        ? boardTemplate(boardTemplateSchema.parse(input.template))
+        ? {
+            ...boardTemplate(boardTemplateSchema.parse(input.template)),
+            projectId: input.projectId ?? null,
+          }
         : input;
     return this.#inSavepoint("board_create", () => {
+      const projectProblem = this.#validateBoardProject(
+        ownerId,
+        config.projectId,
+      );
+      if (projectProblem !== undefined)
+        return { kind: "invalid", detail: projectProblem };
       const panels = this.#parsePanels(ownerId, config.panels);
       if (!panels.ok) return { kind: "invalid", detail: panels.detail };
       const id = newId();
@@ -570,11 +610,12 @@ export class SqliteBoardStore {
         )?.count ?? 0,
       );
       this.#run(
-        "INSERT INTO boards (id, owner_id, title, columns, position, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+        "INSERT INTO boards (id, owner_id, title, columns, project_id, position, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
         id,
         ownerId,
         config.title,
         config.columns,
+        config.projectId ?? null,
         position,
         now,
         now,
@@ -602,6 +643,12 @@ export class SqliteBoardStore {
     return this.#inSavepoint("board_update", () => {
       const current = this.getBoard(ownerId, boardId);
       if (current?.revision !== expectedRevision) return { kind: "conflict" };
+      const projectProblem = this.#validateBoardProject(
+        ownerId,
+        input.projectId,
+      );
+      if (projectProblem !== undefined)
+        return { kind: "invalid", detail: projectProblem };
       const panels = this.#parsePanels(ownerId, input.panels);
       if (!panels.ok) return { kind: "invalid", detail: panels.detail };
       const known = new Set(current.panels.map(({ id }) => id));
@@ -615,9 +662,10 @@ export class SqliteBoardStore {
           detail: "A panel ID does not belong to this board",
         };
       this.#run(
-        "UPDATE boards SET title = ?, columns = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+        "UPDATE boards SET title = ?, columns = ?, project_id = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
         input.title,
         input.columns,
+        input.projectId ?? null,
         now,
         boardId,
       );

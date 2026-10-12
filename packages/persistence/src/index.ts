@@ -260,6 +260,7 @@ import {
 } from "./day-order-store.ts";
 import {
   SqliteBoardStore,
+  boardProjectMigration,
   boardsMigration,
   type ImportedBoardData,
 } from "./board-store.ts";
@@ -1873,6 +1874,7 @@ const migrations: readonly Migration[] = [
     ) STRICT;`,
   },
   completeReadonlyFeedMigration,
+  boardProjectMigration,
 ];
 
 /**

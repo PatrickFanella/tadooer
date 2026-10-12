@@ -985,10 +985,63 @@ describe("import", () => {
         expect(restored.boards.markersOf(owner, t2.id)).toEqual([
           "in_progress",
         ]);
-        expect(restored.state().appliedMigrationCount).toBe(50);
+        expect(restored.state().appliedMigrationCount).toBe(51);
       } finally {
         restored.close();
       }
+    });
+  });
+});
+
+describe("board project (issue #173)", () => {
+  it("attaches a board to an owned project, detaches it, and rejects a foreign project", async () => {
+    await withDatabase((db) => {
+      const projectId = createProject(db, owner, "Garden");
+      const board = applied(
+        db.boards.createBoard(
+          owner,
+          { title: "Garden board", columns: 1, panels: [], projectId },
+          uuid,
+          now,
+        ),
+      ).board;
+      expect(board.projectId).toBe(projectId);
+      expect(db.boards.listBoards(owner)[0]?.projectId).toBe(projectId);
+
+      const template = applied(
+        db.boards.createBoard(
+          owner,
+          { template: "kanban", projectId },
+          uuid,
+          now,
+        ),
+      ).board;
+      expect(template.projectId).toBe(projectId);
+
+      const detached = applied(
+        db.boards.updateBoard(
+          owner,
+          board.id,
+          board.revision,
+          { title: board.title, columns: 1, panels: [], projectId: null },
+          uuid,
+          later,
+        ),
+      ).board;
+      expect(detached.projectId).toBeNull();
+      expect(detached.revision).toBe(board.revision + 1);
+
+      expect(
+        db.boards.createBoard(
+          other,
+          { title: "Not mine", columns: 1, panels: [], projectId },
+          uuid,
+          now,
+        ),
+      ).toEqual({
+        kind: "invalid",
+        detail: "The board names a project you do not own",
+      });
     });
   });
 });

@@ -186,3 +186,18 @@ keep that folder. Markers apply to newly imported tasks only.
   scheduled-only panels is not reproduced.
 - Sections of the Today view and a `timeSpent` sort beyond 366 days remain
   open.
+
+## Addendum 2026-10-12: a board may belong to a project (issue #173)
+
+A board carries an optional `projectId` (migration `0056_board_project`,
+`boards.project_id` with `ON DELETE SET NULL`). The project must belong to
+the owner, otherwise create and update are rejected as invalid. The value
+travels with the board in the read-only feed; records cached before the
+column existed read as `null`. In the browser a new panel of an attached
+board starts with its filter scoped to that project, the board list and
+header name the project, and the Tasks list offers "Boards for this project"
+when a project filter is active, which opens Boards with that project's
+first board selected. Archiving a project does not change its boards: they
+stay listed and show the project as archived, so nothing is lost silently
+and the owner detaches or deletes them deliberately. Super Productivity
+exports have no equivalent, so imported boards have no project.
