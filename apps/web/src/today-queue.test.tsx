@@ -78,6 +78,30 @@ describe("TodayQueue", () => {
     expect(markup).not.toContain("Future task title");
   });
 
+  it("omits sections with nothing in them (issue #175)", () => {
+    const markup = renderToStaticMarkup(
+      <TodayQueue
+        at="2026-08-10T15:00:00.000Z"
+        preferences={preferences}
+        tasks={[task("inbox", "Inbox note", null)]}
+        activeSession={null}
+        calendars={[]}
+        busy={false}
+        calendarActionsAvailable={false}
+        focusActionsAvailable={false}
+        onStartFocus={() => undefined}
+        onChangeTaskStatus={async () => await Promise.resolve(true)}
+        onSubmitTimeBlock={async () => await Promise.resolve()}
+        onRemoveTimeBlock={async () => await Promise.resolve()}
+        onViewTasks={() => undefined}
+      />,
+    );
+    expect(markup).toContain(">Planning</h2>");
+    expect(markup).not.toContain(">Overdue</h2>");
+    expect(markup).not.toContain(">Scheduled today</h2>");
+    expect(markup).not.toContain("Today is clear.");
+  });
+
   it("renders the empty queue state", () => {
     const markup = renderToStaticMarkup(
       <TodayQueue

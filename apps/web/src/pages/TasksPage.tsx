@@ -422,16 +422,26 @@ export const TasksPage = ({
         </>
       )}
       {task.parentId == null && (
-        <TaskChildrenSection
-          parent={task}
-          items={childrenByParent.get(task.id) ?? []}
-          allItems={allChildren.get(task.id) ?? []}
-          busy={busy}
-          renderChild={(child) =>
-            renderTask(child, allChildren.get(task.id) ?? [])
-          }
-          onCreateChildTask={onCreateChildTask}
-        />
+        <details
+          className="task-children-disclosure"
+          open={(allChildren.get(task.id) ?? []).length > 0}
+        >
+          <summary aria-label={`Child tasks of “${task.title}”`}>
+            {(allChildren.get(task.id) ?? []).length === 0
+              ? "Add child tasks"
+              : `${String((allChildren.get(task.id) ?? []).length)} child ${(allChildren.get(task.id) ?? []).length === 1 ? "task" : "tasks"}`}
+          </summary>
+          <TaskChildrenSection
+            parent={task}
+            items={childrenByParent.get(task.id) ?? []}
+            allItems={allChildren.get(task.id) ?? []}
+            busy={busy}
+            renderChild={(child) =>
+              renderTask(child, allChildren.get(task.id) ?? [])
+            }
+            onCreateChildTask={onCreateChildTask}
+          />
+        </details>
       )}
       {isEditing(task.id) && organization !== undefined && (
         <TaskLinksPanel

@@ -161,6 +161,7 @@ import {
   tasksSectionFromPath,
   tasksSectionPath,
   type TasksSection,
+  routeLabel,
   workspaceRoutes,
   type WorkspaceRoute,
 } from "./app/routes.ts";
@@ -2798,9 +2799,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                       navigate(item);
                     }}
                   >
-                    {item === "reuse"
-                      ? "Reuse"
-                      : item.charAt(0).toUpperCase() + item.slice(1)}
+                    {routeLabel(item)}
                   </a>
                 ))}
               </nav>

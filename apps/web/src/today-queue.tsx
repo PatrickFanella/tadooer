@@ -220,6 +220,9 @@ export const TodayQueue = ({
     listed: readonly Task[],
     state: "overdue" | "scheduled" | "planned-day" | "planning",
   ) => {
+    // Issue #175: an empty section is not shown; the whole queue falls back
+    // to the "Today is clear" state when nothing is listed at all.
+    if (listed.length === 0) return null;
     const expanded = expandedSections.has(className);
     const shown = expanded ? listed : listed.slice(0, sectionLimit);
     const hidden = listed.length - shown.length;
@@ -296,14 +299,12 @@ export const TodayQueue = ({
             scheduled,
             "scheduled",
           )}
-          {plannedToday.length > 0
-            ? section(
-                "Planned for today",
-                "today-planned-day",
-                plannedToday,
-                "planned-day",
-              )
-            : null}
+          {section(
+            "Planned for today",
+            "today-planned-day",
+            plannedToday,
+            "planned-day",
+          )}
           {section("Planning", "today-planning", planning, "planning")}
         </>
       )}
