@@ -42,6 +42,10 @@ import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { LoadingList } from "../components/ui/loading-list.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
+import {
+  UnplannedTasksDrawer,
+  useDrawerOpen,
+} from "../components/tasks/UnplannedTasksDrawer.tsx";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.tsx";
 import { useLiveRevision } from "../live-sync/views.ts";
 
@@ -137,6 +141,25 @@ export const PlannerPage = ({
     saved: savedDayOrders,
     actions: dayOrderActions,
   });
+  // Issue #172: the unplanned-tasks drawer; a drop or a placement gives
+  // the task that day as its planned day through the day-order outbox.
+  const [drawerOpen, setDrawerOpen] = useDrawerOpen("planner");
+  const taskById = useMemo(
+    () => new Map(tasks.map((task) => [task.id, task])),
+    [tasks],
+  );
+  const placeTask = (taskId: string, date: string) => {
+    const task = taskById.get(taskId);
+    if (task === undefined) return;
+    void dayOrders.plan(date, [task]);
+  };
+  const dayLabel = (date: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(new Date(`${date}T12:00:00`));
   const orderedDays = dayKeys
     .map((date) => ({
       date,
@@ -152,21 +175,32 @@ export const PlannerPage = ({
   }, [onLoadPlanner, range, livePlanner]);
 
   return (
-    <div className="today-page">
+    <div className={drawerOpen ? "today-page page-with-drawer" : "today-page"}>
       <PageHeader
         eyebrow="Calendar and tasks"
         title="Planner"
         description="Calendar events and planned tasks on one time grid."
         actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAnchor(new Date())}
-            disabled={busy}
-          >
-            Today
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-pressed={drawerOpen}
+              onClick={() => setDrawerOpen(!drawerOpen)}
+            >
+              Unplanned tasks
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAnchor(new Date())}
+              disabled={busy}
+            >
+              Today
+            </Button>
+          </>
         }
       />
       <Card aria-label="Planner controls and calendar">
@@ -295,6 +329,7 @@ export const PlannerPage = ({
                     ]),
                   )
                 }
+                onDropTask={dayOrders.enabled ? placeTask : undefined}
                 onSelectEntry={(entry) => {
                   setOpener(
                     document.activeElement instanceof HTMLElement
@@ -369,6 +404,18 @@ export const PlannerPage = ({
         }
         onRemoveTimeBlock={(task) => onRemoveTimeBlock(task, range)}
       />
+      {drawerOpen && (
+        <UnplannedTasksDrawer
+          tasks={tasks}
+          targets={dayKeys.map((date) => ({ id: date, label: dayLabel(date) }))}
+          targetLabel="Day"
+          placeLabel="Plan"
+          available={dayOrders.enabled}
+          busy={busy || dayOrders.pending}
+          onPlace={(task, date) => placeTask(task.id, date)}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
     </div>
   );
 };

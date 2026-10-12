@@ -192,6 +192,14 @@ cached or empty state rather than a placeholder that never resolves.
   creation, lifecycle and appearance, sidebar folders and recurring series.
   Configuration never shares a scroll with the list. Settings stays for
   owner preferences and connections, not for records.
+- Drag-and-drop (issue #172) uses the native HTML drag API with a private
+  data type, no library: the unplanned-tasks drawer's rows are draggable,
+  planner days and board panels are drop targets with a dashed purple
+  outline while hovered. Every drop has an equivalent control: the drawer's
+  select-and-place form, the day-order Up/Down buttons and the board Move
+  button, so nothing depends on a pointer. A drop on a board runs the same
+  previewed move as the button. dnd-kit was considered and left out until a
+  reorder-by-drag need appears; the native API covers placement.
 - The Planner uses a day, three-day, or week time grid with separate all-day
   rows and overlap lanes. Each day follows the selected timezone, including
   DST. Tasks without estimates show an explicit 30-minute placeholder.
