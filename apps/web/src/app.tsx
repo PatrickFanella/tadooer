@@ -158,6 +158,9 @@ import { InboxPage } from "./pages/InboxPage.tsx";
 import { PlannerPage } from "./pages/PlannerPage.tsx";
 import {
   routeFromPath,
+  tasksSectionFromPath,
+  tasksSectionPath,
+  type TasksSection,
   workspaceRoutes,
   type WorkspaceRoute,
 } from "./app/routes.ts";
@@ -368,6 +371,13 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         (typeof window === "undefined" ? "/today" : window.location.pathname),
     ),
   );
+  // Issue #171: `/tasks/organize` selects the Organize section of Tasks.
+  const [tasksSection, setTasksSection] = useState<TasksSection>(() =>
+    tasksSectionFromPath(
+      initialPath ??
+        (typeof window === "undefined" ? "/today" : window.location.pathname),
+    ),
+  );
   const [habitLibrary, setHabitLibrary] = useState<HabitListResponse>({
     habits: [],
     occurrences: [],
@@ -402,6 +412,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   useEffect(() => {
     const onPopState = (): void => {
       setRoute(routeFromPath(location.pathname));
+      setTasksSection(tasksSectionFromPath(location.pathname));
       setTaskIdFilter(new URLSearchParams(location.search).get("task") ?? "");
     };
     window.addEventListener("popstate", onPopState);
@@ -412,6 +423,12 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     if (typeof history !== "undefined") history.pushState({}, "", `/${next}`);
     setRoute(next);
     setTaskIdFilter("");
+    if (next === "tasks") setTasksSection("list");
+  };
+  const changeTasksSection = (section: TasksSection): void => {
+    if (typeof history !== "undefined")
+      history.pushState({}, "", tasksSectionPath(section));
+    setTasksSection(section);
   };
 
   // ADR 0030: application preferences, theme and shortcuts for this session.
@@ -3091,6 +3108,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         )}
         {route === "tasks" && (
           <TasksPage
+            section={tasksSection}
+            onSectionChange={changeTasksSection}
             taskIdFilter={taskIdFilter}
             onClearTaskIdFilter={() => {
               setTaskIdFilter("");

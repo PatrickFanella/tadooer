@@ -26,6 +26,8 @@ import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import { NativeSelect } from "../components/ui/native-select.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
+import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.tsx";
+import type { TasksSection } from "../app/routes.ts";
 import {
   OrganizationPanel,
   type NoteQueue,
@@ -124,6 +126,13 @@ export interface TasksPageProps extends TaskHierarchyActions {
     task: Task,
     patch: TaskPatchRequest,
   ) => Promise<void>;
+  /**
+   * Issue #171: the list (filters, saved views, tasks) or Organize
+   * (projects, tags, sidebar folders, recurring series). The app keeps the
+   * section in the URL as `/tasks` and `/tasks/organize`.
+   */
+  readonly section?: TasksSection;
+  readonly onSectionChange?: (section: TasksSection) => void;
 }
 
 export const TasksPage = ({
@@ -165,6 +174,8 @@ export const TasksPage = ({
   onSubmitTaskPlanning,
   onCreateChildTask,
   onMoveTask,
+  section = "list",
+  onSectionChange,
 }: TasksPageProps) => {
   // ADR 0030: task notes use the same safe Markdown subset as notes.
   const { markdownInNotes } = useApplicationPreferences().snapshot.preferences;
@@ -490,254 +501,283 @@ export const TasksPage = ({
     <>
       <PageHeader
         title="Tasks"
-        description="Every task, with filters and saved views."
+        description={
+          section === "organize"
+            ? "Projects, tags, sidebar folders and recurring series."
+            : "Every task, with filters and saved views."
+        }
+        actions={
+          <Tabs
+            value={section}
+            onValueChange={(value) => onSectionChange?.(value as TasksSection)}
+          >
+            <TabsList aria-label="Tasks page section">
+              <TabsTrigger value="list">Tasks</TabsTrigger>
+              <TabsTrigger value="organize">Organize</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
       />
-      <Card aria-labelledby="organization-title">
-        <CardHeader>
-          <SectionHeading
-            id="organization-title"
-            as="h2"
-            title="Projects and tags"
-          />
-        </CardHeader>
-        <CardContent>
-          <div className="task-actions">
-            <form
-              onSubmit={(event) => void onSubmitOrganization(event, "project")}
-            >
-              <Field label="New project" name="title" autoComplete="off" />
-              <Button disabled={busy}>Add project</Button>
-            </form>
-            <form onSubmit={(event) => void onSubmitOrganization(event, "tag")}>
-              <Field label="New tag" name="title" autoComplete="off" />
-              <Button disabled={busy}>Add tag</Button>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
-      {organization !== undefined && (
-        <OrganizationPanel
-          projects={projects}
-          tags={tags}
-          tasks={tasks}
-          {...organization}
-        />
-      )}
-      {organization !== undefined && (
-        <MenuFolderManager
-          csrfToken={organization.csrfToken}
-          online={organization.online}
-          folders={folders}
-          onFoldersChange={setFolders}
-          projects={projects}
-          tags={tags}
-          busy={busy}
-        />
-      )}
-      {organization !== undefined && (
-        <RecurringSeriesManager
-          csrfToken={organization.csrfToken}
-          online={organization.online}
-          projects={projects}
-          today={today}
-        />
-      )}
-      <Card className="task-filter-bar" role="search" aria-label="Filter tasks">
-        <CardContent className="flex flex-wrap items-end gap-2 pt-4">
-          <label>
-            Search
-            <Input
-              type="search"
-              value={taskQuery}
-              onChange={(event) => onTaskQueryChange(event.currentTarget.value)}
-            />
-          </label>
-          <label>
-            Status
-            <NativeSelect
-              value={taskStatusFilter}
-              onChange={(event) =>
-                onTaskStatusFilterChange(
-                  event.currentTarget.value as "all" | Task["status"],
-                )
-              }
-            >
-              <option value="all">All</option>
-              <option value="open">Open</option>
-              <option value="completed">Completed</option>
-            </NativeSelect>
-          </label>
-          <label>
-            Project
-            <NativeSelect
-              value={taskProjectFilter}
-              onChange={(event) =>
-                onTaskProjectFilterChange(event.currentTarget.value)
-              }
-            >
-              <option value="">All projects</option>
-              {groupByFolder(
-                projects.filter(
-                  (project) =>
-                    !project.hiddenFromMenu || project.id === taskProjectFilter,
-                ),
-                folders,
-                "project",
-              ).map((group) =>
-                group.folder === null ? (
-                  group.items.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))
-                ) : (
-                  <optgroup
-                    key={group.folder.id}
-                    label={`${"· ".repeat(group.depth)}${group.folder.title}`}
-                  >
-                    {group.items.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.title}
-                      </option>
-                    ))}
-                  </optgroup>
-                ),
-              )}
-            </NativeSelect>
-          </label>
-          <label>
-            Tag
-            <NativeSelect
-              value={taskTagFilter}
-              onChange={(event) =>
-                onTaskTagFilterChange(event.currentTarget.value)
-              }
-            >
-              <option value="">All tags</option>
-              {groupByFolder(tags, folders, "tag").map((group) =>
-                group.folder === null ? (
-                  group.items.map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.displayName}
-                    </option>
-                  ))
-                ) : (
-                  <optgroup
-                    key={group.folder.id}
-                    label={`${"· ".repeat(group.depth)}${group.folder.title}`}
-                  >
-                    {group.items.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.displayName}
-                      </option>
-                    ))}
-                  </optgroup>
-                ),
-              )}
-            </NativeSelect>
-          </label>
-        </CardContent>
-      </Card>
-      {organization !== undefined && (
-        <TaskViewControls
-          view={savedView.view}
-          online={organization.online}
-          tags={tags}
-          projects={projects}
-          message={savedView.message}
-          onSave={savedView.save}
-        />
-      )}
-      {organization !== undefined &&
-        viewContext.contextKind !== "all" &&
-        viewContext.contextKind !== "today" && (
-          <SectionsPanel
-            csrfToken={organization.csrfToken}
-            online={organization.online}
-            contextKind={viewContext.contextKind}
-            contextId={viewContext.contextId}
-            contextTitle={
-              viewContext.contextKind === "project"
-                ? viewLabels.project(viewContext.contextId)
-                : viewLabels.tag(viewContext.contextId)
-            }
-            tasks={tasks.filter(
-              (task) =>
-                task.deletedAt == null &&
-                (viewContext.contextKind === "project"
-                  ? task.projectId === viewContext.contextId
-                  : task.tagIds?.includes(viewContext.contextId) === true),
-            )}
-            busy={busy}
-          />
-        )}
-      {taskIdFilter !== "" && (
-        <Button type="button" onClick={onClearTaskIdFilter}>
-          Show all tasks
-        </Button>
-      )}
-      <SectionHeading as="h2" title="Captured tasks" />
-      {visibleTasks.length === 0 ||
-      viewGroups.every((group) => group.tasks.length === 0) ? (
-        <EmptyState title="No tasks match these filters." />
-      ) : (
-        viewGroups.map((group) => (
-          <div key={group.key} className="task-view-group">
-            {group.label !== "" && (
+      {section === "organize" && (
+        <>
+          <Card aria-labelledby="organization-title">
+            <CardHeader>
               <SectionHeading
-                as="h3"
-                title={`${group.label} (${String(group.tasks.length)})`}
+                id="organization-title"
+                as="h2"
+                title="Projects and tags"
+              />
+            </CardHeader>
+            <CardContent>
+              <div className="task-actions">
+                <form
+                  onSubmit={(event) =>
+                    void onSubmitOrganization(event, "project")
+                  }
+                >
+                  <Field label="New project" name="title" autoComplete="off" />
+                  <Button disabled={busy}>Add project</Button>
+                </form>
+                <form
+                  onSubmit={(event) => void onSubmitOrganization(event, "tag")}
+                >
+                  <Field label="New tag" name="title" autoComplete="off" />
+                  <Button disabled={busy}>Add tag</Button>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+          {organization !== undefined && (
+            <OrganizationPanel
+              projects={projects}
+              tags={tags}
+              tasks={tasks}
+              {...organization}
+            />
+          )}
+          {organization !== undefined && (
+            <MenuFolderManager
+              csrfToken={organization.csrfToken}
+              online={organization.online}
+              folders={folders}
+              onFoldersChange={setFolders}
+              projects={projects}
+              tags={tags}
+              busy={busy}
+            />
+          )}
+          {organization !== undefined && (
+            <RecurringSeriesManager
+              csrfToken={organization.csrfToken}
+              online={organization.online}
+              projects={projects}
+              today={today}
+            />
+          )}
+        </>
+      )}
+      {section === "list" && (
+        <>
+          <Card
+            className="task-filter-bar"
+            role="search"
+            aria-label="Filter tasks"
+          >
+            <CardContent className="flex flex-wrap items-end gap-2 pt-4">
+              <label>
+                Search
+                <Input
+                  type="search"
+                  value={taskQuery}
+                  onChange={(event) =>
+                    onTaskQueryChange(event.currentTarget.value)
+                  }
+                />
+              </label>
+              <label>
+                Status
+                <NativeSelect
+                  value={taskStatusFilter}
+                  onChange={(event) =>
+                    onTaskStatusFilterChange(
+                      event.currentTarget.value as "all" | Task["status"],
+                    )
+                  }
+                >
+                  <option value="all">All</option>
+                  <option value="open">Open</option>
+                  <option value="completed">Completed</option>
+                </NativeSelect>
+              </label>
+              <label>
+                Project
+                <NativeSelect
+                  value={taskProjectFilter}
+                  onChange={(event) =>
+                    onTaskProjectFilterChange(event.currentTarget.value)
+                  }
+                >
+                  <option value="">All projects</option>
+                  {groupByFolder(
+                    projects.filter(
+                      (project) =>
+                        !project.hiddenFromMenu ||
+                        project.id === taskProjectFilter,
+                    ),
+                    folders,
+                    "project",
+                  ).map((group) =>
+                    group.folder === null ? (
+                      group.items.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.title}
+                        </option>
+                      ))
+                    ) : (
+                      <optgroup
+                        key={group.folder.id}
+                        label={`${"· ".repeat(group.depth)}${group.folder.title}`}
+                      >
+                        {group.items.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.title}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ),
+                  )}
+                </NativeSelect>
+              </label>
+              <label>
+                Tag
+                <NativeSelect
+                  value={taskTagFilter}
+                  onChange={(event) =>
+                    onTaskTagFilterChange(event.currentTarget.value)
+                  }
+                >
+                  <option value="">All tags</option>
+                  {groupByFolder(tags, folders, "tag").map((group) =>
+                    group.folder === null ? (
+                      group.items.map((tag) => (
+                        <option key={tag.id} value={tag.id}>
+                          {tag.displayName}
+                        </option>
+                      ))
+                    ) : (
+                      <optgroup
+                        key={group.folder.id}
+                        label={`${"· ".repeat(group.depth)}${group.folder.title}`}
+                      >
+                        {group.items.map((tag) => (
+                          <option key={tag.id} value={tag.id}>
+                            {tag.displayName}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ),
+                  )}
+                </NativeSelect>
+              </label>
+            </CardContent>
+          </Card>
+          {organization !== undefined && (
+            <TaskViewControls
+              view={savedView.view}
+              online={organization.online}
+              tags={tags}
+              projects={projects}
+              message={savedView.message}
+              onSave={savedView.save}
+            />
+          )}
+          {organization !== undefined &&
+            viewContext.contextKind !== "all" &&
+            viewContext.contextKind !== "today" && (
+              <SectionsPanel
+                csrfToken={organization.csrfToken}
+                online={organization.online}
+                contextKind={viewContext.contextKind}
+                contextId={viewContext.contextId}
+                contextTitle={
+                  viewContext.contextKind === "project"
+                    ? viewLabels.project(viewContext.contextId)
+                    : viewLabels.tag(viewContext.contextId)
+                }
+                tasks={tasks.filter(
+                  (task) =>
+                    task.deletedAt == null &&
+                    (viewContext.contextKind === "project"
+                      ? task.projectId === viewContext.contextId
+                      : task.tagIds?.includes(viewContext.contextId) === true),
+                )}
+                busy={busy}
               />
             )}
-            <ul className="tasks">
-              {group.tasks.map((task) =>
-                renderTask(
-                  task,
-                  task.parentId == null
-                    ? []
-                    : (allChildren.get(task.parentId) ?? []),
-                ),
-              )}
-            </ul>
-          </div>
-        ))
-      )}
-      <Card className="recovery">
-        <CardHeader>
-          <SectionHeading
-            as="h2"
-            title={`Recently deleted tasks (${String(recovery.length)})`}
-          />
-        </CardHeader>
-        <CardContent>
-          {recovery.length === 0 ? (
-            <p className="muted">Nothing needs recovery.</p>
-          ) : (
-            <ul className="tasks">
-              {recovery.map((task) => (
-                <li key={task.id}>
-                  <strong>{task.title}</strong>
-                  {task.parentId != null && (
-                    <small>
-                      Child of{" "}
-                      {titleById.get(task.parentId) ?? "a deleted task"};
-                      restoring it alone makes it top-level if its parent is
-                      still deleted
-                    </small>
-                  )}
-                  <Button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onRecoverTask(task)}
-                  >
-                    Restore task
-                  </Button>
-                </li>
-              ))}
-            </ul>
+          {taskIdFilter !== "" && (
+            <Button type="button" onClick={onClearTaskIdFilter}>
+              Show all tasks
+            </Button>
           )}
-        </CardContent>
-      </Card>
+          <SectionHeading as="h2" title="Captured tasks" />
+          {visibleTasks.length === 0 ||
+          viewGroups.every((group) => group.tasks.length === 0) ? (
+            <EmptyState title="No tasks match these filters." />
+          ) : (
+            viewGroups.map((group) => (
+              <div key={group.key} className="task-view-group">
+                {group.label !== "" && (
+                  <SectionHeading
+                    as="h3"
+                    title={`${group.label} (${String(group.tasks.length)})`}
+                  />
+                )}
+                <ul className="tasks">
+                  {group.tasks.map((task) =>
+                    renderTask(
+                      task,
+                      task.parentId == null
+                        ? []
+                        : (allChildren.get(task.parentId) ?? []),
+                    ),
+                  )}
+                </ul>
+              </div>
+            ))
+          )}
+          <details className="recovery">
+            <summary>
+              Recently deleted tasks ({String(recovery.length)})
+            </summary>
+            {recovery.length === 0 ? (
+              <p className="muted">Nothing needs recovery.</p>
+            ) : (
+              <ul className="tasks">
+                {recovery.map((task) => (
+                  <li key={task.id}>
+                    <strong>{task.title}</strong>
+                    {task.parentId != null && (
+                      <small>
+                        Child of{" "}
+                        {titleById.get(task.parentId) ?? "a deleted task"};
+                        restoring it alone makes it top-level if its parent is
+                        still deleted
+                      </small>
+                    )}
+                    <Button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void onRecoverTask(task)}
+                    >
+                      Restore task
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
+        </>
+      )}
     </>
   );
 };
