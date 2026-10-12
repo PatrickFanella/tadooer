@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "version": "0.15.0-rc.5",
+  "createdAt": "2026-10-12T23:09:57Z",
+  "deployedAt": "2026-10-12T23:11:38Z",
+  "sourceCommit": "490b7e706aa2de28d5792d914e3fa19be9539ca8",
+  "image": "127.0.0.1:5000/subculture-collective/productivity-suite@sha256:4e0ee526e96ed1a11c0117bd2ad7cc7107550252462cc766ede8d8cd25df9a9e",
+  "publicOrigin": "https://tadooer.subcult.tv",
+  "status": "deployed",
+  "migrationCount": 52,
+  "reason": "Issues #167-#176 (PRs 177-187): UI notes, information architecture, board project, unplanned-tasks drawer, Gitea project columns; owner tests #174 live"
+}
