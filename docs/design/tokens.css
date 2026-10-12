@@ -27,7 +27,17 @@
   --purple: #bd93f9; /* primary action, selection, time blocks, focus frame */
   --pink: #ff79c6; /* now: current-time line, live timer, running focus */
   --cyan: #8be9fd; /* keyboard focus ring, links, information, work calendars */
-  --teal: #94e2d5; /* calendar authority: Baikal calendars, planned-time metadata */
+  --teal: #94e2d5;
+
+  /* Motion: two durations, one easing; reduced-motion disables all of it */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-out: cubic-bezier(
+    0.2,
+    0,
+    0,
+    1
+  ); /* calendar authority: Baikal calendars, planned-time metadata */
   --green: #50fa7b; /* success, sync online, working state, fresh */
   --orange: #ffb86c; /* warning, conflict, overdue, stale, offline */
   --red: #ff5555; /* danger, destructive actions, errors, unavailable */

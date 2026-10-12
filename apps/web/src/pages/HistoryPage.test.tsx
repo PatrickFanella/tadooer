@@ -179,3 +179,28 @@ describe("history controller", () => {
     expect(result.state.error).toContain("changed since the list loaded");
   });
 });
+
+describe("HistoryList loading (issue #169)", () => {
+  const base = {
+    online: true,
+    timeZone: "UTC",
+    projects: [],
+    onRestore: () => undefined,
+    onLoadMore: () => undefined,
+  };
+
+  it("shows placeholder rows while the first search is in flight", () => {
+    const html = renderToStaticMarkup(
+      <HistoryList {...base} state={emptyHistory} busy={true} />,
+    );
+    expect(html).toContain("Loading archived tasks");
+    expect(html).not.toContain("No archived tasks yet.");
+  });
+
+  it("keeps the empty state once the search has finished", () => {
+    const html = renderToStaticMarkup(
+      <HistoryList {...base} state={emptyHistory} busy={false} />,
+    );
+    expect(html).toContain("No archived tasks yet.");
+  });
+});

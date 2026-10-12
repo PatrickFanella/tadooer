@@ -20,6 +20,7 @@ import { Badge } from "../components/ui/badge.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
+import { LoadingList } from "../components/ui/loading-list.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 import { addCalendarDays, planningDate } from "@suite/domain";
@@ -289,7 +290,9 @@ export const TodayPage = (props: TodayPageProps) => {
           />
         </CardHeader>
         <CardContent className="grid gap-3">
-          {planner === null || planner.events.length === 0 ? (
+          {planner === null && syncStatus !== "offline" ? (
+            <LoadingList label="Loading the week plan" />
+          ) : planner === null || planner.events.length === 0 ? (
             <EmptyState title="No supported events in this week." />
           ) : (
             <>

@@ -41,6 +41,12 @@
   /* Mocha teal, kept for calendar authority */
   --teal: #94e2d5;
 
+  /* Motion: two durations and one easing; the reduced-motion rule in
+     section 4 disables every animation and transition. */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
   /* ── 2. Semantic roles (shadcn names) ── */
   --radius: 0.5rem;
   --background: var(--base);
@@ -517,7 +523,7 @@
     border-right: 1.5px solid currentColor;
     border-bottom: 1.5px solid currentColor;
     transform: rotate(-45deg);
-    transition: transform 0.12s ease;
+    transition: transform var(--motion-fast) var(--ease-out);
     margin-right: 0.15rem;
     flex-shrink: 0;
   }
@@ -759,6 +765,26 @@
     50% {
       opacity: 0.35;
     }
+  }
+  /* Rows and opened disclosures settle in rather than appear. */
+  @keyframes enter-fade {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .today-task-row,
+  .board-panel-tasks > li,
+  .history-list > li,
+  [data-slot="loading-list"] {
+    animation: enter-fade var(--motion-base) var(--ease-out) both;
+  }
+  details[open] > :not(summary) {
+    animation: enter-fade var(--motion-fast) var(--ease-out) both;
   }
 
   /* ── 8. Shell ──────────────────────────────────────────────────── */

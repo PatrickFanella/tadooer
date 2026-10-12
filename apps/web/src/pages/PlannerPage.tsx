@@ -39,6 +39,7 @@ import {
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import { LoadingList } from "../components/ui/loading-list.tsx";
 import { PageHeader } from "../components/ui/page-header.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.tsx";
@@ -257,7 +258,9 @@ export const PlannerPage = ({
               </AlertDescription>
             </Alert>
           )}
-          {planner === null || !matchesRange ? (
+          {(planner === null || !matchesRange) && loading ? (
+            <LoadingList rows={4} />
+          ) : planner === null || !matchesRange ? (
             <p className="text-sm text-subtext">
               {error === null
                 ? "Nothing is loaded for this period yet."
