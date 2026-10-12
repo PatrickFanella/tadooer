@@ -362,6 +362,19 @@ export const saveIssueConnection = (
     headers: { "X-CSRF-Token": csrfToken },
     body: JSON.stringify(input),
   });
+export const saveSharedIssueToken = (
+  input: { provider: "github" | "gitea"; origin: string; token: string },
+  csrfToken: string,
+) =>
+  request(
+    "/api/issue-connections/shared-token",
+    issueConnectionsResponseSchema,
+    {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(input),
+    },
+  );
 export const browseIssues = (id: string) =>
   request(`/api/issue-connections/${id}/browse`, issueBrowseResponseSchema);
 export const importIssues = (

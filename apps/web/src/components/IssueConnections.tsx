@@ -12,15 +12,16 @@ import {
   listIssueConnections,
   getProjects,
   saveIssueConnection,
+  saveSharedIssueToken,
   syncIssues,
   removeSharedIssueToken,
 } from "../api.ts";
 
 export const IssueConnections = ({
-  csrfToken,
+  getCsrfToken,
   onTaskChange,
 }: {
-  readonly csrfToken: string;
+  readonly getCsrfToken: () => Promise<string>;
   readonly onTaskChange: () => Promise<void>;
 }) => {
   const [data, setData] = useState<IssueConnectionsResponse | null>(null);
@@ -62,6 +63,8 @@ export const IssueConnections = ({
       setBusy(false);
     }
   };
+  const mutate = (work: (csrfToken: string) => Promise<void>) =>
+    run(async () => work(await getCsrfToken()));
   const refresh = () =>
     run(async () => {
       const [connections, projectList] = await Promise.all([
@@ -93,7 +96,25 @@ export const IssueConnections = ({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              void run(async () => {
+              void mutate(async (csrfToken) => {
+                if (tokenScope === "global" && repository.trim() === "") {
+                  setData(
+                    await saveSharedIssueToken(
+                      {
+                        provider,
+                        origin:
+                          provider === "github" ? "https://github.com" : origin,
+                        token,
+                      },
+                      csrfToken,
+                    ),
+                  );
+                  setToken("");
+                  setMessage(
+                    "Shared token saved. Repository access is checked when you connect a repository.",
+                  );
+                  return;
+                }
                 const saved = await saveIssueConnection(
                   {
                     provider,
@@ -145,9 +166,12 @@ export const IssueConnections = ({
               )}
               <label>
                 Repository (owner/name)
+                {tokenScope === "global"
+                  ? " — optional when saving a shared token"
+                  : ""}
                 <input
                   type="text"
-                  required
+                  required={tokenScope === "repository"}
                   value={repository}
                   placeholder="subculture-collective/tadooer"
                   onChange={(event) => setRepository(event.target.value)}
@@ -174,6 +198,7 @@ export const IssueConnections = ({
                 <input
                   required={
                     tokenScope === "repository" ||
+                    repository.trim() === "" ||
                     !data.sharedTokens.some(
                       (item) =>
                         item.provider === provider &&
@@ -200,11 +225,12 @@ export const IssueConnections = ({
               </label>
               <p className="muted">
                 Use a token with issue read access. Write-back also needs issue
-                write access. A shared token applies to repositories using it on
-                the selected provider and server. Leave it blank to reuse the
-                saved token; entering a new one replaces it for those
-                repositories. A repository token overrides the shared token for
-                that connection.
+                write access. With shared scope, leave Repository blank to save
+                the token first; repository access is checked when you connect.
+                A shared token applies to repositories using it on the selected
+                provider and server. Leave it blank to reuse the saved token;
+                entering a new one replaces it for those repositories. A
+                repository token overrides the shared token for that connection.
               </p>
               <button
                 type="submit"
@@ -212,7 +238,9 @@ export const IssueConnections = ({
                   provider === "gitea" && data.giteaOrigins.length === 0
                 }
               >
-                Connect repository
+                {tokenScope === "global" && repository.trim() === ""
+                  ? "Save shared token"
+                  : "Connect repository"}
               </button>
             </fieldset>
           </form>
@@ -229,7 +257,7 @@ export const IssueConnections = ({
                 type="button"
                 disabled={busy}
                 onClick={() =>
-                  void run(async () => {
+                  void mutate(async (csrfToken) => {
                     setData(
                       await removeSharedIssueToken(
                         item.provider,
@@ -290,7 +318,7 @@ export const IssueConnections = ({
                   type="button"
                   disabled={busy || connection.state === "disconnected"}
                   onClick={() =>
-                    void run(async () => {
+                    void mutate(async (csrfToken) => {
                       setData(await syncIssues(connection.id, csrfToken));
                       await onTaskChange();
                       setMessage(
@@ -305,7 +333,7 @@ export const IssueConnections = ({
                   type="button"
                   disabled={busy || connection.state === "disconnected"}
                   onClick={() =>
-                    void run(async () => {
+                    void mutate(async (csrfToken) => {
                       setData(await disconnectIssues(connection.id, csrfToken));
                       if (browse?.connection.id === connection.id)
                         setBrowse(null);
@@ -340,7 +368,7 @@ export const IssueConnections = ({
                           type="button"
                           disabled={busy || connection.state === "disconnected"}
                           onClick={() =>
-                            void run(async () => {
+                            void mutate(async (csrfToken) => {
                               setData(
                                 await syncIssues(
                                   connection.id,
@@ -359,7 +387,7 @@ export const IssueConnections = ({
                           type="button"
                           disabled={busy || connection.state === "disconnected"}
                           onClick={() =>
-                            void run(async () => {
+                            void mutate(async (csrfToken) => {
                               setData(
                                 await syncIssues(
                                   connection.id,
@@ -476,7 +504,7 @@ export const IssueConnections = ({
                   busy || selected.length === 0 || selected.length > 100
                 }
                 onClick={() =>
-                  void run(async () => {
+                  void mutate(async (csrfToken) => {
                     setData(
                       await importIssues(
                         browse.connection.id,

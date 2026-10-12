@@ -182,8 +182,8 @@ export class IssueConnectorService {
       sharedTokens: this.db.issues.sharedTokens(ownerId),
     };
   }
-  async connect(ownerId: string, input: IssueConnectionInput): Promise<void> {
-    const url = new URL(input.origin);
+  private allowedOrigin(provider: "github" | "gitea", origin: string): string {
+    const url = new URL(origin);
     if (
       url.protocol !== "https:" ||
       url.username ||
@@ -191,12 +191,43 @@ export class IssueConnectorService {
       url.pathname !== "/" ||
       url.search ||
       url.hash ||
-      (input.provider === "github"
+      (provider === "github"
         ? url.origin !== "https://github.com"
         : !this.giteaOrigins.includes(url.origin))
     )
       throw new IssueSyncError("Choose an allowed HTTPS provider origin.");
-    input = { ...input, origin: url.origin };
+    return url.origin;
+  }
+  async saveSharedToken(
+    ownerId: string,
+    input: { provider: "github" | "gitea"; origin: string; token: string },
+  ): Promise<void> {
+    const origin = this.allowedOrigin(input.provider, input.origin);
+    if (input.token.trim() === "")
+      throw new IssueSyncError("Provide a shared token.");
+    await this.exclusive(`grant:${ownerId}:${input.provider}:${origin}`, () => {
+      const shared = {
+        ownerId,
+        id: "shared",
+        provider: input.provider,
+        origin,
+        repository: "",
+      };
+      // Repository permissions are verified when connecting or syncing a repository.
+      this.db.issues.putSharedToken(
+        ownerId,
+        input.provider,
+        origin,
+        this.encrypt(shared, input.token),
+      );
+      return Promise.resolve();
+    });
+  }
+  async connect(ownerId: string, input: IssueConnectionInput): Promise<void> {
+    input = {
+      ...input,
+      origin: this.allowedOrigin(input.provider, input.origin),
+    };
     const existing = this.db.issues
       .connections(ownerId)
       .find(

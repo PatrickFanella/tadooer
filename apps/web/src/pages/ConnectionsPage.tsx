@@ -26,6 +26,8 @@ export interface ConnectionsPageProps {
   readonly planningPreferences: PlanningPreferences | undefined;
   readonly dayPlan: DayPlanResponse | undefined;
   readonly csrfToken: string;
+  readonly getIssueCsrfToken: () => Promise<string>;
+  readonly onIssueTaskChange: () => Promise<void>;
   readonly onTaskImport: () => Promise<void>;
   readonly busy: boolean;
   readonly onAuthorizeGoogle: (() => Promise<string>) | undefined;
@@ -44,7 +46,9 @@ export const ConnectionsPage = ({
   planningPreferences,
   dayPlan,
   csrfToken,
+  getIssueCsrfToken,
   onTaskImport,
+  onIssueTaskChange,
   busy,
   onAuthorizeGoogle,
   onSyncGoogle,
@@ -62,7 +66,10 @@ export const ConnectionsPage = ({
         description="Calendars, imports and assistant access."
       />
       <AssistantAccess csrfToken={csrfToken} />
-      <IssueConnections csrfToken={csrfToken} onTaskChange={onTaskImport} />
+      <IssueConnections
+        getCsrfToken={getIssueCsrfToken}
+        onTaskChange={onIssueTaskChange}
+      />
       <SuperProductivityImport
         csrfToken={csrfToken}
         onApplied={async () => {

@@ -3151,6 +3151,10 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         {route === "connections" && (
           <ConnectionsPage
             onTaskImport={syncNow}
+            onIssueTaskChange={async () =>
+              loadAuthenticated(await resumeSession())
+            }
+            getIssueCsrfToken={async () => (await calendarSession()).csrfToken}
             calendarMessage={calendarMessage}
             baikal={state.baikal}
             google={googleView}

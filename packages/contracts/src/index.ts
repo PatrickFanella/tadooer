@@ -549,6 +549,13 @@ export const issueConnectionsResponseSchema = z.object({
 export const issueSharedTokenRequestSchema = z
   .object({ provider: z.enum(["github", "gitea"]), origin: z.url() })
   .strict();
+export const issueSharedTokenSaveRequestSchema = issueSharedTokenRequestSchema
+  .extend({
+    token: issueConnectionInputSchema.shape.token.refine(
+      (value) => value.trim().length > 0,
+    ),
+  })
+  .strict();
 export const issueBrowseResponseSchema = z.object({
   issues: z.array(externalIssueSchema),
 });

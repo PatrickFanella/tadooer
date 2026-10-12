@@ -1,19 +1,26 @@
 # GitHub and Gitea issue sync
 
 Issue connections are configured under **Connections → GitHub and Gitea
-issues**. Load connections, choose a provider, enter `owner/repository`, and
-choose **This repository only** or **Shared across repositories on this
-provider**. A repository token is stored for that connection. A shared token is
+issues**. Load connections, choose a provider, and choose **This repository
+only** or **Shared across repositories on this provider**. Repository scope
+requires `owner/repository`. With shared scope, leave Repository blank, enter
+the token, and select **Save shared token** to save a grant before connecting
+repositories. Repository permissions are checked when connecting or syncing;
+saving the token alone does not verify provider access. A repository token is stored for that connection. A shared token is
 stored once per signed-in owner, provider, and server origin; connections opting
 into it reuse that grant. GitHub and each configured Gitea server have separate
 shared tokens.
 
-When connecting with shared scope, enter a token to save or replace it, or leave
+When connecting a repository with shared scope, enter a token to save or replace it, or leave
 the token field blank to reuse the saved one. The server verifies access to the
 selected repository before saving a replacement. Replacing a shared token changes
 the grant used on subsequent requests by every connection using that shared
 scope. Repository-specific tokens are unaffected. Reconnecting a repository can
 switch its token scope without changing its task links or write-back setting.
+
+Issue mutations refresh the owner session immediately before submission and use
+the returned CSRF token. This handles a session token rotated while the form
+was open. Import and sync then refresh task state with the current session.
 
 **Remove shared token** deletes the saved shared grant and marks its active
 connections as needing authentication. Disconnecting one repository keeps the
