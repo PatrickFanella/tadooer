@@ -770,6 +770,7 @@
       "webApi": [
         "listIssueConnections",
         "saveIssueConnection",
+        "saveSharedIssueToken",
         "browseIssues",
         "importIssues",
         "syncIssues",
