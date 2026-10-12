@@ -66,7 +66,7 @@ export const handleBoards: RouteHandler = async (
   request,
   response,
   url,
-  { auth, stores },
+  { auth, stores, boardProvider },
 ) => {
   const method = request.method ?? "GET";
   const root = "/api/boards";
@@ -268,7 +268,22 @@ export const handleBoards: RouteHandler = async (
       sendError(response, 404, "BOARD_NOT_FOUND", "Board or panel not found");
     else if (plan.kind === "invalid")
       sendError(response, 409, "BOARD_MOVE_UNSUPPORTED", plan.detail);
-    else sendJson(response, 200, { applied: false, changes: plan.changes });
+    else {
+      // Issue #174: name the Gitea effect in the preview.
+      const provider = await boardProvider.writeBack(
+        ownerId,
+        boardId,
+        panelId,
+        parsed.data.taskId,
+        true,
+        now,
+      );
+      sendJson(response, 200, {
+        applied: false,
+        changes: plan.changes,
+        ...(provider === undefined ? {} : { provider }),
+      });
+    }
     return true;
   }
   const result = stores.boards.moveTask(
@@ -290,11 +305,23 @@ export const handleBoards: RouteHandler = async (
     );
   else if (result.kind === "invalid")
     sendError(response, 409, "BOARD_MOVE_UNSUPPORTED", result.detail);
-  else
+  else {
+    // Issue #174: after the local move committed, move the issue too when
+    // the mapping asks for it. A failure is reported, never a rollback.
+    const provider = await boardProvider.writeBack(
+      ownerId,
+      boardId,
+      panelId,
+      parsed.data.taskId,
+      false,
+      now,
+    );
     sendJson(response, 200, {
       applied: true,
       changes: result.changes,
       view: stores.boards.viewBoard(ownerId, boardId, clock),
+      ...(provider === undefined ? {} : { provider }),
     });
+  }
   return true;
 };

@@ -175,6 +175,10 @@ const routeRules: readonly RouteRule[] = [
 
   // Calendars, connectors, publication and the bridge.
   none(`issue-connections/(shared-token|${uuid})/browse`, readOnly),
+  none(`issue-connections/${uuid}/projects`, readOnly),
+  // Issue #174: the board's Gitea mapping is connector state; a sync moves
+  // tasks through the ordinary feed, like an issue import.
+  families("*", `boards/${uuid}/provider(/sync)?`, "connectors"),
   // Import and refresh also write tasks through the ordinary sync feed;
   // their connection/link status remains online connector state.
   families(

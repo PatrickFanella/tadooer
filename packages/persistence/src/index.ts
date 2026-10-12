@@ -20,7 +20,12 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { SqliteIssueStore } from "./issue-store.js";
+import {
+  SqliteBoardProviderStore,
+  boardProviderMappingsMigration,
+} from "./board-provider-store.js";
 export type { IssueConnectionRecord, IssueLinkRecord } from "./issue-store.js";
+export { SqliteBoardProviderStore } from "./board-provider-store.js";
 import {
   hostedOAuthMigration,
   SqliteHostedOAuthStore,
@@ -1875,6 +1880,7 @@ const migrations: readonly Migration[] = [
   },
   completeReadonlyFeedMigration,
   boardProjectMigration,
+  boardProviderMappingsMigration,
 ];
 
 /**
@@ -1939,11 +1945,14 @@ export class SuiteDatabase {
   readonly calendarBridgeWorker: SqliteCalendarBridgeWorkerStore;
   /** ADR 0051: digest-only hosted MCP OAuth grants and credentials. */
   readonly hostedOAuth: SqliteHostedOAuthStore;
+  /** Issue #174 (ADR 0054): Gitea project mappings for boards. */
+  readonly boardProviders: SqliteBoardProviderStore;
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
     this.readonlyFeed = new ReadonlyFeedStore(database);
     this.issues = new SqliteIssueStore(database);
+    this.boardProviders = new SqliteBoardProviderStore(database);
     this.hostedOAuth = new SqliteHostedOAuthStore(database);
     this.dataExport = new SqliteDataExportStore(database);
     this.deviceSessions = new SqliteDeviceSessionStore(database);

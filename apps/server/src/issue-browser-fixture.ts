@@ -5,6 +5,7 @@ import { startSuiteServer } from "./server.ts";
 if (process.env.SUITE_ISSUE_FIXTURE !== "true")
   throw new Error("Explicit disposable fixture opt-in required");
 const states = new Map<string, "open" | "closed">();
+let projectColumn = 71;
 const issueFetch: typeof fetch = async (input, init) => {
   await Promise.resolve();
   const url =
@@ -45,7 +46,35 @@ const issueFetch: typeof fetch = async (input, init) => {
     labels: [{ name: "bug" }],
     assignees: [{ login: "issue-test" }],
   };
-  if (url.pathname.endsWith("/issues/1")) return Response.json(issue);
+  // Issue #174: one project with three columns; issue 1 starts in "Doing".
+  const path = url.pathname.replace(/^\/api\/v1/, "");
+  if (init?.method === "POST") {
+    const move = /\/projects\/7\/issues\/(\d+)\/move$/.exec(path);
+    if (move === null) return new Response(null, { status: 404 });
+    const { column_id } = JSON.parse(
+      typeof init.body === "string" ? init.body : "",
+    ) as { column_id: number };
+    projectColumn = column_id;
+    console.info("fixture.project.issue_moved");
+    return new Response(null, { status: 204 });
+  }
+  if (path.endsWith("/projects"))
+    return Response.json([
+      { id: 7, title: "Fixture roadmap", is_closed: false },
+    ]);
+  if (path.endsWith("/projects/7/columns"))
+    return Response.json([
+      { id: 70, title: "Todo" },
+      { id: 71, title: "Doing" },
+      { id: 72, title: "Done" },
+    ]);
+  const column = /\/projects\/7\/columns\/(\d+)\/issues$/.exec(path);
+  if (column !== null)
+    return Response.json(
+      Number(column[1]) === projectColumn ? [{ ...issue, id: 101 }] : [],
+    );
+  if (url.pathname.endsWith("/issues/1"))
+    return Response.json({ ...issue, id: 101 });
   if (url.pathname.endsWith("/issues")) return Response.json([issue]);
   if (url.pathname.endsWith("/repos/fixture/issues"))
     return Response.json({ full_name: "fixture/issues" });

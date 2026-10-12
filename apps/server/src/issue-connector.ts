@@ -129,6 +129,14 @@ export class IssueConnectorService {
       );
     }
   }
+  /**
+   * Issue #174: decrypted provider access for one connection, for services
+   * that act on the same repository (board column sync). The token never
+   * leaves the process.
+   */
+  credentials(ownerId: string, id: string): IssueConnectionInput {
+    return this.input(this.connection(ownerId, id));
+  }
   private connection(ownerId: string, id: string): IssueConnectionRecord {
     const record = this.db.issues.connection(ownerId, id);
     if (record === undefined)

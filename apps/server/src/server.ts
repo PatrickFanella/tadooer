@@ -17,6 +17,8 @@ import { sendError } from "./http-utils.ts";
 import { BaikalConnectorService } from "./connector.ts";
 import { IssueConnectorService } from "./issue-connector.ts";
 import { handleIssues } from "./routes/issues.ts";
+import { handleBoardProvider } from "./routes/board-provider.ts";
+import { BoardProviderService } from "./board-provider.ts";
 import { GoogleConnectorService } from "./google-connector.ts";
 import {
   CalendarSubscriptionService,
@@ -153,6 +155,12 @@ export const startSuiteServer = async (
     database,
     config.credentialKeyPath,
     config.giteaIssueOrigins ?? ["https://git.subcult.tv"],
+    options.issueFetch,
+  );
+  // Issue #174: Gitea project columns on boards share the issue fetcher.
+  const boardProvider = new BoardProviderService(
+    database,
+    issues,
     options.issueFetch,
   );
   const calendarSubscriptions = new CalendarSubscriptionService(
@@ -460,6 +468,7 @@ export const startSuiteServer = async (
     baikal: connector,
     google,
     issues,
+    boardProvider,
     calendarSubscriptions,
     calendarBridge,
     calendarBridgeWorker,
@@ -477,6 +486,7 @@ export const startSuiteServer = async (
     handleHealth,
     handleAuthSetup,
     handleConnectors,
+    handleBoardProvider,
     handleIssues,
     handleSync,
     handleActiveSession,

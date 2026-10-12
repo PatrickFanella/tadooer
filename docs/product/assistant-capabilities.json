@@ -499,6 +499,22 @@
       "source": "apps/web/src/api.ts"
     },
     {
+      "id": "board-provider",
+      "action": "Boards: attach a board to a Gitea project, map panels to project columns, run an inbound sync that moves linked tasks into their issue's column panel, and move the issue on a panel move when write-back is on",
+      "webApi": [
+        "listIssueConnectionProjects",
+        "getBoardProvider",
+        "setBoardProvider",
+        "clearBoardProvider",
+        "syncBoardProvider"
+      ],
+      "catalog": [],
+      "status": "owner-only",
+      "issue": 174,
+      "authority": "Owner-only in the web app (ADR 0054): the mapping and the manual sync act on a connected Gitea repository with the owner's stored token. The assistant reaches boards through boards.list and boards.mutate; provider mapping and sync stay with the owner until the Gitea pass is qualified in production.",
+      "source": "apps/server/src/routes/board-provider.ts"
+    },
+    {
       "id": "sections",
       "action": "Sections inside a project or tag: list, create, rename, collapse, set ordered members, reorder and delete",
       "webApi": [

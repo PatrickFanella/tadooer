@@ -219,12 +219,47 @@ export const boardMoveRequestSchema = z
   })
   .strict();
 
+/** Gitea API payloads read by the board provider service (API 28 shapes). */
+export const giteaProjectPayloadSchema = z.object({
+  id: z.number().int().positive(),
+  title: z.string(),
+  is_closed: z.boolean().optional(),
+});
+export const giteaProjectColumnPayloadSchema = z.object({
+  id: z.number().int().positive(),
+  title: z.string(),
+});
+export const giteaColumnIssuePayloadSchema = z.object({
+  id: z.number().int().positive(),
+  number: z.number().int().positive(),
+  pull_request: z.unknown().optional(),
+});
+export const giteaIssueIdPayloadSchema = z.object({
+  id: z.number().int().positive(),
+});
+
+/** The provider side of a board move: previewed on a dry run, then applied. */
+export const boardMoveProviderEffectSchema = z
+  .object({
+    provider: z.literal("gitea"),
+    issueNumber: z.number().int().positive(),
+    columnTitle: z.string().max(240),
+    state: z.enum(["planned", "applied", "failed"]),
+    message: z.string().max(2000).nullable(),
+  })
+  .strict();
+
 export const boardMoveResponseSchema = z
   .object({
     applied: z.boolean(),
     changes: z.array(boardMoveChangeSchema),
     /** Present after an applied move. */
     view: boardViewSchema.optional(),
+    /**
+     * Issue #174: the Gitea side of the move when the panel maps to a project
+     * column and the task is linked to an issue; absent otherwise.
+     */
+    provider: boardMoveProviderEffectSchema.optional(),
   })
   .strict();
 
@@ -610,7 +645,113 @@ export const menuFolderMutationResponseSchema = z
   .object({ folders: z.array(menuFolderSchema) })
   .strict();
 
+/**
+ * Issue #174 (ADR 0054): a board attached to a Gitea project. Each panel may
+ * map to one project column; linked tasks follow their issue's column on
+ * sync, and with `writeBack` a panel move also moves the issue.
+ */
+export const boardProviderColumnSchema = z
+  .object({
+    panelId: id,
+    columnId: z.number().int().positive(),
+    columnTitle: z.string().trim().min(1).max(240),
+  })
+  .strict();
+
+export const boardProviderMappingStateSchema = z.enum([
+  "idle",
+  "synced",
+  "conflict",
+  "unavailable",
+  "authentication_required",
+]);
+
+export const boardProviderMappingSchema = z
+  .object({
+    boardId: id,
+    connectionId: id,
+    provider: z.literal("gitea"),
+    projectId: z.number().int().positive(),
+    projectTitle: z.string().trim().min(1).max(240),
+    columns: z.array(boardProviderColumnSchema).max(boardMaxPanels),
+    writeBack: z.boolean(),
+    state: boardProviderMappingStateSchema,
+    message: z.string().max(2000).nullable(),
+    lastSyncedAt: z.iso.datetime().nullable(),
+    /**
+     * Where each linked task was after the last sync, keyed by task. A task
+     * found elsewhere at the next sync moved locally; when Gitea disagrees
+     * too, that is a conflict rather than a silent move (ADR 0054).
+     */
+    placements: z
+      .record(id, z.object({ panelId: id, at: z.iso.datetime() }).strict())
+      .default({}),
+    updatedAt: z.iso.datetime(),
+  })
+  .strict();
+
+export const boardProviderMappingSetRequestSchema = z
+  .object({
+    connectionId: id,
+    projectId: z.number().int().positive(),
+    projectTitle: z.string().trim().min(1).max(240),
+    columns: z.array(boardProviderColumnSchema).max(boardMaxPanels),
+    writeBack: z.boolean().default(false),
+  })
+  .strict();
+
+export const boardProviderMappingResponseSchema = z
+  .object({ mapping: boardProviderMappingSchema.nullable() })
+  .strict();
+
+export const providerProjectColumnSchema = z
+  .object({ id: z.number().int().positive(), title: z.string().max(240) })
+  .strict();
+export const providerProjectSchema = z
+  .object({
+    id: z.number().int().positive(),
+    title: z.string().max(240),
+    columns: z.array(providerProjectColumnSchema).max(50),
+  })
+  .strict();
+export const providerProjectsResponseSchema = z
+  .object({ projects: z.array(providerProjectSchema).max(200) })
+  .strict();
+
+export const boardProviderSyncMoveSchema = z
+  .object({
+    taskId: id,
+    issueNumber: z.number().int().positive(),
+    panelId: id,
+    columnTitle: z.string().max(240),
+  })
+  .strict();
+export const boardProviderSyncConflictSchema = boardProviderSyncMoveSchema
+  .extend({ reason: z.string().max(2000) })
+  .strict();
+export const boardProviderSyncResponseSchema = z
+  .object({
+    mapping: boardProviderMappingSchema,
+    moved: z.array(boardProviderSyncMoveSchema),
+    conflicts: z.array(boardProviderSyncConflictSchema),
+    unchanged: z.number().int().nonnegative(),
+    view: boardViewSchema,
+  })
+  .strict();
+
 export type BoardMarker = z.infer<typeof boardMarkerSchema>;
+export type BoardProviderColumn = z.infer<typeof boardProviderColumnSchema>;
+export type BoardProviderMapping = z.infer<typeof boardProviderMappingSchema>;
+export type BoardProviderMappingSetRequest = z.infer<
+  typeof boardProviderMappingSetRequestSchema
+>;
+export type ProviderProject = z.infer<typeof providerProjectSchema>;
+export type BoardProviderSyncResponse = z.infer<
+  typeof boardProviderSyncResponseSchema
+>;
+export type BoardMoveProviderEffect = z.infer<
+  typeof boardMoveProviderEffectSchema
+>;
 export type BoardPanelFilter = z.infer<typeof boardPanelFilterSchema>;
 export type BoardPanelFilterInput = z.input<typeof boardPanelFilterSchema>;
 export type BoardPanel = z.infer<typeof boardPanelSchema>;
