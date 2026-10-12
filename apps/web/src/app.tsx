@@ -2622,6 +2622,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             onRemoveTimeBlock={removeTimeBlock}
             onViewTasks={() => navigate("tasks")}
             pinnedNotes={pinnedNotes}
+            onSubmitTaskEdit={submitTaskEdit}
+            onCreateChildTask={taskHierarchyActions.onCreateChildTask}
           />
         )}
         <section aria-label="Offline sync status">
@@ -3045,6 +3047,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
               state.client === undefined ? undefined : dayOrderActions
             }
             pinnedNotes={pinnedNotes}
+            onSubmitTaskEdit={submitTaskEdit}
+            onCreateChildTask={taskHierarchyActions.onCreateChildTask}
           />
         )}
         {route === "inbox" && (

@@ -28,6 +28,7 @@ import { useDayOrders, type DayOrderActions } from "../day-order.tsx";
 import { PlanTomorrowPanel } from "../plan-tomorrow.tsx";
 import { NoteMarkdown } from "../components/notes/NoteMarkdown.tsx";
 import { useApplicationPreferences } from "../application-preferences.tsx";
+import type { TaskHierarchyActions } from "../components/tasks/TaskHierarchy.tsx";
 
 export interface TodayPageProps {
   readonly dayPlan: DayPlanResponse | undefined;
@@ -72,6 +73,15 @@ export interface TodayPageProps {
    * owner's order. They render without a connection.
    */
   readonly pinnedNotes?: readonly Note[] | undefined;
+  /** Issue #170: inline edit and child tasks on Today rows. */
+  readonly onSubmitTaskEdit?:
+    | ((
+        event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
+        task: Task,
+      ) => Promise<void>)
+    | undefined;
+  readonly onCreateChildTask?:
+    TaskHierarchyActions["onCreateChildTask"] | undefined;
 }
 const calmStateLabel: Readonly<Record<DayPlanResponse["state"], string>> = {
   working: "Working",
@@ -118,6 +128,8 @@ export const TodayPage = (props: TodayPageProps) => {
     dayOrderActions,
     pinnedNotes = [],
     focus,
+    onSubmitTaskEdit,
+    onCreateChildTask,
   } = props;
   const [logicalAt, setLogicalAt] = useState(
     dayPlan?.at ?? new Date().toISOString(),
@@ -243,6 +255,8 @@ export const TodayPage = (props: TodayPageProps) => {
         onSubmitTimeBlock={onSubmitTimeBlock}
         onRemoveTimeBlock={onRemoveTimeBlock}
         onViewTasks={onViewTasks}
+        onSubmitTaskEdit={onSubmitTaskEdit}
+        onCreateChildTask={onCreateChildTask}
         plannedTodayOrder={dayOrders.orders.get(today)?.taskIds}
         onMovePlanned={
           dayOrders.enabled

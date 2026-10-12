@@ -5,7 +5,8 @@ import {
   type PlanningPreferences,
   type Task,
 } from "@suite/contracts";
-import { buildTodayQueue } from "@suite/domain";
+import { buildTodayQueue, groupTaskHierarchy } from "@suite/domain";
+import type { TaskHierarchyActions } from "./components/tasks/TaskHierarchy.tsx";
 import {
   TaskListItem,
   type TaskListItemState,
@@ -40,6 +41,15 @@ export interface TodayQueueProps {
   /** Moves within today's order; absent until the device has synced once. */
   readonly onMovePlanned?:
     ((taskId: string, direction: -1 | 1) => void) | undefined;
+  /** Issue #170: inline edit and child tasks on each row. */
+  readonly onSubmitTaskEdit?:
+    | ((
+        event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
+        task: Task,
+      ) => Promise<void>)
+    | undefined;
+  readonly onCreateChildTask?:
+    TaskHierarchyActions["onCreateChildTask"] | undefined;
 }
 
 export const TodayQueue = ({
@@ -58,12 +68,20 @@ export const TodayQueue = ({
   onViewTasks,
   plannedTodayOrder,
   onMovePlanned,
+  onSubmitTaskEdit,
+  onCreateChildTask,
 }: TodayQueueProps) => {
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<
     ReadonlySet<string>
   >(new Set());
   const byId = useMemo(
     () => new Map(tasks.map((task) => [task.id, task])),
+    [tasks],
+  );
+  // ADR 0018: children render under their parent's row; a child whose
+  // parent is in today's queue is nested instead of listed twice.
+  const { childrenByParent } = useMemo(
+    () => groupTaskHierarchy(tasks.filter((task) => task.deletedAt == null)),
     [tasks],
   );
   const queue =
@@ -76,7 +94,7 @@ export const TodayQueue = ({
           tasks,
           plannedTodayOrder,
         });
-  const planning =
+  const unnestedPlanning =
     queue === undefined
       ? tasks
           .filter(
@@ -94,21 +112,37 @@ export const TodayQueue = ({
   const [expandedSections, setExpandedSections] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const overdue =
+  const unnestedOverdue =
     queue?.overdueTaskIds.flatMap((id) => {
       const task = byId.get(id);
       return task === undefined ? [] : [task];
     }) ?? [];
-  const scheduled =
+  const unnestedScheduled =
     queue?.scheduledTodayTaskIds.flatMap((id) => {
       const task = byId.get(id);
       return task === undefined ? [] : [task];
     }) ?? [];
-  const plannedToday =
+  const unnestedPlannedToday =
     queue?.plannedTodayTaskIds.flatMap((id) => {
       const task = byId.get(id);
       return task === undefined ? [] : [task];
     }) ?? [];
+  const listedIds = new Set(
+    [
+      ...unnestedOverdue,
+      ...unnestedScheduled,
+      ...unnestedPlannedToday,
+      ...unnestedPlanning,
+    ].map(({ id }) => id),
+  );
+  const unnested = (listed: readonly Task[]) =>
+    listed.filter(
+      (task) => task.parentId == null || !listedIds.has(task.parentId),
+    );
+  const overdue = unnested(unnestedOverdue);
+  const scheduled = unnested(unnestedScheduled);
+  const plannedToday = unnested(unnestedPlannedToday);
+  const planning = unnested(unnestedPlanning);
   const completed = tasks.filter(
     (task) =>
       recentlyCompletedIds.has(task.id) &&
@@ -167,6 +201,13 @@ export const TodayQueue = ({
         onSubmitTimeBlock={onSubmitTimeBlock}
         onRemoveTimeBlock={onRemoveTimeBlock}
         moveControls={moveControls(task, state)}
+        onSubmitTaskEdit={onSubmitTaskEdit}
+        childTasks={
+          task.parentId == null
+            ? (childrenByParent.get(task.id) ?? [])
+            : undefined
+        }
+        onCreateChildTask={onCreateChildTask}
       />
     );
   };
