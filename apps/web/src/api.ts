@@ -186,6 +186,13 @@ import {
   boardListResponseSchema,
   boardMoveRequestSchema,
   boardMoveResponseSchema,
+  boardProviderMappingResponseSchema,
+  boardProviderMappingSetRequestSchema,
+  boardProviderSyncResponseSchema,
+  providerProjectsResponseSchema,
+  type BoardProviderMapping,
+  type BoardProviderSyncResponse,
+  type ProviderProject,
   boardOrderRequestSchema,
   boardPanelOrderRequestSchema,
   boardResponseSchema,
@@ -1988,6 +1995,58 @@ export const moveTaskToPanel = (
       headers: { "X-CSRF-Token": csrfToken },
       body: JSON.stringify(boardMoveRequestSchema.parse(input)),
     },
+  );
+
+/** Issue #174: open Gitea projects of a connection's repository. */
+export const listIssueConnectionProjects = (
+  connectionId: string,
+): Promise<readonly ProviderProject[]> =>
+  request(
+    `/api/issue-connections/${encodeURIComponent(connectionId)}/projects`,
+    providerProjectsResponseSchema,
+  ).then(({ projects }) => projects);
+
+export const getBoardProvider = (
+  boardId: string,
+): Promise<BoardProviderMapping | null> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}/provider`,
+    boardProviderMappingResponseSchema,
+  ).then(({ mapping }) => mapping);
+
+export const setBoardProvider = (
+  boardId: string,
+  input: z.input<typeof boardProviderMappingSetRequestSchema>,
+  csrfToken: string,
+): Promise<BoardProviderMapping | null> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}/provider`,
+    boardProviderMappingResponseSchema,
+    {
+      method: "PUT",
+      headers: { "X-CSRF-Token": csrfToken },
+      body: JSON.stringify(boardProviderMappingSetRequestSchema.parse(input)),
+    },
+  ).then(({ mapping }) => mapping);
+
+export const clearBoardProvider = (
+  boardId: string,
+  csrfToken: string,
+): Promise<void> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}/provider`,
+    boardProviderMappingResponseSchema,
+    { method: "DELETE", headers: { "X-CSRF-Token": csrfToken } },
+  ).then(() => undefined);
+
+export const syncBoardProvider = (
+  boardId: string,
+  csrfToken: string,
+): Promise<BoardProviderSyncResponse> =>
+  request(
+    `/api/boards/${encodeURIComponent(boardId)}/provider/sync`,
+    boardProviderSyncResponseSchema,
+    { method: "POST", headers: { "X-CSRF-Token": csrfToken } },
   );
 
 export const getSections = (

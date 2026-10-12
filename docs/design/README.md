@@ -198,6 +198,9 @@ cached or empty state rather than a placeholder that never resolves.
   sections are omitted, and the Tasks list keeps the saved view and each
   row's child-task form behind disclosures. The route audit and screenshots
   are in [information-architecture.md](information-architecture.md).
+- A board's Gitea project (issue #174, ADR 0054) lives in a disclosure under
+  the board's header, closed until a mapping exists. Sync results list moved
+  tasks and conflicts in plain sentences; a conflict is never auto-resolved.
 - Drag-and-drop (issue #172) uses the native HTML drag API with a private
   data type, no library: the unplanned-tasks drawer's rows are draggable,
   planner days and board panels are drop targets with a dashed purple

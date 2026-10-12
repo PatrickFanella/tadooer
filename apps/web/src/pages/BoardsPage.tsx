@@ -31,6 +31,7 @@ import {
   reorderBoardPanel,
   updateBoard,
 } from "../api.ts";
+import { BoardProviderSection } from "../components/boards/BoardProviderSection.tsx";
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
@@ -628,6 +629,11 @@ export const BoardsPage = ({
         plan.changes.length === 0
           ? ["No task changes; only the panel order changes."]
           : plan.changes.map((change) => describeBoardChange(change, names));
+      // Issue #174: the Gitea side of the move is named before anything applies.
+      if (plan.provider !== undefined)
+        lines.push(
+          `Also moves Gitea issue #${String(plan.provider.issueNumber)} to column "${plan.provider.columnTitle}"`,
+        );
       if (
         !window.confirm(
           `Move "${task.title}" into "${panelTitle}"?\n\n${lines.join("\n")}`,
@@ -645,6 +651,10 @@ export const BoardsPage = ({
         csrfToken,
       );
       if (result.view !== undefined) setView(result.view);
+      if (result.provider?.state === "failed")
+        setMessage(
+          `Moved here, but Gitea issue #${String(result.provider.issueNumber)} was not moved: ${result.provider.message ?? "write-back failed"}.`,
+        );
       await loadBoards();
     }, "The task could not be moved.");
   };
@@ -791,6 +801,14 @@ export const BoardsPage = ({
             </SectionHeading>
           </CardHeader>
           <CardContent>
+            <BoardProviderSection
+              boardId={selected.id}
+              panels={selected.panels}
+              csrfToken={csrfToken}
+              online={online}
+              onView={setView}
+              taskTitle={(taskId) => taskById.get(taskId)?.title ?? "task"}
+            />
             <div className="task-actions">
               <Button
                 type="button"

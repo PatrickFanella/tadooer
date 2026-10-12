@@ -26,13 +26,31 @@ export class IssueProvider {
     path: string,
     state?: "open" | "closed",
   ): Promise<unknown> {
+    return this.send(
+      connection,
+      path,
+      state === undefined
+        ? { method: "GET" }
+        : { method: "PATCH", body: { state } },
+    );
+  }
+
+  /**
+   * One authenticated call with the same limits as issue reads: no
+   * redirects, a 10 s timeout and a 2 MiB response cap. A 204 returns null.
+   */
+  async send(
+    connection: IssueConnectionInput,
+    path: string,
+    init: { method: "GET" | "POST" | "PATCH"; body?: unknown },
+  ): Promise<unknown> {
     const base =
       connection.provider === "github"
         ? "https://api.github.com"
         : `${connection.origin}/api/v1`;
     try {
       const response = await this.fetcher(`${base}${path}`, {
-        method: state === undefined ? "GET" : "PATCH",
+        method: init.method,
         redirect: "error",
         signal: AbortSignal.timeout(10_000),
         headers: {
@@ -41,16 +59,17 @@ export class IssueProvider {
           ...(connection.provider === "github"
             ? { "X-GitHub-Api-Version": "2022-11-28" }
             : {}),
-          ...(state === undefined
+          ...(init.body === undefined
             ? {}
             : { "Content-Type": "application/json" }),
         },
-        ...(state === undefined ? {} : { body: JSON.stringify({ state }) }),
+        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
       });
       if (response.status === 401)
         throw new IssueProviderError("authentication_required");
       if (response.status === 404) throw new IssueProviderError("not_found");
       if (!response.ok) throw new IssueProviderError("unavailable");
+      if (response.status === 204) return null;
       if (response.body === null)
         throw new IssueProviderError("invalid_response");
       const reader = response.body.getReader();

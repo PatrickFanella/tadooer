@@ -83,6 +83,42 @@ Changing task completion during a pending write requires conflict resolution.
 Authentication failures and unavailable issues retain tasks and show recovery
 states.
 
+## Gitea project columns on a board
+
+Issue #174, ADR 0054. A board can follow one open project of a connected Gitea
+repository. On the Boards page, the selected board's "Gitea project" disclosure
+lists the Gitea connections, the repository's open projects and their columns;
+map any panel to a column and save. Only tasks already linked to an issue of
+that connection take part; sync never imports.
+
+"Sync from Gitea" runs one inbound pass. For each mapped column the service
+reads the column's issues (up to 20 pages of 50) and moves each linked task
+into the mapped panel with the same previewed board move the Move button uses,
+so the panel's filter changes (tags, markers, state, project) apply. A task
+that changed locally after the last sync and sits in another mapped panel is
+reported as a conflict with the issue, the column and the reason, and is not
+moved. The mapping shows `synced`, `conflict`, `unavailable` or
+`authentication_required` with a message and the last sync time. An inbound
+move writes "Moved to panel X from Gitea column Y at T" on the issue link,
+visible in Connections.
+
+Write-back is off by default per mapping. When on, moving a task into a mapped
+panel also moves its issue into that column (`POST
+/repos/{owner}/{repo}/projects/{id}/issues/{issue_id}/move`) after the local
+move has committed; the move preview names the issue and column first. A failed
+provider write keeps the local move and records the failure on the mapping; the
+next sync then reports the divergence as a conflict rather than moving the task
+back. GitHub Projects are not supported by this mapping yet.
+
+Endpoints: `GET /api/issue-connections/{id}/projects`,
+`GET|PUT|DELETE /api/boards/{id}/provider`, `POST /api/boards/{id}/provider/sync`.
+Checks: `apps/server/src/board-provider.test.ts` runs the service against a
+fake Gitea built from the git.subcult.tv API shapes, and the disposable
+`issue-browser-fixture.ts` answers the same project endpoints for a browser
+pass (mapping, sync, previewed move with write-back; see
+`docs/design/screenshots/boards-gitea-desktop.png`). A live run against a real
+project is recorded in issue #174 when it happens.
+
 ## Current limits and verification
 
 Sync is manual. There are no webhooks, automatic polling, comment/attachment

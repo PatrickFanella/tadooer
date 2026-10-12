@@ -896,6 +896,43 @@
     color: var(--purple);
   }
 
+  /* Issue #174: a board's Gitea project disclosure. */
+  .board-provider {
+    margin: 0.75rem 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--mantle);
+  }
+  .board-provider > summary {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .board-provider__summary,
+  .board-provider__form {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .board-provider__columns {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+  }
+  .board-provider__result ul {
+    margin: 0.25rem 0 0;
+    padding-left: 1.1rem;
+    font-size: var(--text-sm);
+    color: var(--subtext);
+  }
+  .board-provider__conflicts li {
+    color: var(--orange);
+  }
+
   /* Issue #175: Records and Setup groups. */
   .sidebar-group {
     display: flex;

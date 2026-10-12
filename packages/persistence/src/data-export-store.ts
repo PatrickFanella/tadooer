@@ -131,6 +131,7 @@ export const dataExportExcludedTables: readonly string[] = [
   "issue_connections",
   "issue_shared_tokens",
   "issue_links",
+  "board_provider_mappings",
   "google_oauth_states",
   "google_calendar_sync",
   "google_calendar_capabilities",
