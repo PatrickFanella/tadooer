@@ -27,7 +27,7 @@ describe("landing page (issue #176)", () => {
 
   it("references only assets and anchors that exist", () => {
     const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(
-      (m) => m[1]!,
+      (m) => m[1] ?? "",
     );
     for (const ref of refs) {
       if (ref.startsWith("http")) continue;
