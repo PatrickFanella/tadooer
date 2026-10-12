@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   disconnectGoogle,
+  downloadDataExport,
   getGoogleStatus,
   revokeCalendarFeed,
 } from "./api.ts";
@@ -73,4 +74,47 @@ describe("shared session recovery boundary", () => {
     await expect(getGoogleStatus()).rejects.toThrow();
     expect(listener).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    ["JSON read", () => getGoogleStatus()],
+    ["JSON write", () => disconnectGoogle("old-token")],
+    ["empty write", () => revokeCalendarFeed("feed", "old-token")],
+    ["export", () => downloadDataExport()],
+  ] as const)(
+    "does not report a delayed %s failure to a replacement session",
+    async (_name, request) => {
+      let finish!: (response: Response) => void;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
+        ),
+      );
+      const oldListener = vi.fn();
+      const unsubscribeOld = subscribeSessionFailure(oldListener);
+      const pending = request().catch((error: unknown) => error);
+      unsubscribeOld();
+      const newListener = vi.fn();
+      const unsubscribeNew = subscribeSessionFailure(newListener);
+      try {
+        finish(
+          new Response(
+            JSON.stringify({
+              code: "AUTH_REQUIRED",
+              message: "Old session expired",
+              requestId: "00000000-0000-4000-8000-000000000001",
+            }),
+            { status: 401 },
+          ),
+        );
+        expect(await pending).toBeInstanceOf(Error);
+        expect(oldListener).not.toHaveBeenCalled();
+        expect(newListener).not.toHaveBeenCalled();
+      } finally {
+        unsubscribeNew();
+      }
+    },
+  );
 });

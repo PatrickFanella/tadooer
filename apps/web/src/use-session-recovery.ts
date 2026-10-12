@@ -38,9 +38,13 @@ export const useSessionRecovery = (
     [onRecovered, sessionKey],
   );
 
-  const reportFailure = useCallback((nextFailure: SessionFailure): void => {
-    if (currentSessionKey.current !== null) setFailure(nextFailure);
-  }, []);
+  const reportFailure = useCallback(
+    (nextFailure: SessionFailure): void => {
+      if (sessionKey !== null && currentSessionKey.current === sessionKey)
+        setFailure(nextFailure);
+    },
+    [sessionKey],
+  );
 
   return { failure, recover, reportFailure };
 };
