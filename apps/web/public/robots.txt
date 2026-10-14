@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# The private application emits noindex; public product information is on subcult.tv.
