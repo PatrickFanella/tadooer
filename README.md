@@ -46,3 +46,13 @@ container image keep the historical `productivity-suite` name.
 GitHub and Gitea issue connections support selective task import, manual refresh,
 text conflict resolution, and optional close/reopen write-back. See
 [the setup and sync guide](docs/operations/issue-sync.md) for shared and repository-specific tokens.
+
+## License
+
+Original contributions in this repository are licensed under the GNU General
+Public License, version 3 or (at your option) any later version
+(`GPL-3.0-or-later`). See [LICENSE](LICENSE).
+
+Third-party code, documentation, fonts, data, and other assets retain their own
+licenses, copyright notices, and attribution. This license does not replace
+those terms or grant rights to upstream material that its authors have not granted.
