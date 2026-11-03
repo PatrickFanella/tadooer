@@ -52,7 +52,7 @@ export const sidebarCounts = (
       (task.plannedStart != null &&
         zonedCalendarDate(task.plannedStart, timeZone) === today);
     if (plannedToday) todayCount += 1;
-    if (task.plannedStart == null && task.plannedDay == null) inbox += 1;
+    if (task.plannedStart == null) inbox += 1;
     if (task.projectId != null)
       byProject.set(task.projectId, (byProject.get(task.projectId) ?? 0) + 1);
     for (const tagId of task.tagIds ?? [])

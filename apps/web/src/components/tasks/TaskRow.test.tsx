@@ -159,8 +159,12 @@ describe("TaskRow (issue #194)", () => {
     const html = render({
       task: task({ parentId: "parent", plannedDay: "2026-11-01" }),
       state: "overdue",
+      nested: true,
     });
     expect(html).toContain("task-row--child");
+    expect(render({ task: task({ parentId: "parent" }) })).not.toContain(
+      "task-row--child",
+    );
     expect(html).toContain('data-tone="warning"');
     expect(html).toContain("Overdue · planned for 2026-11-01");
   });

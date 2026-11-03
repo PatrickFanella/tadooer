@@ -50,8 +50,22 @@ const toneLabel: Readonly<Record<SyncTone, string>> = {
 
 export const SyncIndicator = (props: SyncIndicatorProps) => {
   const tone = syncTone(props);
+  // The state is text in a status region, not colour alone.
+  const summary = [
+    `Task sync: ${props.syncStatus ?? "offline"}.`,
+    ...(props.liveStatus === undefined
+      ? []
+      : [
+          `Live updates: ${liveSyncStatusLabel(props.liveStatus)}.`,
+          liveSyncStatusDescription(props.liveStatus),
+        ]),
+    props.baikalConnected ? "Baikal verified." : "Baikal disconnected.",
+  ].join(" ");
   return (
     <Popover>
+      <span className="sr-only" role="status">
+        {summary}
+      </span>
       <PopoverTrigger
         type="button"
         className="sync-dot-trigger"

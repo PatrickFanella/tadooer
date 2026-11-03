@@ -60,14 +60,15 @@ export type Location =
 const contextPrefixes = { projects: "project", tags: "tag" } as const;
 
 export const locationFromPath = (path: string): Location => {
-  const [first, second] = path.replace(/^\//, "").split("/");
+  const pathname = path.replace(/[?#].*$/, "");
+  const [first, second] = pathname.replace(/^\//, "").split("/");
   const kind =
     first === "projects" || first === "tags" ? contextPrefixes[first] : null;
   if (kind !== null) {
     if (second === undefined || second === "") return { route: "tasks" };
     return { route: kind, id: decodeURIComponent(second) };
   }
-  return { route: routeFromPath(path) };
+  return { route: routeFromPath(pathname) };
 };
 
 export const pathForLocation = (location: Location): string =>

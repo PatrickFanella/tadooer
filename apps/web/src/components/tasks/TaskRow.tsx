@@ -6,7 +6,14 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { CalendarClock, ChevronRight, Ellipsis, Play } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CalendarClock,
+  ChevronRight,
+  Ellipsis,
+  Play,
+} from "lucide-react";
 import type {
   BaikalStatusResponse,
   Project,
@@ -81,6 +88,8 @@ export interface TaskRowProps {
   /** Nested child rows, rendered under this row. */
   readonly children?: ReactNode;
   readonly childCount?: number | undefined;
+  /** Rendered under its parent; a child whose parent is filtered out is not. */
+  readonly nested?: boolean | undefined;
   readonly onSelect: (task: Task, modifiers: SelectModifiers) => void;
   readonly onBeginEdit: (task: Task) => void;
   readonly onEndEdit: () => void;
@@ -118,6 +127,7 @@ export const TaskRow = ({
   moveControls,
   children,
   childCount = 0,
+  nested = false,
   onSelect,
   onBeginEdit,
   onEndEdit,
@@ -190,7 +200,7 @@ export const TaskRow = ({
         "task-row",
         selected ? "task-row--selected" : "",
         completed ? "task-row--completed" : "",
-        isChild ? "task-row--child" : "",
+        nested ? "task-row--child" : "",
         edit.editing ? "task-row--editing" : "",
       ]
         .filter(Boolean)
@@ -296,6 +306,32 @@ export const TaskRow = ({
           )}
         </span>
         <span className="task-row__actions">
+          {moveControls !== undefined && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={busy || !moveControls.canMoveUp}
+                aria-label={`Move “${task.title}” up`}
+                title="Move up"
+                onClick={() => moveControls.onMove(-1)}
+              >
+                <ArrowUp />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={busy || !moveControls.canMoveDown}
+                aria-label={`Move “${task.title}” down`}
+                title="Move down"
+                onClick={() => moveControls.onMove(1)}
+              >
+                <ArrowDown />
+              </Button>
+            </>
+          )}
           {completed ? null : focusState === "running" ? (
             <Badge variant="now">Running</Badge>
           ) : (
@@ -317,7 +353,7 @@ export const TaskRow = ({
               <Play />
             </Button>
           )}
-          {completed ? null : (
+          {completed || !calendarActionsAvailable ? null : (
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -377,23 +413,6 @@ export const TaskRow = ({
               >
                 Save as template
               </DropdownMenuItem>
-              {moveControls !== undefined && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={busy || !moveControls.canMoveUp}
-                    onSelect={() => moveControls.onMove(-1)}
-                  >
-                    Move up
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={busy || !moveControls.canMoveDown}
-                    onSelect={() => moveControls.onMove(1)}
-                  >
-                    Move down
-                  </DropdownMenuItem>
-                </>
-              )}
               <DropdownMenuSeparator />
               {actions.archive !== undefined && !isChild && (
                 <DropdownMenuItem

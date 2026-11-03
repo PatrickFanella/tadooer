@@ -72,6 +72,11 @@ describe("workspace locations (issue #194)", () => {
     expect(locationFromPath("/projects")).toEqual({ route: "tasks" });
     expect(locationFromPath("/nothing")).toEqual({ route: "today" });
     expect(locationFromPath("/tasks/organize")).toEqual({ route: "tasks" });
+    expect(locationFromPath("/tasks?task=abc")).toEqual({ route: "tasks" });
+    expect(locationFromPath("/projects/p1?task=abc")).toEqual({
+      route: "project",
+      id: "p1",
+    });
     expect(locationFromPath("/tags/with%20space")).toEqual({
       route: "tag",
       id: "with space",

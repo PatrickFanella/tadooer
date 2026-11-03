@@ -1,51 +1,64 @@
 import type {
   ActiveSession,
   BaikalStatusResponse,
+  Project,
+  Tag,
   Task,
 } from "@suite/contracts";
 import { useState, type SyntheticEvent } from "react";
-import { TaskCaptureForm } from "../components/tasks/TaskCaptureForm.tsx";
-import { TaskListItem } from "../components/tasks/TaskListItem.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import { AddTaskBar } from "../components/tasks/AddTaskBar.tsx";
+import type { TaskActions } from "../components/tasks/task-actions.ts";
+import {
+  TaskRows,
+  useVisibleOrder,
+  visibleOrder,
+  type TaskListContext,
+} from "../components/tasks/TaskList.tsx";
+import type { ListSelectionProps } from "../components/tasks/TaskRow.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
-import { SectionHeading } from "../components/ui/section-heading.tsx";
 
 interface InboxPageProps {
   readonly tasks: readonly Task[];
+  readonly projects: readonly Project[];
+  readonly tags: readonly Tag[];
   readonly activeSession: ActiveSession | null;
   readonly calendars: BaikalStatusResponse["calendars"];
+  readonly timeZone: string;
+  readonly today: string;
   readonly busy: boolean;
+  readonly online: boolean;
+  readonly csrfToken: string | undefined;
   readonly calendarActionsAvailable: boolean;
   readonly focusActionsAvailable: boolean;
+  readonly actions: TaskActions;
+  readonly list: ListSelectionProps;
   readonly onSubmitTask: (
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
   ) => Promise<void>;
-  readonly onStartFocus: (task: Task) => void;
-  readonly onChangeTaskStatus: (
-    task: Task,
-    action: "complete" | "reopen",
-  ) => Promise<boolean>;
-  readonly onSubmitTimeBlock: (
-    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-    task: Task,
-  ) => Promise<void>;
-  readonly onRemoveTimeBlock: (task: Task) => Promise<void>;
+  readonly onTasksCreated?: (() => void) | undefined;
 }
 
+const pageSize = 12;
+
+/** Open tasks with no planned time (issue #194): the add bar and one list. */
 export const InboxPage = ({
   tasks,
+  projects,
+  tags,
   activeSession,
   calendars,
+  timeZone,
+  today,
   busy,
+  online,
+  csrfToken,
   calendarActionsAvailable,
   focusActionsAvailable,
+  actions,
+  list,
   onSubmitTask,
-  onStartFocus,
-  onChangeTaskStatus,
-  onSubmitTimeBlock,
-  onRemoveTimeBlock,
+  onTasksCreated,
 }: InboxPageProps) => {
   // The first dozen unplanned tasks; the owner opens the rest.
   const [showAll, setShowAll] = useState(false);
@@ -55,69 +68,64 @@ export const InboxPage = ({
       task.deletedAt === null &&
       task.plannedStart === null,
   );
+  const shown = showAll ? inboxTasks : inboxTasks.slice(0, pageSize);
+  useVisibleOrder(visibleOrder([shown], new Map()), list.onVisibleOrderChange);
+  const context: TaskListContext = {
+    at: new Date().toISOString(),
+    timeZone,
+    today,
+    projects,
+    tags,
+    activeSession,
+    calendars,
+    busy,
+    calendarActionsAvailable,
+    focusActionsAvailable,
+    actions,
+    list,
+  };
 
   return (
-    <div className="today-page mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader
-        eyebrow="Not planned yet"
-        title="Inbox"
-        description="Open tasks with no planned time."
+    <div className="inbox-page list-page">
+      <AddTaskBar
+        busy={busy}
+        online={online}
+        csrfToken={csrfToken}
+        onSubmit={onSubmitTask}
+        onTasksCreated={onTasksCreated}
       />
-      <TaskCaptureForm busy={busy} onSubmit={onSubmitTask} />
       {inboxTasks.length === 0 ? (
         <EmptyState
           title="The inbox is empty."
           description="New tasks wait here until you give them a time."
         />
       ) : (
-        <Card
-          className="today-section today-planning"
-          aria-labelledby="inbox-list-title"
-        >
-          <CardHeader>
-            <SectionHeading
-              id="inbox-list-title"
-              title={`To plan (${String(inboxTasks.length)})`}
-            />
-          </CardHeader>
-          <CardContent>
-            <ul>
-              {(showAll ? inboxTasks : inboxTasks.slice(0, 12)).map((task) => (
-                <TaskListItem
-                  key={task.id}
-                  task={task}
-                  state="planning"
-                  at={new Date().toISOString()}
-                  timeZone="UTC"
-                  activeSession={activeSession}
-                  calendars={calendars}
-                  busy={busy}
-                  calendarActionsAvailable={calendarActionsAvailable}
-                  focusActionsAvailable={focusActionsAvailable}
-                  onStartFocus={onStartFocus}
-                  onChangeTaskStatus={async (taskToChange, action) => {
-                    await onChangeTaskStatus(taskToChange, action);
-                  }}
-                  onSubmitTimeBlock={onSubmitTimeBlock}
-                  onRemoveTimeBlock={onRemoveTimeBlock}
-                />
-              ))}
-            </ul>
-            {inboxTasks.length > 12 ? (
-              <p className="today-section__more">
-                <Button
-                  variant="link"
-                  type="button"
-                  onClick={() => setShowAll((current) => !current)}
-                >
-                  {showAll
-                    ? "Show fewer"
-                    : `Show ${String(inboxTasks.length - 12)} more`}
-                </Button>
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+        <section className="list-section" aria-labelledby="inbox-list-title">
+          <h2 id="inbox-list-title" className="list-heading">
+            To plan
+            <span className="list-heading__count">{inboxTasks.length}</span>
+          </h2>
+          <TaskRows
+            tasks={shown}
+            childrenByParent={new Map()}
+            stateOf={() => "planning"}
+            context={context}
+            label="To plan"
+          />
+          {inboxTasks.length > pageSize ? (
+            <p className="today-section__more">
+              <Button
+                variant="link"
+                type="button"
+                onClick={() => setShowAll((current) => !current)}
+              >
+                {showAll
+                  ? "Show fewer"
+                  : `Show ${String(inboxTasks.length - pageSize)} more`}
+              </Button>
+            </p>
+          ) : null}
+        </section>
       )}
     </div>
   );

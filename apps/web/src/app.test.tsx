@@ -107,13 +107,13 @@ describe("App", () => {
     );
     expect(markup).toContain("Tadooer");
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain("Capture a task");
+    expect(markup).toContain('aria-label="Add a task"');
     expect(markup).toContain("Capture the first task");
     expect(markup).toContain("Existing appointment");
     expect(markup).toContain("Baikal");
     expect(markup).toContain("Work");
-    expect(markup).toContain("Focus session");
-    expect(markup).toContain("Estimate minutes");
+    expect(markup).toContain("No session");
+    expect(markup).toContain("Account menu for Owner");
   });
 
   it("renders a bounded offline task workspace without calendar or focus controls", () => {
@@ -173,17 +173,15 @@ describe("App", () => {
     expect(markup).toContain("Offline inbox task");
     expect(markup).toContain("Overdue");
     expect(markup).toContain("Planning");
-    expect(markup).toContain(
-      "Offline. You can still add, complete and reopen tasks. They sync later.",
-    );
-    expect(markup).toContain("Reconnect to start focus");
-    expect(markup).toContain("Reconnect to change calendar blocks");
+    expect(markup).toContain("Reconnect to start focus.");
+    expect(markup).not.toContain('aria-label="Schedule');
     expect(markup).toContain('aria-label="Complete “Durable offline task”"');
     expect(markup).toContain("disabled");
     expect(markup).toContain("Visible sync conflicts: 1");
     expect(markup).toContain("Sync now");
     expect(markup).toContain("Export redacted sync diagnostics");
-    expect(markup).toContain("Capture a task");
+    expect(markup).toContain('aria-label="Add a task"');
+    expect(markup).toContain("Offline: plain capture");
     expect(markup).not.toContain("Limited workspace");
   });
 
@@ -261,5 +259,63 @@ describe("App", () => {
     expect(connections).toContain("Migration &amp; read-only publication");
     expect(settings).toContain("Client and service health");
     expect(settings).toContain("Export redacted sync diagnostics");
+  });
+
+  it("renders a project context and a deep-linked task's details (issue #194)", () => {
+    const state = {
+      kind: "authenticated" as const,
+      session: {
+        owner: {
+          id: "d1054acd-c04d-4bd8-a814-254b007154ba",
+          username: "owner",
+          displayName: "Owner",
+        },
+        csrfToken: "A".repeat(43),
+        expiresAt: "2026-08-08T12:00:00.000Z",
+      },
+      baikal: {
+        connected: true,
+        providerId: "728a504a-0997-4eb3-94dd-5d6ff8af5967",
+        endpoint: "http://baikal/dav.php/",
+        username: "alice",
+        verifiedAt: "2026-08-05T00:00:00.000Z",
+        calendars: [],
+      },
+      tasks: [
+        {
+          id: "afcab502-2199-43fd-b9d3-c8b556c6f25b",
+          title: "Route-backed task",
+          notes: "",
+          status: "open" as const,
+          revision: 1,
+          createdAt: "2026-08-07T12:00:00.000Z",
+          updatedAt: "2026-08-07T12:00:00.000Z",
+          completedAt: null,
+          deletedAt: null,
+          plannedStart: null,
+          estimateMinutes: 30,
+          projectId: "7b1f4f1e-6d3a-4a6f-9f2a-2d0b6a4f0c11",
+        },
+      ],
+      recovery: [],
+      planner: null,
+    };
+    const project = renderToStaticMarkup(
+      <App
+        initialState={state}
+        initialPath="/projects/7b1f4f1e-6d3a-4a6f-9f2a-2d0b6a4f0c11"
+      />,
+    );
+    // Projects load after sign-in, so the context is unknown at first paint.
+    expect(project).toContain("This project no longer exists.");
+    expect(project).not.toContain("All projects");
+    const detail = renderToStaticMarkup(
+      <App
+        initialState={state}
+        initialPath="/tasks?task=afcab502-2199-43fd-b9d3-c8b556c6f25b"
+      />,
+    );
+    expect(detail).toContain('aria-label="Task details"');
+    expect(detail).toContain("task-row--selected");
   });
 });

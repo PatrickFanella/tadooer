@@ -86,7 +86,8 @@ describe("sidebarCounts (issue #194)", () => {
     );
     // c is 22:00 on the 3rd in Chicago, so it counts for today.
     expect(counts.today).toBe(3);
-    expect(counts.inbox).toBe(1);
+    // Date-only plans have no time, so a and d wait in the inbox.
+    expect(counts.inbox).toBe(2);
     expect(counts.byProject.get("p1")).toBe(2);
     expect(counts.byTag.get("t1")).toBe(1);
     expect(counts.byTag.get("t2")).toBe(1);

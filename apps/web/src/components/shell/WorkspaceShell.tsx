@@ -7,6 +7,8 @@ export interface WorkspaceShellProps {
   readonly header: HeaderProps;
   /** The detail panel for the selected task; null closes the column. */
   readonly detail: ReactNode | null;
+  /** True while a bulk bar replaces the add bar (issue #194). */
+  readonly bulk?: boolean | undefined;
   readonly children: ReactNode;
 }
 
@@ -19,6 +21,7 @@ export const WorkspaceShell = ({
   sidebar,
   header,
   detail,
+  bulk = false,
   children,
 }: WorkspaceShellProps) => (
   <div
@@ -28,7 +31,9 @@ export const WorkspaceShell = ({
   >
     <Sidebar {...sidebar} />
     <Header {...header} />
-    <main className="main">{children}</main>
+    <main className="main" data-bulk={bulk ? "true" : "false"}>
+      {children}
+    </main>
     {detail !== null && <div className="detail-column">{detail}</div>}
   </div>
 );

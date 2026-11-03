@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Task } from "@suite/contracts";
 import { DayOrderList, orderedDayTasks } from "./day-order.tsx";
 import { PlanTomorrowPanel, planCandidates } from "./plan-tomorrow.tsx";
+import { listContext } from "./components/tasks/test-support.ts";
 import { TodayQueue } from "./today-queue.tsx";
 
 const task = (id: string, fields: Partial<Task> = {}): Task => ({
@@ -126,26 +127,19 @@ describe("day order in the browser (ADR 0027, ADR 0050)", () => {
           dayStartsAt: "00:00",
         }}
         tasks={tasks}
-        activeSession={null}
-        calendars={[]}
-        busy={false}
-        calendarActionsAvailable={false}
-        focusActionsAvailable={false}
-        onStartFocus={() => undefined}
-        onChangeTaskStatus={async () => await Promise.resolve(true)}
-        onSubmitTimeBlock={async () => await Promise.resolve()}
-        onRemoveTimeBlock={async () => await Promise.resolve()}
+        context={listContext()}
         onViewTasks={() => undefined}
         plannedTodayOrder={["c", "b", "a"]}
         onMovePlanned={() => undefined}
       />,
     );
     const planned = markup.slice(markup.indexOf("Planned for today"));
-    expect(planned.indexOf("<strong>C</strong>")).toBeLessThan(
-      planned.indexOf("<strong>B</strong>"),
+    const title = (text: string) => `class="task-row__title">${text}<`;
+    expect(planned.indexOf(title("C"))).toBeLessThan(
+      planned.indexOf(title("B")),
     );
-    expect(planned.indexOf("<strong>B</strong>")).toBeLessThan(
-      planned.indexOf("<strong>A</strong>"),
+    expect(planned.indexOf(title("B"))).toBeLessThan(
+      planned.indexOf(title("A")),
     );
     expect(disabled(markup, "Move “C” up")).toBe(true);
     expect(disabled(markup, "Move “B” down")).toBe(false);

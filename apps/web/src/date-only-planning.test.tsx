@@ -6,6 +6,7 @@ import {
   TaskPlanningForm,
   taskPlanningPatchFromForm,
 } from "./components/tasks/TaskPlanningForm.tsx";
+import { listContext } from "./components/tasks/test-support.ts";
 import { TodayQueue } from "./today-queue.tsx";
 
 const task = (id: string, title: string, fields: Partial<Task> = {}): Task => ({
@@ -41,15 +42,10 @@ const queue = (at: string, tasks: readonly Task[]) =>
       at={at}
       preferences={preferences}
       tasks={tasks}
-      activeSession={null}
-      calendars={[]}
-      busy={false}
-      calendarActionsAvailable
-      focusActionsAvailable
-      onStartFocus={() => undefined}
-      onChangeTaskStatus={async () => await Promise.resolve(true)}
-      onSubmitTimeBlock={async () => await Promise.resolve()}
-      onRemoveTimeBlock={async () => await Promise.resolve()}
+      context={listContext({
+        calendarActionsAvailable: true,
+        focusActionsAvailable: true,
+      })}
       onViewTasks={() => undefined}
     />,
   );
@@ -64,7 +60,7 @@ describe("date-only planning in the browser", () => {
     const beforeMidnight = queue("2026-03-09T04:59:00.000Z", tasks);
     expect(beforeMidnight).toContain(">Planned for today</h2>");
     expect(beforeMidnight).toContain("Pack bags");
-    expect(beforeMidnight).toContain("Today · no time set");
+    expect(beforeMidnight).toContain('data-kind="today">Today<');
     expect(beforeMidnight).not.toContain("Call the landlord");
     expect(beforeMidnight).toContain("1 future task hidden");
 

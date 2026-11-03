@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ActiveSession } from "@suite/contracts";
+import type { ActiveSession, FocusTimer } from "@suite/contracts";
 import { FocusStrip } from "./FocusStrip.tsx";
 import { Header } from "./Header.tsx";
 import { syncTone } from "./SyncIndicator.tsx";
@@ -30,20 +30,24 @@ const strip = (active: ActiveSession | null, clientId = "me") =>
       busy={false}
       online={true}
       timer={{
+        // Only the countdown matters to the strip; the reminders are omitted.
         timer: {
           at: "2026-11-03T12:05:00.000Z",
           session: active,
-          plan: { mode: "countdown", focusMinutes: 25 },
+          plan: null,
           countdown: {
             phase: "focus",
             elapsedMs: 300_000,
             targetMs: 1_500_000,
+            remainingMs: 1_200_000,
             done: false,
             cycle: 1,
             isLongBreak: false,
+            reachedAt: null,
           },
-        },
-        receivedAt: Date.now(),
+        } as unknown as FocusTimer,
+        // Received "now" so no local time is added before the render.
+        receivedAt: Date.now() + 60_000,
         onSelectMode: () => undefined,
       }}
       onCommand={() => undefined}

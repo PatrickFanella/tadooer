@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { CommandIcon } from "lucide-react";
-import { workspaceRoutes, routeLabel, type WorkspaceRoute } from "@/app/routes";
+import type { Project, Tag } from "@suite/contracts";
+import {
+  workspaceRoutes,
+  routeLabel,
+  type Location,
+  type WorkspaceRoute,
+} from "@/app/routes";
 import {
   CommandDialog,
   CommandEmpty,
@@ -15,7 +21,10 @@ import { useApplicationPreferences } from "@/application-preferences";
 import { formatBinding, shortcutActionFor } from "@/shortcuts";
 
 interface CommandBarProps {
-  readonly onNavigate: (route: WorkspaceRoute) => void;
+  readonly onNavigate: (target: WorkspaceRoute | Location) => void;
+  /** Issue #194: project and tag contexts, listed like the sidebar. */
+  readonly projects?: readonly Project[] | undefined;
+  readonly tags?: readonly Tag[] | undefined;
   readonly onSyncNow: () => void;
   readonly syncAvailable: boolean;
   readonly onShowShortcuts?: (() => void) | undefined;
@@ -23,6 +32,8 @@ interface CommandBarProps {
 
 export const CommandBar = ({
   onNavigate,
+  projects = [],
+  tags = [],
   onSyncNow,
   syncAvailable,
   onShowShortcuts,
@@ -53,10 +64,14 @@ export const CommandBar = ({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, overrides]);
 
-  const navigate = (route: WorkspaceRoute): void => {
-    onNavigate(route);
+  const navigate = (target: WorkspaceRoute | Location): void => {
+    onNavigate(target);
     setOpen(false);
   };
+  const visibleProjects = projects.filter(
+    (project) => project.archivedAt === null && !project.hiddenFromMenu,
+  );
+  const visibleTags = tags.filter((tag) => tag.archivedAt === null);
 
   return (
     <>
@@ -103,6 +118,34 @@ export const CommandBar = ({
               </CommandItem>
             ))}
           </CommandGroup>
+          {visibleProjects.length > 0 && (
+            <CommandGroup heading="Projects">
+              {visibleProjects.map((project) => (
+                <CommandItem
+                  key={project.id}
+                  value={`project ${project.title}`}
+                  onSelect={() =>
+                    navigate({ route: "project", id: project.id })
+                  }
+                >
+                  {project.title}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {visibleTags.length > 0 && (
+            <CommandGroup heading="Tags">
+              {visibleTags.map((tag) => (
+                <CommandItem
+                  key={tag.id}
+                  value={`tag ${tag.displayName}`}
+                  onSelect={() => navigate({ route: "tag", id: tag.id })}
+                >
+                  #{tag.displayName}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           <CommandGroup heading="Actions">
             <CommandItem
               value="sync now"
