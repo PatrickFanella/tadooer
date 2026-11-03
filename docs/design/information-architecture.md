@@ -22,6 +22,17 @@ The open state of each group is remembered per browser in
 flattened into the scrolling row and the toggles are hidden, so the row reads
 Today … Habits, History … Reuse, Connections, Settings.
 
+### Context routes (issue #194)
+
+Since 2026-11-03 the sidebar also lists Projects and Tags between the daily
+views and Records. A project or tag opens `/projects/<id>` or `/tags/<id>`,
+which renders the Tasks list with that filter fixed and the matching
+dropdown hidden; `/tasks` still means every task. The add bar sits at the
+top of Today, Inbox, Tasks and the context routes, and a selected row opens
+the detail panel in a third column (a bottom sheet on phones). The
+screenshots below predate that change and show the card layout; the rows
+and headings they document are now `TaskRow` lists under eyebrow headings.
+
 ## Audit by route
 
 Each route was checked for its primary action and for content that should sit

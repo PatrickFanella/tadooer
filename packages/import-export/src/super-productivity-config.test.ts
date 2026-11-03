@@ -152,6 +152,8 @@ describe("globalConfig classification (ADR 0030)", () => {
         "command_bar.open": "Shift+F",
         "sync.now": "Ctrl+S",
         "navigate.settings": null,
+        // Issue #194: taskDelete maps to the selection's delete action.
+        "task.delete": "Backspace",
       },
     });
     expect(mapped?.planning).toEqual({
@@ -184,7 +186,7 @@ describe("globalConfig classification (ADR 0030)", () => {
         detail.includes("task.toggle_done collides"),
       ),
     ).toBe(true);
-    expect(mapped?.counts).toMatchObject({ shortcuts: 6, planning: 5 });
+    expect(mapped?.counts).toMatchObject({ shortcuts: 7, planning: 5 });
     const excluded = findings.filter(
       ({ code }) => code === "config_field_excluded",
     );

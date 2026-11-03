@@ -1983,7 +1983,8 @@
   .sidebar-brand {
     position: relative;
   }
-  .sidebar-collapse {
+  /* Outranks the (0,1,1) global button:not([data-slot]) rule. */
+  .sidebar-brand .sidebar-collapse {
     margin-left: auto;
     display: inline-flex;
     align-items: center;
@@ -1998,7 +1999,7 @@
     color: var(--subtext-2);
     cursor: pointer;
   }
-  .sidebar-collapse:hover {
+  .sidebar-brand .sidebar-collapse:hover {
     background: var(--surface-0);
     color: var(--text);
   }
@@ -2188,7 +2189,7 @@
     gap: 0.125rem;
   }
 
-  .sync-dot-trigger {
+  .header .sync-dot-trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2201,7 +2202,7 @@
     background: none;
     cursor: pointer;
   }
-  .sync-dot-trigger:hover {
+  .header .sync-dot-trigger:hover {
     background: var(--surface-0);
   }
   .sync-dot {
@@ -2325,7 +2326,7 @@
     padding: 0.2rem 0.5rem 0.2rem 0.375rem;
     cursor: default;
   }
-  .task-row__chevron {
+  .task-row .task-row__chevron {
     width: 1rem;
     height: 1rem;
     min-height: 0;
@@ -2340,11 +2341,11 @@
     cursor: pointer;
     border-radius: var(--radius-sm);
   }
-  .task-row__chevron:hover {
+  .task-row .task-row__chevron:hover {
     color: var(--text);
     background: var(--surface-1);
   }
-  .task-row__chevron--empty {
+  .task-row .task-row__chevron--empty {
     cursor: default;
   }
   .task-row__chevron-icon {
@@ -2817,6 +2818,34 @@
     .offline-capture {
       flex-direction: column;
       align-items: stretch;
+    }
+    /* Issue #194: on a phone the title wins; metadata wraps under it and the
+       actions stay visible, since there is no hover. */
+    .task-row__main {
+      flex-wrap: wrap;
+      padding-block: 0.375rem;
+    }
+    .task-row__title {
+      flex: 1 1 8rem;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .task-row__meta {
+      flex: 1 1 100%;
+      order: 10;
+      flex-wrap: wrap;
+      white-space: normal;
+      padding-left: 2.5rem;
+      row-gap: 0.25rem;
+    }
+    .task-row__actions {
+      opacity: 1;
+    }
+    .task-row__children {
+      padding-left: 1rem;
+    }
+    .add-task-bar {
+      top: 0;
     }
 
     /* Phone widths: a long title or address wraps instead of widening the
