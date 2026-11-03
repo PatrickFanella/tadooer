@@ -21,6 +21,10 @@ import { WorklogPage } from "./pages/WorklogPage.tsx";
 import { CountersPage } from "./pages/CountersPage.tsx";
 import { BoardsPage } from "./pages/BoardsPage.tsx";
 import { deadlineFromForm } from "./components/tasks/DeadlineFields.tsx";
+import type {
+  TaskActions,
+  TaskPatch,
+} from "./components/tasks/task-actions.ts";
 import {
   useCallback,
   useEffect,
@@ -1470,6 +1474,22 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     setFormError(null);
     try {
       await localStore.queueTaskRestore(task.id);
+      await syncAfterLocalMutation();
+    } catch (error: unknown) {
+      handleTaskError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Issue #194: in-place edits from a row or the detail panel; the same
+  // outbox patch as the form-based editor, with only the given fields.
+  const editTask = async (task: Task, patch: TaskPatch): Promise<void> => {
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      await localStore.queueTaskPatch(task.id, patch);
       await syncAfterLocalMutation();
     } catch (error: unknown) {
       handleTaskError(error);
@@ -2958,6 +2978,24 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         </div>
       </div>
     );
+
+  // Issue #194: one object of task callbacks for rows, lists and the panel.
+  const taskActions: TaskActions = {
+    changeStatus: changeTaskStatus,
+    editTask,
+    startFocus: (task) =>
+      void handleFocusCommand({ command: "start", taskId: task.id }),
+    submitTimeBlock,
+    removeTimeBlock,
+    saveAsTemplate: saveTaskAsTemplate,
+    archive:
+      networkOnline && state.kind === "authenticated"
+        ? archiveTaskToHistory
+        : undefined,
+    remove: removeTask,
+    createChildTask: taskHierarchyActions.onCreateChildTask,
+    moveTask: taskHierarchyActions.onMoveTask,
+  };
 
   /* ── Workspace ── */
   const googleView =
