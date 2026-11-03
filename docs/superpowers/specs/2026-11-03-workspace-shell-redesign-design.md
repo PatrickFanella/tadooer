@@ -16,13 +16,13 @@ field.
 
 ## Decisions taken
 
-| Question                      | Decision                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| "Standalone"                  | Feels like a desktop app on the server-backed architecture. No serverless mode.            |
-| First slice                   | Shell, task row and add bar, applied to Today, Inbox and Tasks. Other routes move unchanged. |
-| Sidebar                       | Views on top; Projects and Tags groups below; Records and Setup groups at the bottom.       |
-| Style                         | Existing tokens, type, density and voice. No brand asset changes.                           |
-| Approach                      | New frame inside the existing `App` controller, with task callbacks grouped as `TaskActions`. |
+| Question     | Decision                                                                                      |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| "Standalone" | Feels like a desktop app on the server-backed architecture. No serverless mode.               |
+| First slice  | Shell, task row and add bar, applied to Today, Inbox and Tasks. Other routes move unchanged.  |
+| Sidebar      | Views on top; Projects and Tags groups below; Records and Setup groups at the bottom.         |
+| Style        | Existing tokens, type, density and voice. No brand asset changes.                             |
+| Approach     | New frame inside the existing `App` controller, with task callbacks grouped as `TaskActions`. |
 
 ## Scope
 
@@ -290,16 +290,16 @@ current)`, `clear`. Each list reports its visible order to `App` through a
 New actions in the contracts shortcut registry (group Tasks, with the
 Super Productivity key where one exists):
 
-| id                       | default   | sourceKey            |
-| ------------------------ | --------- | -------------------- |
-| `task.select_next`       | `Down`    | `selectNextTask`     |
-| `task.select_previous`   | `Up`      | `selectPreviousTask` |
-| `task.edit_title`        | `Enter`   | `taskEditTitle`      |
-| `task.delete`            | `Delete`  | `taskDelete`         |
-| `task.schedule`          | `S`       | `taskSchedule`       |
-| `task.add_child`         | `Shift+N` | `taskAddSubTask`     |
-| `task.open_details`      | `O`       | null                 |
-| `selection.clear`        | `Escape`  | null                 |
+| id                     | default     | sourceKey            |
+| ---------------------- | ----------- | -------------------- |
+| `task.select_next`     | `ArrowDown` | `selectNextTask`     |
+| `task.select_previous` | `ArrowUp`   | `selectPreviousTask` |
+| `task.edit_title`      | `Enter`     | `taskEditTitle`      |
+| `task.delete`          | `Delete`    | `taskDelete`         |
+| `task.schedule`        | `S`         | `taskSchedule`       |
+| `task.add_child`       | `Shift+N`   | `taskAddSubTask`     |
+| `task.open_details`    | `O`         | null                 |
+| `selection.clear`      | `Escape`    | null                 |
 
 `task.toggle_done` (D), `focus.toggle` (Y) and `task.add` (Shift+A) keep
 their bindings and now act on the selection instead of the focused row.
@@ -313,8 +313,14 @@ can bind them in Settings.
 
 ```ts
 export interface TaskActions {
-  readonly changeStatus: (task, action: "complete" | "reopen") => Promise<boolean>;
-  readonly editTask: (task, patch: { title?; notes?; estimateMinutes?; deadline? }) => Promise<void>;
+  readonly changeStatus: (
+    task,
+    action: "complete" | "reopen",
+  ) => Promise<boolean>;
+  readonly editTask: (
+    task,
+    patch: { title?; notes?; estimateMinutes?; deadline? },
+  ) => Promise<void>;
   readonly startFocus: (task) => void;
   readonly submitTimeBlock: (event, task) => Promise<void>;
   readonly removeTimeBlock: (task) => Promise<void>;

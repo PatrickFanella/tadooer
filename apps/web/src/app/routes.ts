@@ -47,6 +47,42 @@ export const routeFromPath = (path: string): WorkspaceRoute => {
   return workspaceRoutes.find((route) => route === candidate) ?? "today";
 };
 
+/**
+ * Issue #194: a location is a view route or a project/tag context that
+ * renders the Tasks list with a fixed filter. `/projects/<id>` and
+ * `/tags/<id>`; anything else parses like `routeFromPath`.
+ */
+export type Location =
+  | { readonly route: WorkspaceRoute }
+  | { readonly route: "project"; readonly id: string }
+  | { readonly route: "tag"; readonly id: string };
+
+const contextPrefixes = { projects: "project", tags: "tag" } as const;
+
+export const locationFromPath = (path: string): Location => {
+  const [first, second] = path.replace(/^\//, "").split("/");
+  const kind =
+    first === "projects" || first === "tags" ? contextPrefixes[first] : null;
+  if (kind !== null) {
+    if (second === undefined || second === "") return { route: "tasks" };
+    return { route: kind, id: decodeURIComponent(second) };
+  }
+  return { route: routeFromPath(path) };
+};
+
+export const pathForLocation = (location: Location): string =>
+  location.route === "project"
+    ? `/projects/${encodeURIComponent(location.id)}`
+    : location.route === "tag"
+      ? `/tags/${encodeURIComponent(location.id)}`
+      : `/${location.route}`;
+
+/** The view that renders a location; contexts render the Tasks page. */
+export const routeOf = (location: Location): WorkspaceRoute =>
+  location.route === "project" || location.route === "tag"
+    ? "tasks"
+    : location.route;
+
 /** Issue #171: the Tasks page has two sections, the list and Organize. */
 export const tasksSections = ["list", "organize"] as const;
 export type TasksSection = (typeof tasksSections)[number];

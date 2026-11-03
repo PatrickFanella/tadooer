@@ -35,11 +35,13 @@
 ### Task 1: Shortcut registry rows
 
 **Files:**
+
 - Modify: `packages/contracts/src/application-preferences.ts` (append to `shortcutActions`)
 - Test: `packages/contracts/src/application-preferences.test.ts`
 
 **Interfaces:**
-- Produces: action ids `task.select_next` (Down), `task.select_previous` (Up), `task.edit_title` (Enter), `task.delete` (Delete), `task.schedule` (S), `task.add_child` (Shift+N), `task.open_details` (O), `selection.clear` (Escape); group `"Tasks"`; sourceKeys `selectNextTask`, `selectPreviousTask`, `taskEditTitle`, `taskDelete`, `taskSchedule`, `taskAddSubTask`, null, null.
+
+- Produces: action ids `task.select_next` (ArrowDown), `task.select_previous` (ArrowUp), `task.edit_title` (Enter), `task.delete` (Delete), `task.schedule` (S), `task.add_child` (Shift+N), `task.open_details` (O), `selection.clear` (Escape); group `"Tasks"`; sourceKeys `selectNextTask`, `selectPreviousTask`, `taskEditTitle`, `taskDelete`, `taskSchedule`, `taskAddSubTask`, null, null.
 
 - [ ] **Step 1: Add a test** in the existing describe: `it("binds selection and editing actions")` asserting `shortcutActions.find(a => a.id === "task.select_next")?.defaultBinding === "Down"` and the same for the seven others, and that `normalizeShortcutBinding("Down")`, `("Enter")`, `("Delete")`, `("Escape")` return themselves.
 - [ ] **Step 2: Run** `pnpm vitest run packages/contracts/src/application-preferences.test.ts`; expect failure on the find.
@@ -50,10 +52,13 @@
 ### Task 2: Selection helpers
 
 **Files:**
+
 - Create: `apps/web/src/lib/selection.ts`, `apps/web/src/lib/selection.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   export interface Selection { readonly ids: readonly string[]; readonly anchor: string | null }
   export const emptySelection: Selection
@@ -74,11 +79,14 @@
 ### Task 3: Context routes
 
 **Files:**
+
 - Modify: `apps/web/src/app/routes.ts`
 - Create: `apps/web/src/app/routes.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   export type Location =
     | { readonly route: WorkspaceRoute }
@@ -88,6 +96,7 @@
   export const pathForLocation = (location: Location): string  // "/today", "/projects/<id>", "/tags/<id>"
   export const routeOf = (location: Location): WorkspaceRoute  // "tasks" for project/tag
   ```
+
   `workspaceRoutes`, `routeFromPath`, `routeGroups`, `tasksSection*` unchanged.
 
 - [ ] **Step 1: Tests**: round trip for all twelve routes; `/projects/abc` → `{route:"project", id:"abc"}`; `/tags/x/extra` → id `x`; `/projects/` → `{route:"tasks"}`; `/nothing` → today; `routeOf` of a project location is `"tasks"`.
@@ -96,10 +105,12 @@
 ### Task 4: `TaskActions` and `editTask` in `App`
 
 **Files:**
+
 - Create: `apps/web/src/components/tasks/task-actions.ts`
 - Modify: `apps/web/src/app.tsx` (after `recoverTask`, around line 1480)
 
 **Interfaces:**
+
 - Produces: the `TaskActions` interface from the spec, plus `export type TaskPatch = { readonly title?: string; readonly notes?: string; readonly estimateMinutes?: number | null; readonly deadline?: Task["deadline"] }`. In `App`: `const editTask = async (task: Task, patch: TaskPatch): Promise<void>` queueing `localStore.queueTaskPatch(task.id, patch)` with the same busy/error handling as `submitTaskEdit`; `const taskActions: TaskActions` built from `changeTaskStatus`, `editTask`, `handleFocusCommand` (start), `submitTimeBlock`, `removeTimeBlock`, `saveTaskAsTemplate`, `archiveTaskToHistory` (only when online and a client exists), `removeTask`, `taskHierarchyActions.onCreateChildTask`, `taskHierarchyActions.onMoveTask`.
 
 - [ ] **Step 1: Write the interface file.** No test: it is types plus a `const` object assembled in `App`; Task 12's app test covers it.
@@ -109,6 +120,7 @@
 ### Task 5: Dropdown menu and popover primitives
 
 **Files:**
+
 - Create: `apps/web/src/components/ui/dropdown-menu.tsx`, `apps/web/src/components/ui/popover.tsx`
 
 - [ ] **Step 1: Write both** following the `sheet.tsx`/`tooltip.tsx` pattern: import `{ DropdownMenu as DropdownMenuPrimitive }` and `{ Popover as PopoverPrimitive }` from `"radix-ui"`, `data-slot` attributes, `cn`, content classes `bg-popover text-popover-foreground border border-border rounded-md shadow-[var(--shadow-overlay)] p-1 min-w-[10rem] z-50` and the tw-animate enter/exit classes used by `dialog.tsx`. Export `DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel` and `Popover, PopoverTrigger, PopoverContent, PopoverClose`. Item classes: `flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-surface-1 data-[disabled]:opacity-50`.
@@ -117,13 +129,16 @@
 ### Task 6: Shell components
 
 **Files:**
+
 - Create: `apps/web/src/components/shell/WorkspaceShell.tsx`, `Sidebar.tsx`, `Header.tsx`, `FocusStrip.tsx`, `SyncIndicator.tsx`
 - Create tests: `Sidebar.test.tsx`, `Header.test.tsx`
 - Delete: `AppShell.tsx`, `SidebarNav.tsx`, `SidebarNav.test.tsx`, `TopBar.tsx` (in Task 12 when `App` switches)
 - Modify: `apps/web/src/focus-panel.tsx` (export `terminal`, `TimerDisplay` props type stays internal)
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   // Sidebar
   export interface SidebarCounts { readonly today: number; readonly inbox: number; readonly byProject: ReadonlyMap<string, number>; readonly byTag: ReadonlyMap<string, number> }
@@ -139,6 +154,7 @@
   // WorkspaceShell
   interface WorkspaceShellProps { sidebar: SidebarProps; header: HeaderProps; detail: ReactNode | null; children: ReactNode }
   ```
+
   Counts: `today` = open, undeleted tasks whose `plannedDay === today` or whose `plannedStart` falls on `today` in `timeZone` (use `zonedCalendarDate` from `@suite/domain`); `inbox` = open, undeleted, `plannedStart == null && plannedDay == null`.
   `syncTone`: red when `liveStatus` is an error state or `syncStatus === "offline"` with conflicts handled outside; orange for `syncing`, `liveStatus` reconnecting, or Baikal disconnected; green when all three fine; neutral when `syncStatus` undefined.
 
@@ -151,10 +167,13 @@
 ### Task 7: `TaskRow`
 
 **Files:**
+
 - Create: `apps/web/src/components/tasks/TaskRow.tsx`, `task-row-state.ts`, `TaskRow.test.tsx`, `task-row-state.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   // task-row-state.ts: pure
   export type TitleEdit = { readonly editing: false } | { readonly editing: true; readonly draft: string; readonly original: string }
@@ -177,6 +196,7 @@
     onBeginEdit(task: Task): void; onEndEdit(): void;
   }
   ```
+
   Markup contract: `<li data-task-id role="option" aria-selected tabIndex={selected ? 0 : -1} class="task-row [task-row--selected] [task-row--completed] [task-row--child]">`; the complete toggle has `aria-label="Complete “<title>”"` / `Reopen`; the menu trigger `aria-label="More actions for “<title>”"`; the play button `aria-label="Start focus on “<title>”"`; running renders `<Badge variant="now">Running</Badge>`; chips render `<span class="task-chip" data-kind="project|tag">`; the "+n" chip has `data-kind="more"`.
 
 - [ ] **Step 1: State tests**: `commitEdit` returns `save: null` for unchanged or whitespace drafts and the trimmed title otherwise; `cancelEdit` is non-editing; `rowMeta` for overdue has tone warning and text "Overdue"; `describeDeadline` for today+2 gives a weekday, for today+10 gives "due 13 Nov" (fixed dates in the test); estimate renders "45m" and "1h30m".
@@ -187,10 +207,12 @@
 ### Task 8: `AddTaskBar`
 
 **Files:**
+
 - Create: `apps/web/src/components/tasks/AddTaskBar.tsx`, `AddTaskBar.test.tsx`
 - Modify: `apps/web/src/components/settings/ApplicationPreferencesSettings.tsx` (add `CaptureLinkPreference` under the capture section; it needs `csrfToken`, which `SettingsPage` already has)
 
 **Interfaces:**
+
 - Produces: `interface AddTaskBarProps { busy: boolean; online: boolean; csrfToken: string | undefined; onSubmit(event): Promise<void>; onTasksCreated?: () => void; inputRef?: Ref<HTMLInputElement> }`; `export const readMarkersPreference = (): boolean` (default true; `tadooer.capture:markers`); the form keeps `name="title"`, `notes`, `estimateMinutes`, `createTags`, and a hidden `<input name="structured" value="on">` rendered only when online and markers are on; the root is `<form class="add-task-bar" aria-label="Add a task">`; the input has `placeholder="Add a task. Try +Project #tag 30m @tomorrow 09:00"`; a `data-markers="on|off|offline"` attribute on the form.
 
 - [ ] **Step 1: Tests**: online + default renders `name="structured"` and `data-markers="on"`; offline renders no `structured` input, `data-markers="offline"` and the text "Offline: plain capture"; the More line contains the Notes field and "Paste a list" only when `csrfToken` is given.
@@ -200,24 +222,41 @@
 ### Task 9: `TaskDetailPanel`
 
 **Files:**
+
 - Create: `apps/web/src/components/shell/TaskDetailPanel.tsx`, `TaskDetailPanel.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `TaskActions`, `TaskPlanningForm`, `TimeBlockForm`, `TaskPlacementControls`, `TaskChildrenSection`, `TaskLinksPanel`, `TaskRecurrencePanel`, `NoteMarkdown`, `DeadlineFields`.
 - Produces:
+
   ```ts
   interface TaskDetailPanelProps {
-    task: Task; tasks: readonly Task[]; projects: readonly Project[]; tags: readonly Tag[];
-    subtasks: readonly Subtask[]; provenance: string | undefined; calendars: BaikalStatusResponse["calendars"];
-    timeZone: string; today: string; busy: boolean; online: boolean; csrfToken: string | undefined;
-    calendarActionsAvailable: boolean; focusState: "idle"|"running"|"blocked"; focusActionsAvailable: boolean;
+    task: Task;
+    tasks: readonly Task[];
+    projects: readonly Project[];
+    tags: readonly Tag[];
+    subtasks: readonly Subtask[];
+    provenance: string | undefined;
+    calendars: BaikalStatusResponse["calendars"];
+    timeZone: string;
+    today: string;
+    busy: boolean;
+    online: boolean;
+    csrfToken: string | undefined;
+    calendarActionsAvailable: boolean;
+    focusState: "idle" | "running" | "blocked";
+    focusActionsAvailable: boolean;
     actions: TaskActions;
-    onSubmitTaskEdit(event, task): Promise<void>; onSubmitTaskOrganization(event, task): Promise<void>;
+    onSubmitTaskEdit(event, task): Promise<void>;
+    onSubmitTaskOrganization(event, task): Promise<void>;
     onSubmitTaskPlanning?(task, patch: TaskPatchRequest): Promise<void>;
-    onSubmitSubtask(event, task): Promise<void>; onChangeSubtask(subtask, action): Promise<void>;
+    onSubmitSubtask(event, task): Promise<void>;
+    onChangeSubtask(subtask, action): Promise<void>;
     onClose(): void;
   }
   ```
+
   Root: `<aside class="task-detail" aria-label="Task details">`; close button `aria-label="Close task details"`; section headings "Plan", "Organize", "Notes", "Child tasks", "Checklist", "Links", "Recurrence"; the notes section has an "Edit notes" toggle revealing a `Textarea name="notes"` and Save calling `actions.editTask(task, { notes })`.
 
 - [ ] **Step 1: Tests**: with `csrfToken` the markup contains all seven headings; without it, Links and Recurrence are absent and "Plan" is present; the footer has "Save as template", "Delete", and "Archive" only when `actions.archive` exists; provenance text appears when given.
@@ -226,11 +265,13 @@
 ### Task 10: Lists on the new row: Today, Inbox, Tasks
 
 **Files:**
+
 - Modify: `apps/web/src/today-queue.tsx`, `pages/TodayPage.tsx`, `pages/InboxPage.tsx`, `pages/TasksPage.tsx`
 - Modify tests: `today-queue.test.tsx`, `pages/*.test.tsx` as they exist
 - Delete: `components/tasks/TaskListItem.tsx`, `components/tasks/TaskCaptureForm.tsx` and their tests
 
 **Interfaces:**
+
 - Consumes: `TaskRow`, `AddTaskBar`, `TaskActions`, `Selection`.
 - Produces: a shared prop bundle `interface ListSelectionProps { selection: Selection; editingId: string | null; onSelect(task, modifiers): void; onBeginEdit(task): void; onEndEdit(): void; onVisibleOrderChange(ids: readonly string[]): void }` exported from `components/tasks/TaskRow.tsx`. Page props: `TodayPageProps` loses `onSubmitTask/onChangeTaskStatus/onSubmitTimeBlock/onRemoveTimeBlock/onSubmitTaskEdit/onCreateChildTask` and gains `actions: TaskActions`, `projects`, `tags`, `today`, `list: ListSelectionProps`, `online`; `InboxPageProps` likewise; `TasksPageProps` loses the row-editor props that moved to the panel (`onSubmitTaskOrganization`, `onSubmitSubtask`, `onChangeSubtask`, `subtasks`, `provenance`, `onSaveTaskAsTemplate`, `onRemoveTask`, `onArchiveTask`, `editorsOpen`, `onSubmitTaskPlanning`, `onSubmitTimeBlock`, `onRemoveTimeBlock`, `onSubmitTaskEdit`, `onCreateChildTask`, `onMoveTask`) and gains `actions`, `list`, and `context?: { kind: "project"|"tag"; id: string }` which fixes the filter and hides that dropdown; `recovery` and `onRecoverTask` stay.
 - `onVisibleOrderChange` is called from a `useEffect` keyed on the joined id string so `App` can run `retain` and arrow navigation.
@@ -242,9 +283,11 @@
 ### Task 11: Bulk bar
 
 **Files:**
+
 - Create: `apps/web/src/components/tasks/BulkBar.tsx`, `bulk-actions.ts`, `bulk-actions.test.ts`
 
 **Interfaces:**
+
 - Produces: `export const runBulk = async (tasks: readonly Task[], run: (task: Task) => Promise<boolean | void>): Promise<{ readonly done: number; readonly failed: Task | null; readonly message: string | null }>` stopping at the first `false` or throw, message `"Changed 2 of 3. “<title>” did not change: <error message>."` or null when all done; `interface BulkBarProps { count: number; projects: readonly Project[]; busy: boolean; online: boolean; onComplete(): void; onArchive(): void; onDelete(): void; onMoveToProject(projectId: string | null): void; onClear(): void }` with root `<div class="bulk-bar" role="toolbar" aria-label="Selected tasks">`.
 
 - [ ] **Step 1: Tests**: `runBulk` with the second of three rejecting returns `done: 1`, `failed` the second task, and the message above; all succeeding returns `message: null`. BulkBar markup shows "3 selected" and disables Archive offline.
@@ -253,6 +296,7 @@
 ### Task 12: Wire `App`
 
 **Files:**
+
 - Modify: `apps/web/src/app.tsx`, `apps/web/src/app.test.tsx`, `components/command-bar/CommandBar.tsx`
 - Delete: `components/shell/AppShell.tsx`, `SidebarNav.tsx`, `SidebarNav.test.tsx`, `TopBar.tsx`
 
@@ -269,6 +313,7 @@
 ### Task 13: Styles
 
 **Files:**
+
 - Modify: `apps/web/src/styles.css` (new section 20, rewritten 64rem block, removed `.topbar*`, `.sidebar-status`, `.today-task-*`, `.task-heading`, `.task-edit`, `.task--child` rules after a grep shows no consumer)
 
 - [ ] **Step 1: Write the rules** for `.workspace` (grid `15rem minmax(0,1fr) auto`; `[data-collapsed="true"]` → `3rem`), `.sidebar`, `.sidebar-section`, `.sidebar-count`, `.sidebar-swatch`, `.header`, `.focus-strip` (`--pink` underline when running), `.sync-dot`, `.main`, `.list-heading` (`--text-2xs` uppercase eyebrow style), `.task-list`, `.task-row` (2.25rem, states, `--primary-tint` + 2px `--purple` left bar when selected, hover actions via `.task-row__actions { opacity: 0 } .task-row:hover/:focus-within/[aria-selected=true] .task-row__actions { opacity: 1 }`), `.task-chip`, `.add-task-bar` (sticky top 0, `--base`), `.bulk-bar`, `.task-detail` (22rem, `--surface-0`, left `--line`, `overflow-y: auto`, `max-height: calc(100dvh - 2.75rem)`, sticky). 64rem block: single column, sidebar row as today, detail hidden (the Sheet renders it). Keep `env(safe-area-inset-*)` on `.sidebar`, `.header`, `.task-detail`.
@@ -277,6 +322,7 @@
 ### Task 14: Verification, screenshots and docs
 
 **Files:**
+
 - Modify: `docs/design/README.md` (component rules: frame, sidebar, row, add bar, detail panel, keyboard; remove the capture card and `TaskListItem` references), `docs/design/information-architecture.md` (one paragraph: context routes), `docs/design/screenshots/` (today-desktop, project-desktop, today-phone replaced)
 
 - [ ] **Step 1: Run** `pnpm --filter @suite/web typecheck && pnpm lint && pnpm format:check && pnpm vitest run apps/web/src packages/contracts/src && pnpm --filter @suite/web build`; expect all pass.
