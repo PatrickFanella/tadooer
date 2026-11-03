@@ -9,6 +9,7 @@ import type {
 import type { ApplicationPreferencesState } from "../application-preferences.tsx";
 import { ApplicationPreferencesSettings } from "../components/settings/ApplicationPreferencesSettings.tsx";
 import { DataExportRestore } from "../components/settings/DataExportRestore.tsx";
+import { CaptureLinkPreference } from "../components/tasks/CaptureLinkPreference.tsx";
 import { SignedInDevices } from "../components/settings/SignedInDevices.tsx";
 import { GooglePlanning } from "../google-planning.tsx";
 import { NotificationSettings } from "../notification-settings.tsx";
@@ -140,6 +141,20 @@ export const SettingsPage = ({
           error={applicationPreferences.error}
           onSave={applicationPreferences.save}
         />
+      )}
+      {csrfToken !== undefined && (
+        <Card aria-labelledby="capture-links-title">
+          <CardHeader>
+            <SectionHeading
+              id="capture-links-title"
+              title="Captured links"
+              eyebrow="Capture"
+            />
+          </CardHeader>
+          <CardContent>
+            <CaptureLinkPreference csrfToken={csrfToken} />
+          </CardContent>
+        </Card>
       )}
       {csrfToken !== undefined && onRestored !== undefined && (
         <DataExportRestore
