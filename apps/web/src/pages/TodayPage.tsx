@@ -6,55 +6,47 @@ import type {
   Note,
   PlanningPreferences,
   PlannerResponse,
+  Project,
   SavedDayOrder,
+  Tag,
   Task,
 } from "@suite/contracts";
-import {
-  FocusPanel,
-  type FocusPanelCommand,
-  type FocusPanelTimerProps,
-} from "../focus-panel.tsx";
 import { TodayQueue } from "../today-queue.tsx";
-import { TaskCaptureForm } from "../components/tasks/TaskCaptureForm.tsx";
+import { AddTaskBar } from "../components/tasks/AddTaskBar.tsx";
+import type { TaskActions } from "../components/tasks/task-actions.ts";
+import type { TaskListContext } from "../components/tasks/TaskList.tsx";
+import type { ListSelectionProps } from "../components/tasks/TaskRow.tsx";
 import { Badge } from "../components/ui/badge.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
 import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { LoadingList } from "../components/ui/loading-list.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 import { addCalendarDays, planningDate } from "@suite/domain";
 import { useDayOrders, type DayOrderActions } from "../day-order.tsx";
 import { PlanTomorrowPanel } from "../plan-tomorrow.tsx";
 import { NoteMarkdown } from "../components/notes/NoteMarkdown.tsx";
 import { useApplicationPreferences } from "../application-preferences.tsx";
-import type { TaskHierarchyActions } from "../components/tasks/TaskHierarchy.tsx";
 
 export interface TodayPageProps {
   readonly dayPlan: DayPlanResponse | undefined;
   readonly planningPreferences: PlanningPreferences | undefined;
   readonly tasks: readonly Task[];
+  readonly projects: readonly Project[];
+  readonly tags: readonly Tag[];
   readonly activeSession: ActiveSession | null;
-  readonly clientId: string | null;
   readonly syncStatus: "online" | "offline" | "syncing" | undefined;
   readonly planner: PlannerResponse | null;
   readonly baikalCalendars: BaikalStatusResponse["calendars"];
   readonly calendarActionsAvailable: boolean;
   readonly focusActionsAvailable: boolean;
   readonly busy: boolean;
-  readonly onFocusCommand: (command: FocusPanelCommand) => void;
+  /** Issue #194: the grouped task callbacks and the list selection. */
+  readonly actions: TaskActions;
+  readonly list: ListSelectionProps;
   readonly onSubmitTask: (
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
   ) => Promise<void>;
-  readonly onChangeTaskStatus: (
-    task: Task,
-    action: "complete" | "reopen",
-  ) => Promise<boolean>;
-  readonly onSubmitTimeBlock: (
-    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-    task: Task,
-  ) => Promise<void>;
-  readonly onRemoveTimeBlock: (task: Task) => Promise<void>;
   readonly onViewTasks: () => void;
   /** Enables online quick capture. */
   readonly csrfToken?: string | undefined;
@@ -66,22 +58,11 @@ export interface TodayPageProps {
    */
   readonly dayOrders?: readonly SavedDayOrder[] | undefined;
   readonly dayOrderActions?: DayOrderActions | undefined;
-  /** ADR 0029: server timer state and the preset control. */
-  readonly focus?: FocusPanelTimerProps | undefined;
   /**
    * ADR 0046: notes pinned to Today, read from the offline cache in the
    * owner's order. They render without a connection.
    */
   readonly pinnedNotes?: readonly Note[] | undefined;
-  /** Issue #170: inline edit and child tasks on Today rows. */
-  readonly onSubmitTaskEdit?:
-    | ((
-        event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-        task: Task,
-      ) => Promise<void>)
-    | undefined;
-  readonly onCreateChildTask?:
-    TaskHierarchyActions["onCreateChildTask"] | undefined;
 }
 const calmStateLabel: Readonly<Record<DayPlanResponse["state"], string>> = {
   working: "Working",
@@ -108,28 +89,24 @@ export const TodayPage = (props: TodayPageProps) => {
     dayPlan,
     planningPreferences,
     tasks,
+    projects,
+    tags,
     activeSession,
-    clientId,
     syncStatus,
     planner,
     baikalCalendars,
     calendarActionsAvailable,
     focusActionsAvailable,
     busy,
-    onFocusCommand,
+    actions,
+    list,
     onSubmitTask,
-    onChangeTaskStatus,
-    onSubmitTimeBlock,
-    onRemoveTimeBlock,
     onViewTasks,
     csrfToken,
     onTasksPlanned,
     dayOrders: savedDayOrders,
     dayOrderActions,
     pinnedNotes = [],
-    focus,
-    onSubmitTaskEdit,
-    onCreateChildTask,
   } = props;
   const [logicalAt, setLogicalAt] = useState(
     dayPlan?.at ?? new Date().toISOString(),
@@ -161,36 +138,49 @@ export const TodayPage = (props: TodayPageProps) => {
     saved: savedDayOrders,
     actions: preferences === undefined ? undefined : dayOrderActions,
   });
+  const context: TaskListContext = {
+    at: logicalAt,
+    timeZone: preferences?.timeZone ?? "UTC",
+    today,
+    projects,
+    tags,
+    activeSession,
+    calendars: baikalCalendars,
+    busy,
+    calendarActionsAvailable,
+    focusActionsAvailable,
+    actions,
+    list,
+  };
   return (
-    <div className="today-page mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader
-        eyebrow="Calm Day"
-        title="Today"
-        description={
-          dayPlan === undefined
-            ? "Here is the day."
-            : calmStateLabel[dayPlan.state]
-        }
-      >
-        {dayPlan?.nextTask === null ? (
-          <p className="text-xs text-subtext-2">Nothing is scheduled next.</p>
-        ) : dayPlan?.nextTask !== undefined ? (
-          <p className="text-xs text-subtext-2">
-            Next: {dayPlan.nextTask.title}
-          </p>
-        ) : null}
-      </PageHeader>
-      <p
-        className="flex items-center gap-2 text-xs text-subtext-2"
-        aria-live="polite"
-      >
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
-        {syncStatus === "offline"
-          ? "Offline. You can still add, complete and reopen tasks. They sync later."
-          : syncStatus === "syncing"
-            ? "Syncing local tasks."
-            : "Task sync is on."}
-      </p>
+    <div className="today-page list-page">
+      <AddTaskBar
+        busy={busy}
+        online={syncStatus !== "offline"}
+        csrfToken={syncStatus === "offline" ? undefined : csrfToken}
+        onSubmit={onSubmitTask}
+        onTasksCreated={onTasksPlanned}
+      />
+      {dayPlan !== undefined && (
+        <p className="list-status" aria-live="polite">
+          <Badge
+            variant={
+              dayPlan.state === "working"
+                ? "success"
+                : dayPlan.state === "scheduled_break"
+                  ? "info"
+                  : dayPlan.state === "finished_for_today"
+                    ? "default"
+                    : "secondary"
+            }
+          >
+            {calmStateLabel[dayPlan.state]}
+          </Badge>
+          {dayPlan.nextTask === null
+            ? "Nothing is scheduled next."
+            : `Next: ${dayPlan.nextTask.title}`}
+        </p>
+      )}
       {dailySummaryNote.trim() !== "" && (
         <Card aria-labelledby="daily-summary-note-title">
           <CardHeader>
@@ -223,40 +213,12 @@ export const TodayPage = (props: TodayPageProps) => {
           </CardContent>
         </Card>
       )}
-      <TaskCaptureForm
-        busy={busy}
-        onSubmit={onSubmitTask}
-        csrfToken={syncStatus === "offline" ? undefined : csrfToken}
-        onTasksCreated={onTasksPlanned}
-      />
-      <FocusPanel
-        tasks={tasks}
-        activeSession={activeSession}
-        clientId={clientId}
-        busy={busy}
-        online={focusActionsAvailable}
-        onCommand={onFocusCommand}
-        showStartForm={false}
-        focus={focus}
-      />
       <TodayQueue
         at={logicalAt}
         preferences={preferences}
         tasks={tasks}
-        activeSession={activeSession}
-        calendars={baikalCalendars}
-        busy={busy}
-        calendarActionsAvailable={calendarActionsAvailable}
-        focusActionsAvailable={focusActionsAvailable}
-        onStartFocus={(task) =>
-          onFocusCommand({ command: "start", taskId: task.id })
-        }
-        onChangeTaskStatus={onChangeTaskStatus}
-        onSubmitTimeBlock={onSubmitTimeBlock}
-        onRemoveTimeBlock={onRemoveTimeBlock}
+        context={context}
         onViewTasks={onViewTasks}
-        onSubmitTaskEdit={onSubmitTaskEdit}
-        onCreateChildTask={onCreateChildTask}
         plannedTodayOrder={dayOrders.orders.get(today)?.taskIds}
         onMovePlanned={
           dayOrders.enabled

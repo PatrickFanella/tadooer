@@ -7,6 +7,26 @@ import {
   type TodayPageProps,
 } from "./TodayPage.tsx";
 
+const actions = {
+  changeStatus: () => Promise.resolve(false),
+  editTask: () => Promise.resolve(),
+  startFocus: () => undefined,
+  submitTimeBlock: () => Promise.resolve(),
+  removeTimeBlock: () => Promise.resolve(),
+  saveAsTemplate: () => Promise.resolve(),
+  remove: () => Promise.resolve(),
+  createChildTask: () => Promise.resolve(),
+  moveTask: () => Promise.resolve(),
+};
+const list = {
+  selectedIds: [],
+  editingId: null,
+  onSelect: () => undefined,
+  onBeginEdit: () => undefined,
+  onEndEdit: () => undefined,
+  onVisibleOrderChange: () => undefined,
+};
+
 describe("updateHiddenCalendarIds", () => {
   it("can hide and then show the same calendar without retaining stale state", () => {
     const hidden = updateHiddenCalendarIds([], "calendar-work", false);
@@ -26,19 +46,18 @@ describe("pinned notes (ADR 0046)", () => {
     dayPlan: undefined,
     planningPreferences: undefined,
     tasks: [],
+    projects: [],
+    tags: [],
     activeSession: null,
-    clientId: null,
     syncStatus: "offline",
     planner: null,
     baikalCalendars: [],
     calendarActionsAvailable: false,
     focusActionsAvailable: false,
     busy: false,
-    onFocusCommand: () => undefined,
+    actions,
+    list,
     onSubmitTask: () => Promise.resolve(),
-    onChangeTaskStatus: () => Promise.resolve(false),
-    onSubmitTimeBlock: () => Promise.resolve(),
-    onRemoveTimeBlock: () => Promise.resolve(),
     onViewTasks: () => undefined,
   };
   const note = noteSchema.parse({
@@ -74,19 +93,18 @@ describe("week plan loading (issue #169)", () => {
     dayPlan: undefined,
     planningPreferences: undefined,
     tasks: [],
+    projects: [],
+    tags: [],
     activeSession: null,
-    clientId: null,
     syncStatus: "online",
     planner: null,
     baikalCalendars: [],
     calendarActionsAvailable: false,
     focusActionsAvailable: false,
     busy: false,
-    onFocusCommand: () => undefined,
+    actions,
+    list,
     onSubmitTask: () => Promise.resolve(),
-    onChangeTaskStatus: () => Promise.resolve(false),
-    onSubmitTimeBlock: () => Promise.resolve(),
-    onRemoveTimeBlock: () => Promise.resolve(),
     onViewTasks: () => undefined,
   };
 

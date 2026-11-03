@@ -4,7 +4,7 @@ import { OfflineLibrary } from "./pages/OfflineLibrary.tsx";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { usePlannerLoader } from "./use-planner-loader.ts";
-import { googleProjectionFreshness } from "@suite/domain";
+import { googleProjectionFreshness, planningDate } from "@suite/domain";
 import { archiveTask, createTask } from "./api.ts";
 import { SessionRecovery } from "./components/SessionRecovery.tsx";
 import { PasswordConfirmation } from "./components/PasswordConfirmation.tsx";
@@ -21,6 +21,10 @@ import { WorklogPage } from "./pages/WorklogPage.tsx";
 import { CountersPage } from "./pages/CountersPage.tsx";
 import { BoardsPage } from "./pages/BoardsPage.tsx";
 import { deadlineFromForm } from "./components/tasks/DeadlineFields.tsx";
+import type {
+  TaskActions,
+  TaskPatch,
+} from "./components/tasks/task-actions.ts";
 import {
   useCallback,
   useEffect,
@@ -157,15 +161,39 @@ import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { InboxPage } from "./pages/InboxPage.tsx";
 import { PlannerPage } from "./pages/PlannerPage.tsx";
 import {
-  routeFromPath,
+  locationFromPath,
+  pathForLocation,
+  routeOf,
   tasksSectionFromPath,
   tasksSectionPath,
+  type Location,
   type TasksSection,
   routeLabel,
   workspaceRoutes,
   type WorkspaceRoute,
 } from "./app/routes.ts";
-import { AppShell } from "./components/shell/AppShell.tsx";
+import { WorkspaceShell } from "./components/shell/WorkspaceShell.tsx";
+import { sidebarCounts } from "./components/shell/Sidebar.tsx";
+import { TaskDetailPanel } from "./components/shell/TaskDetailPanel.tsx";
+import { BulkBar } from "./components/tasks/BulkBar.tsx";
+import { runBulk } from "./components/tasks/bulk-actions.ts";
+import { focusStateFor } from "./components/tasks/TaskList.tsx";
+import type {
+  ListSelectionProps,
+  SelectModifiers,
+} from "./components/tasks/TaskRow.tsx";
+import { Sheet, SheetContent, SheetTitle } from "./components/ui/sheet.tsx";
+import {
+  emptySelection,
+  extendTo,
+  next as selectNext,
+  previous as selectPrevious,
+  primaryId,
+  retain,
+  selectSingle,
+  toggle as toggleSelected,
+  type Selection,
+} from "./lib/selection.ts";
 import { CommandBar } from "./components/command-bar/CommandBar.tsx";
 import {
   ApplicationPreferencesProvider,
@@ -366,12 +394,16 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   const [templatePoolSlots, setTemplatePoolSlots] = useState<
     readonly TemplatePoolSlot[]
   >([]);
-  const [route, setRoute] = useState<WorkspaceRoute>(() =>
-    routeFromPath(
+  // Issue #194: a view route or a project/tag context; `route` is the view.
+  const [workspaceLocation, setWorkspaceLocation] = useState<Location>(() =>
+    locationFromPath(
       initialPath ??
         (typeof window === "undefined" ? "/today" : window.location.pathname),
     ),
   );
+  const route = routeOf(workspaceLocation);
+  const setRoute = (next: WorkspaceRoute): void =>
+    setWorkspaceLocation({ route: next });
   // Issue #171: `/tasks/organize` selects the Organize section of Tasks.
   const [tasksSection, setTasksSection] = useState<TasksSection>(() =>
     tasksSectionFromPath(
@@ -385,16 +417,85 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   });
   const [habitPending, setHabitPending] = useState(false);
   const [taskQuery, setTaskQuery] = useState("");
-  const [taskIdFilter, setTaskIdFilter] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : (new URLSearchParams(window.location.search).get("task") ?? ""),
-  );
+  const [taskIdFilter, setTaskIdFilter] = useState(() => {
+    const search =
+      initialPath === undefined
+        ? typeof window === "undefined"
+          ? ""
+          : window.location.search
+        : initialPath.replace(/^[^?]*/, "");
+    return new URLSearchParams(search).get("task") ?? "";
+  });
   const [taskStatusFilter, setTaskStatusFilter] = useState<
     "all" | Task["status"]
   >("all");
   const [taskProjectFilter, setTaskProjectFilter] = useState("");
   const [taskTagFilter, setTaskTagFilter] = useState("");
+  // Issue #194: a context route fixes one filter; the dropdowns keep theirs.
+  const effectiveProjectFilter =
+    workspaceLocation.route === "project"
+      ? workspaceLocation.id
+      : taskProjectFilter;
+  const effectiveTagFilter =
+    workspaceLocation.route === "tag" ? workspaceLocation.id : taskTagFilter;
+  // Issue #194: the selected rows, the row editing its title in place, and
+  // the order the current list shows so arrow keys follow it.
+  const [selection, setSelection] = useState<Selection>(() =>
+    taskIdFilter === "" ? emptySelection : selectSingle(taskIdFilter),
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [visibleTaskOrder, setVisibleTaskOrder] = useState<readonly string[]>(
+    [],
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("tadooer.sidebar:collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const query = window.matchMedia("(max-width: 64rem)");
+    const update = (): void => setNarrow(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const onVisibleOrderChange = useCallback((ids: readonly string[]) => {
+    setVisibleTaskOrder(ids);
+    setSelection((current) => retain(current, ids));
+  }, []);
+  const selectTask = (task: Task, modifiers: SelectModifiers): void => {
+    setEditingId(null);
+    setSelection((current) =>
+      modifiers.shift
+        ? extendTo(current, visibleTaskOrder, task.id)
+        : modifiers.toggle
+          ? toggleSelected(current, task.id)
+          : selectSingle(task.id),
+    );
+  };
+  const clearSelection = (): void => {
+    setSelection(emptySelection);
+    setEditingId(null);
+  };
+  const listSelection: ListSelectionProps = {
+    selectedIds: selection.ids,
+    editingId,
+    onSelect: selectTask,
+    onBeginEdit: (task) => {
+      setSelection(selectSingle(task.id));
+      setEditingId(task.id);
+    },
+    onEndEdit: () => setEditingId(null),
+    onVisibleOrderChange,
+  };
   const [networkOnline, setNetworkOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -412,7 +513,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
 
   useEffect(() => {
     const onPopState = (): void => {
-      setRoute(routeFromPath(location.pathname));
+      setWorkspaceLocation(locationFromPath(location.pathname));
       setTasksSection(tasksSectionFromPath(location.pathname));
       setTaskIdFilter(new URLSearchParams(location.search).get("task") ?? "");
     };
@@ -420,11 +521,15 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const navigate = (next: WorkspaceRoute): void => {
-    if (typeof history !== "undefined") history.pushState({}, "", `/${next}`);
-    setRoute(next);
+  const navigate = (next: WorkspaceRoute | Location): void => {
+    const target: Location = typeof next === "string" ? { route: next } : next;
+    if (typeof history !== "undefined")
+      history.pushState({}, "", pathForLocation(target));
+    setWorkspaceLocation(target);
     setTaskIdFilter("");
-    if (next === "tasks") setTasksSection("list");
+    setSelection(emptySelection);
+    setEditingId(null);
+    if (target.route === "tasks") setTasksSection("list");
   };
   const changeTasksSection = (section: TasksSection): void => {
     if (typeof history !== "undefined")
@@ -472,9 +577,10 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 .toLocaleLowerCase()
                 .includes(taskQuery.trim().toLocaleLowerCase())) &&
             (taskStatusFilter === "all" || task.status === taskStatusFilter) &&
-            (taskProjectFilter === "" ||
-              task.projectId === taskProjectFilter) &&
-            (taskTagFilter === "" || task.tagIds?.includes(taskTagFilter)),
+            (effectiveProjectFilter === "" ||
+              task.projectId === effectiveProjectFilter) &&
+            (effectiveTagFilter === "" ||
+              task.tagIds?.includes(effectiveTagFilter)),
         )
       : [];
 
@@ -1478,6 +1584,22 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     }
   };
 
+  // Issue #194: in-place edits from a row or the detail panel; the same
+  // outbox patch as the form-based editor, with only the given fields.
+  const editTask = async (task: Task, patch: TaskPatch): Promise<void> => {
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      await localStore.queueTaskPatch(task.id, patch);
+      await syncAfterLocalMutation();
+    } catch (error: unknown) {
+      handleTaskError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleFocusCommand = async (
     command:
       | FocusPanelCommand
@@ -1999,8 +2121,18 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         document.activeElement instanceof HTMLElement
           ? document.activeElement.closest<HTMLElement>("[data-task-id]")
           : null;
-      const id = row?.dataset.taskId ?? state.activeSession?.taskId;
+      const id =
+        primaryId(selection) ??
+        row?.dataset.taskId ??
+        state.activeSession?.taskId;
       return state.tasks.find((task) => task.id === id);
+    };
+    const focusDetail = (selector: string): void => {
+      window.setTimeout(() => {
+        document
+          .querySelector<HTMLElement>(`.task-detail ${selector}`)
+          ?.focus();
+      }, 0);
     };
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return;
@@ -2022,12 +2154,61 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           void syncNow();
           return;
         case "task.add": {
-          if (route !== "today" && route !== "inbox") navigate("today");
+          const listRoute =
+            route === "today" ||
+            route === "inbox" ||
+            (route === "tasks" && tasksSection === "list");
+          if (!listRoute) navigate("today");
           window.setTimeout(() => {
             document
-              .querySelector<HTMLInputElement>('form input[name="title"]')
+              .querySelector<HTMLInputElement>(
+                '.add-task-bar input[name="title"], form input[name="title"]',
+              )
               ?.focus();
           }, 0);
+          return;
+        }
+        case "task.select_next":
+          setEditingId(null);
+          setSelection((current) => selectNext(current, visibleTaskOrder));
+          return;
+        case "task.select_previous":
+          setEditingId(null);
+          setSelection((current) => selectPrevious(current, visibleTaskOrder));
+          return;
+        case "selection.clear":
+          clearSelection();
+          return;
+        case "task.open_details": {
+          const task = selectedTask();
+          if (task !== undefined) setSelection(selectSingle(task.id));
+          return;
+        }
+        case "task.edit_title": {
+          const task = selectedTask();
+          if (task?.status === "open") {
+            setSelection(selectSingle(task.id));
+            setEditingId(task.id);
+          }
+          return;
+        }
+        case "task.delete": {
+          const task = selectedTask();
+          if (task !== undefined) void removeTask(task);
+          return;
+        }
+        case "task.schedule": {
+          const task = selectedTask();
+          if (task === undefined) return;
+          setSelection(selectSingle(task.id));
+          focusDetail(".time-block select, .time-block input");
+          return;
+        }
+        case "task.add_child": {
+          const task = selectedTask();
+          if (task === undefined || task.parentId != null) return;
+          setSelection(selectSingle(task.id));
+          focusDetail('form[aria-label^="Add a child task"] input');
           return;
         }
         case "task.toggle_done": {
@@ -2564,6 +2745,105 @@ export const App = ({ initialState, initialPath }: AppProps) => {
       throw new Error("Offline state is unavailable");
     return offlineState;
   };
+  // Issue #194: one object of task callbacks for rows, lists and the panel.
+  const taskActions: TaskActions = {
+    changeStatus: changeTaskStatus,
+    editTask,
+    startFocus: (task) =>
+      void handleFocusCommand({ command: "start", taskId: task.id }),
+    submitTimeBlock,
+    removeTimeBlock,
+    saveAsTemplate: saveTaskAsTemplate,
+    archive:
+      networkOnline && state.kind === "authenticated"
+        ? archiveTaskToHistory
+        : undefined,
+    remove: removeTask,
+    createChildTask: taskHierarchyActions.onCreateChildTask,
+    moveTask: taskHierarchyActions.onMoveTask,
+  };
+  const planningZone =
+    state.kind === "authenticated" || state.kind === "offline"
+      ? (state.planningPreferences?.timeZone ?? "UTC")
+      : "UTC";
+  const planningToday = planningDate(
+    new Date(),
+    planningZone,
+    state.kind === "authenticated" || state.kind === "offline"
+      ? state.planningPreferences?.dayStartsAt
+      : undefined,
+  );
+  const selectedTasks =
+    state.kind === "authenticated" || state.kind === "offline"
+      ? selection.ids.flatMap((id) => {
+          const task = state.tasks.find((candidate) => candidate.id === id);
+          return task === undefined ? [] : [task];
+        })
+      : [];
+  // Issue #194: bulk changes run the per-task writes in order, then sync once.
+  const runBulkTasks = async (
+    kind: "complete" | "archive" | "delete" | "move",
+    projectId: string | null = null,
+  ): Promise<void> => {
+    if (state.kind !== "authenticated" && state.kind !== "offline") return;
+    const tasks = selectedTasks;
+    if (tasks.length === 0) return;
+    if (
+      kind === "delete" &&
+      appPreferences.snapshot.preferences.confirmBeforeDelete &&
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Delete ${String(tasks.length)} tasks? They can be recovered from Deleted tasks.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setFormError(null);
+    try {
+      const result = await runBulk(tasks, async (task) => {
+        if (kind === "complete") {
+          if (task.status === "open")
+            await localStore.queueTaskStatus(task.id, true);
+        } else if (kind === "delete") await localStore.queueTaskDelete(task.id);
+        else if (kind === "move")
+          await localStore.queueTaskPatch(task.id, { projectId });
+        else if (state.kind === "authenticated")
+          await archiveTask(task.id, task.revision, state.session.csrfToken);
+        else return false;
+        return true;
+      });
+      if (kind === "archive") await syncNow();
+      else await syncAfterLocalMutation();
+      if (result.message !== null) setFormError(result.message);
+      setSelection(
+        result.failed === null
+          ? emptySelection
+          : retain(
+              selection,
+              tasks.slice(result.done).map(({ id }) => id),
+            ),
+      );
+    } catch (error: unknown) {
+      handleTaskError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const bulkBar =
+    selectedTasks.length > 1 ? (
+      <BulkBar
+        count={selectedTasks.length}
+        projects={projects}
+        busy={busy}
+        online={networkOnline && state.kind === "authenticated"}
+        onComplete={() => void runBulkTasks("complete")}
+        onArchive={() => void runBulkTasks("archive")}
+        onDelete={() => void runBulkTasks("delete")}
+        onMoveToProject={(projectId) => void runBulkTasks("move", projectId)}
+        onClear={clearSelection}
+      />
+    ) : null;
+
   if (shouldRenderOffline()) {
     const renderedOfflineState = offlineForRender();
     return (
@@ -2625,23 +2905,20 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             dayPlan={undefined}
             planningPreferences={renderedOfflineState.planningPreferences}
             tasks={renderedOfflineState.tasks}
+            projects={projects}
+            tags={tags}
             activeSession={null}
-            clientId={null}
             syncStatus="offline"
             planner={null}
             baikalCalendars={[]}
             calendarActionsAvailable={false}
             focusActionsAvailable={false}
             busy={busy}
-            onFocusCommand={() => undefined}
+            actions={taskActions}
+            list={listSelection}
             onSubmitTask={submitTask}
-            onChangeTaskStatus={changeTaskStatus}
-            onSubmitTimeBlock={submitTimeBlock}
-            onRemoveTimeBlock={removeTimeBlock}
             onViewTasks={() => navigate("tasks")}
             pinnedNotes={pinnedNotes}
-            onSubmitTaskEdit={submitTaskEdit}
-            onCreateChildTask={taskHierarchyActions.onCreateChildTask}
           />
         )}
         <section aria-label="Offline sync status">
@@ -2999,26 +3276,132 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         }
       : state.dayPlan;
 
+  const detailPanel = (task: Task) => (
+    <TaskDetailPanel
+      key={task.id}
+      task={task}
+      tasks={state.tasks}
+      projects={projects}
+      tags={tags}
+      subtasks={subtasks[task.id] ?? []}
+      provenance={templateProvenance[task.id]}
+      calendars={state.baikal.calendars}
+      timeZone={planningZone}
+      today={planningToday}
+      busy={busy}
+      online={networkOnline}
+      csrfToken={state.session.csrfToken}
+      calendarActionsAvailable={networkOnline}
+      focusState={focusStateFor(state.activeSession ?? null, task.id)}
+      focusActionsAvailable={networkOnline && state.client !== undefined}
+      actions={taskActions}
+      onSubmitTaskEdit={submitTaskEdit}
+      onSubmitTaskOrganization={submitTaskOrganization}
+      onSubmitTaskPlanning={submitTaskPlanning}
+      onSubmitSubtask={submitSubtask}
+      onChangeSubtask={changeSubtask}
+      onClose={clearSelection}
+    />
+  );
+
   return (
     <ApplicationPreferencesProvider value={appPreferences}>
-      <AppShell
-        route={route}
-        onNavigate={navigate}
-        syncStatus={state.syncStatus}
-        liveStatus={liveStatus}
-        conflictCount={state.conflictCount}
-        baikalConnected={state.baikal.connected}
-        formError={formError}
-        onSignOut={() => void signOut()}
-        commandTrigger={
-          <CommandBar
-            onNavigate={navigate}
-            onSyncNow={() => void syncNow()}
-            syncAvailable={networkOnline && state.client !== undefined}
-            onShowShortcuts={() => setShortcutHelpOpen(true)}
-          />
+      <WorkspaceShell
+        sidebar={{
+          location: workspaceLocation,
+          projects,
+          tags,
+          counts: sidebarCounts(state.tasks, planningToday, planningZone),
+          collapsed: sidebarCollapsed,
+          onToggleCollapsed: () => {
+            const next = !sidebarCollapsed;
+            setSidebarCollapsed(next);
+            try {
+              localStorage.setItem("tadooer.sidebar:collapsed", String(next));
+            } catch {
+              /* private mode or storage disabled: the choice simply forgets */
+            }
+          },
+          offline: state.syncStatus === "offline",
+          onNavigate: navigate,
+        }}
+        header={{
+          title:
+            workspaceLocation.route === "project" ? (
+              <span className="header__context">
+                <span
+                  className="sidebar-swatch"
+                  aria-hidden="true"
+                  style={{
+                    backgroundColor:
+                      projects.find(({ id }) => id === workspaceLocation.id)
+                        ?.color ?? "var(--overlay-0)",
+                  }}
+                />
+                {projects.find(({ id }) => id === workspaceLocation.id)
+                  ?.title ?? "Project"}
+              </span>
+            ) : workspaceLocation.route === "tag" ? (
+              `#${tags.find(({ id }) => id === workspaceLocation.id)?.displayName ?? "tag"}`
+            ) : (
+              routeLabel(route)
+            ),
+          focus: {
+            session: state.activeSession ?? null,
+            taskTitle:
+              state.tasks.find(({ id }) => id === state.activeSession?.taskId)
+                ?.title ?? null,
+            clientId: state.client?.clientId ?? null,
+            busy: busy || focus.busy,
+            online: networkOnline && state.client !== undefined,
+            timer: focus.panel,
+            onCommand: (command) => void handleFocusCommand(command),
+          },
+          sync: {
+            syncStatus: state.syncStatus,
+            liveStatus,
+            baikalConnected: state.baikal.connected,
+          },
+          conflictCount: state.conflictCount ?? 0,
+          commandTrigger: (
+            <CommandBar
+              onNavigate={navigate}
+              projects={projects}
+              tags={tags}
+              onSyncNow={() => void syncNow()}
+              syncAvailable={networkOnline && state.client !== undefined}
+              onShowShortcuts={() => setShortcutHelpOpen(true)}
+            />
+          ),
+          ownerName: state.session.owner.displayName,
+          onSignOut: () => void signOut(),
+          formError,
+        }}
+        bulk={selectedTasks.length > 1}
+        detail={
+          selectedTasks.length === 1 &&
+          selectedTasks[0] !== undefined &&
+          !narrow
+            ? detailPanel(selectedTasks[0])
+            : null
         }
       >
+        {narrow &&
+          selectedTasks.length === 1 &&
+          selectedTasks[0] !== undefined && (
+            <Sheet
+              open
+              onOpenChange={(open) => {
+                if (!open) clearSelection();
+              }}
+            >
+              <SheetContent side="bottom" className="task-detail-sheet">
+                <SheetTitle className="sr-only">Task details</SheetTitle>
+                {detailPanel(selectedTasks[0])}
+              </SheetContent>
+            </Sheet>
+          )}
+        {bulkBar}
         <ShortcutHelpDialog
           open={shortcutHelpOpen}
           overrides={shortcutOverrides}
@@ -3041,20 +3424,18 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             dayPlan={dayPlanView}
             planningPreferences={state.planningPreferences}
             tasks={state.tasks}
+            projects={projects}
+            tags={tags}
             activeSession={state.activeSession ?? null}
-            clientId={state.client?.clientId ?? null}
             syncStatus={state.syncStatus}
             planner={plannerView}
             baikalCalendars={state.baikal.calendars}
             calendarActionsAvailable={networkOnline}
             focusActionsAvailable={networkOnline && state.client !== undefined}
             busy={busy}
-            onFocusCommand={(command) => void handleFocusCommand(command)}
-            focus={focus.panel}
+            actions={taskActions}
+            list={listSelection}
             onSubmitTask={submitTask}
-            onChangeTaskStatus={changeTaskStatus}
-            onSubmitTimeBlock={submitTimeBlock}
-            onRemoveTimeBlock={removeTimeBlock}
             onViewTasks={() => navigate("tasks")}
             csrfToken={state.session.csrfToken}
             onTasksPlanned={() => void syncNow()}
@@ -3063,25 +3444,26 @@ export const App = ({ initialState, initialPath }: AppProps) => {
               state.client === undefined ? undefined : dayOrderActions
             }
             pinnedNotes={pinnedNotes}
-            onSubmitTaskEdit={submitTaskEdit}
-            onCreateChildTask={taskHierarchyActions.onCreateChildTask}
           />
         )}
         {route === "inbox" && (
           <InboxPage
             tasks={state.tasks}
+            projects={projects}
+            tags={tags}
             activeSession={state.activeSession ?? null}
             calendars={state.baikal.calendars}
+            timeZone={planningZone}
+            today={planningToday}
             busy={busy}
+            online={networkOnline}
+            csrfToken={networkOnline ? state.session.csrfToken : undefined}
             calendarActionsAvailable={networkOnline}
             focusActionsAvailable={networkOnline && state.client !== undefined}
+            actions={taskActions}
+            list={listSelection}
             onSubmitTask={submitTask}
-            onStartFocus={(task) =>
-              void handleFocusCommand({ command: "start", taskId: task.id })
-            }
-            onChangeTaskStatus={changeTaskStatus}
-            onSubmitTimeBlock={submitTimeBlock}
-            onRemoveTimeBlock={removeTimeBlock}
+            onTasksCreated={() => void syncNow()}
           />
         )}
         {route === "planner" && (
@@ -3118,6 +3500,12 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 );
               setRoute("boards");
             }}
+            context={
+              workspaceLocation.route === "project" ||
+              workspaceLocation.route === "tag"
+                ? { kind: workspaceLocation.route, id: workspaceLocation.id }
+                : undefined
+            }
             taskIdFilter={taskIdFilter}
             onClearTaskIdFilter={() => {
               setTaskIdFilter("");
@@ -3128,31 +3516,25 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             recovery={state.recovery}
             projects={projects}
             tags={tags}
-            subtasks={subtasks}
-            provenance={templateProvenance}
             baikalCalendars={state.baikal.calendars}
+            activeSession={state.activeSession ?? null}
             taskQuery={taskQuery}
             taskStatusFilter={taskStatusFilter}
-            taskProjectFilter={taskProjectFilter}
-            taskTagFilter={taskTagFilter}
+            taskProjectFilter={effectiveProjectFilter}
+            taskTagFilter={effectiveTagFilter}
             busy={busy}
             calendarActionsAvailable={networkOnline}
+            focusActionsAvailable={networkOnline && state.client !== undefined}
             onTaskQueryChange={setTaskQuery}
             onTaskStatusFilterChange={setTaskStatusFilter}
             onTaskProjectFilterChange={setTaskProjectFilter}
             onTaskTagFilterChange={setTaskTagFilter}
             onSubmitOrganization={submitOrganization}
-            onSubmitTaskEdit={submitTaskEdit}
-            onSubmitTimeBlock={submitTimeBlock}
-            onRemoveTimeBlock={removeTimeBlock}
-            onSubmitTaskOrganization={submitTaskOrganization}
-            onSubmitSubtask={submitSubtask}
-            onChangeSubtask={changeSubtask}
-            onSaveTaskAsTemplate={saveTaskAsTemplate}
-            onChangeTaskStatus={changeTaskStatus}
-            onRemoveTask={removeTask}
             onRecoverTask={recoverTask}
-            onArchiveTask={archiveTaskToHistory}
+            actions={taskActions}
+            list={listSelection}
+            onSubmitTask={submitTask}
+            onTasksCreated={() => void syncNow()}
             organization={{
               csrfToken: state.session.csrfToken,
               online: networkOnline,
@@ -3163,8 +3545,6 @@ export const App = ({ initialState, initialPath }: AppProps) => {
               noteQueue,
             }}
             timeZone={state.planningPreferences?.timeZone ?? "UTC"}
-            onSubmitTaskPlanning={submitTaskPlanning}
-            {...taskHierarchyActions}
           />
         )}
         {route === "history" && (
@@ -3298,7 +3678,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             onSignOut={signOut}
           />
         )}
-      </AppShell>
+      </WorkspaceShell>
     </ApplicationPreferencesProvider>
   );
 };

@@ -81,6 +81,21 @@ describe("application preferences (ADR 0030)", () => {
     ).toEqual({ "sync.now": "Ctrl+Shift+S", "help.shortcuts": null });
   });
 
+  it("binds selection and editing actions (issue #194)", () => {
+    const binding = (id: string) =>
+      shortcutActions.find((action) => action.id === id)?.defaultBinding;
+    expect(binding("task.select_next")).toBe("ArrowDown");
+    expect(binding("task.select_previous")).toBe("ArrowUp");
+    expect(binding("task.edit_title")).toBe("Enter");
+    expect(binding("task.delete")).toBe("Delete");
+    expect(binding("task.schedule")).toBe("S");
+    expect(binding("task.add_child")).toBe("Shift+N");
+    expect(binding("task.open_details")).toBe("O");
+    expect(binding("selection.clear")).toBe("Escape");
+    for (const key of ["ArrowDown", "ArrowUp", "Enter", "Delete", "Escape"])
+      expect(normalizeShortcutBinding(key)).toBe(key);
+  });
+
   it("keeps default bindings unique and source keys unique", () => {
     const bound = shortcutActions.flatMap((action) =>
       action.defaultBinding === null ? [] : [action.defaultBinding],

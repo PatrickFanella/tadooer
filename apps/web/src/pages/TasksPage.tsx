@@ -1,27 +1,26 @@
 import { PageHeader } from "../components/ui/page-header.tsx";
-import { DeadlineFields } from "../components/tasks/DeadlineFields.tsx";
-import { useState, type ReactElement, type SyntheticEvent } from "react";
+import type { SyntheticEvent } from "react";
 import { groupTaskHierarchy, zonedCalendarDate } from "@suite/domain";
-import {
-  TaskChildrenSection,
-  TaskPlacementControls,
-  type TaskHierarchyActions,
-} from "../components/tasks/TaskHierarchy.tsx";
 import type {
+  ActiveSession,
   BaikalStatusResponse,
   Note,
   Project,
-  Subtask,
   Tag,
   Task,
-  TaskPatchRequest,
 } from "@suite/contracts";
-import { TaskPlanningForm } from "../components/tasks/TaskPlanningForm.tsx";
+import { AddTaskBar } from "../components/tasks/AddTaskBar.tsx";
+import type { TaskActions } from "../components/tasks/task-actions.ts";
+import {
+  TaskRows,
+  useVisibleOrder,
+  visibleOrder,
+  type TaskListContext,
+} from "../components/tasks/TaskList.tsx";
+import type { ListSelectionProps } from "../components/tasks/TaskRow.tsx";
 import { Field } from "../field.tsx";
-import { TimeBlockForm } from "../time-block-form.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
-import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import { NativeSelect } from "../components/ui/native-select.tsx";
@@ -33,13 +32,7 @@ import {
   type NoteQueue,
   type OrganizationQueue,
 } from "../components/organization/OrganizationPanel.tsx";
-import { TaskLinksPanel } from "../components/tasks/TaskLinksPanel.tsx";
-import { NoteMarkdown } from "../components/notes/NoteMarkdown.tsx";
-import { useApplicationPreferences } from "../application-preferences.tsx";
-import {
-  RecurringSeriesManager,
-  TaskRecurrencePanel,
-} from "../components/tasks/TaskRecurrence.tsx";
+import { RecurringSeriesManager } from "../components/tasks/TaskRecurrence.tsx";
 import {
   MenuFolderManager,
   SectionsPanel,
@@ -51,7 +44,7 @@ import {
   viewContextFor,
 } from "../components/tasks/TaskViews.tsx";
 
-export interface TasksPageProps extends TaskHierarchyActions {
+export interface TasksPageProps {
   readonly taskIdFilter?: string;
   readonly onClearTaskIdFilter?: () => void;
   readonly tasks: readonly Task[];
@@ -59,15 +52,15 @@ export interface TasksPageProps extends TaskHierarchyActions {
   readonly recovery: readonly Task[];
   readonly projects: readonly Project[];
   readonly tags: readonly Tag[];
-  readonly subtasks: Readonly<Record<string, readonly Subtask[]>>;
-  readonly provenance: Readonly<Record<string, string>>;
   readonly baikalCalendars: BaikalStatusResponse["calendars"];
+  readonly activeSession?: ActiveSession | null | undefined;
   readonly taskQuery: string;
   readonly taskStatusFilter: "all" | Task["status"];
   readonly taskProjectFilter: string;
   readonly taskTagFilter: string;
   readonly busy: boolean;
   readonly calendarActionsAvailable: boolean;
+  readonly focusActionsAvailable?: boolean;
   readonly onTaskQueryChange: (query: string) => void;
   readonly onTaskStatusFilterChange: (filter: "all" | Task["status"]) => void;
   readonly onTaskProjectFilterChange: (projectId: string) => void;
@@ -76,38 +69,21 @@ export interface TasksPageProps extends TaskHierarchyActions {
     event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
     kind: "project" | "tag",
   ) => Promise<void>;
-  readonly onSubmitTaskEdit: (
-    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-    task: Task,
-  ) => Promise<void>;
-  readonly onSubmitTimeBlock: (
-    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-    task: Task,
-  ) => Promise<void>;
-  readonly onRemoveTimeBlock: (task: Task) => Promise<void>;
-  readonly onSubmitTaskOrganization: (
-    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-    task: Task,
-  ) => Promise<void>;
-  readonly onSubmitSubtask: (
-    event: SyntheticEvent<HTMLFormElement, SubmitEvent>,
-    task: Task,
-  ) => Promise<void>;
-  readonly onChangeSubtask: (
-    subtask: Subtask,
-    action: "toggle" | "up" | "down" | "delete",
-  ) => Promise<void>;
-  readonly onSaveTaskAsTemplate: (task: Task) => Promise<void>;
-  readonly onChangeTaskStatus: (
-    task: Task,
-    action: "complete" | "reopen",
-  ) => Promise<boolean>;
-  readonly onRemoveTask: (task: Task) => Promise<void>;
   readonly onRecoverTask: (task: Task) => Promise<void>;
-  /** Moves a top-level task and its children to History (ADR 0022); online only. */
-  readonly onArchiveTask?: (task: Task) => Promise<void>;
-  /** Render every task's editor open; the page opens them per task. */
-  readonly editorsOpen?: boolean;
+  /** Issue #194: the grouped task callbacks and the list selection. */
+  readonly actions: TaskActions;
+  readonly list: ListSelectionProps;
+  /** The add bar at the top of the list; omitted where capture is unavailable. */
+  readonly onSubmitTask?:
+    | ((event: SyntheticEvent<HTMLFormElement, SubmitEvent>) => Promise<void>)
+    | undefined;
+  readonly onTasksCreated?: (() => void) | undefined;
+  /**
+   * Issue #194: a project or tag context route. The matching filter is fixed
+   * by `App`; the page hides that dropdown and names a missing context.
+   */
+  readonly context?:
+    { readonly kind: "project" | "tag"; readonly id: string } | undefined;
   /** Enables project/tag/note management when a session is available. */
   readonly organization?: {
     readonly csrfToken: string;
@@ -122,10 +98,6 @@ export interface TasksPageProps extends TaskHierarchyActions {
   };
   /** Owner planning zone for date-only plans (ADR 0020). */
   readonly timeZone?: string;
-  readonly onSubmitTaskPlanning?: (
-    task: Task,
-    patch: TaskPatchRequest,
-  ) => Promise<void>;
   /**
    * Issue #171: the list (filters, saved views, tasks) or Organize
    * (projects, tags, sidebar folders, recurring series). The app keeps the
@@ -146,42 +118,31 @@ export const TasksPage = ({
   recovery,
   projects,
   tags,
-  subtasks,
-  provenance,
   baikalCalendars,
+  activeSession = null,
   taskQuery,
   taskStatusFilter,
   taskProjectFilter,
   taskTagFilter,
   busy,
   calendarActionsAvailable,
+  focusActionsAvailable = false,
   onTaskQueryChange,
   onTaskStatusFilterChange,
   onTaskProjectFilterChange,
   onTaskTagFilterChange,
   onSubmitOrganization,
-  onSubmitTaskEdit,
-  onSubmitTimeBlock,
-  onRemoveTimeBlock,
-  onSubmitTaskOrganization,
-  onSubmitSubtask,
-  onChangeSubtask,
-  onSaveTaskAsTemplate,
-  onChangeTaskStatus,
-  onRemoveTask,
   onRecoverTask,
-  onArchiveTask,
-  editorsOpen = false,
+  actions,
+  list,
+  onSubmitTask,
+  onTasksCreated,
+  context,
   timeZone = "UTC",
-  onSubmitTaskPlanning,
-  onCreateChildTask,
-  onMoveTask,
   section = "list",
   onSectionChange,
   onOpenProjectBoards,
 }: TasksPageProps) => {
-  // ADR 0030: task notes use the same safe Markdown subset as notes.
-  const { markdownInNotes } = useApplicationPreferences().snapshot.preferences;
   const visibleIds = new Set(visibleTasks.map(({ id }) => id));
   const today = zonedCalendarDate(new Date(), timeZone);
   // Saved view, sections and sidebar folders (ADR 0028): online HTTP records.
@@ -214,302 +175,49 @@ export const TasksPage = ({
     savedView.timeSpentMinutes,
   );
   const { childrenByParent } = groupTaskHierarchy(visibleTasks);
-  const allChildren = groupTaskHierarchy(tasks).childrenByParent;
   const titleById = new Map(tasks.map(({ id, title }) => [id, title]));
-  const parentCandidates = tasks.filter(
-    (task) => task.parentId == null && task.deletedAt == null,
+  // Issue #194: a context route whose project or tag is gone.
+  const missingContext =
+    context === undefined
+      ? null
+      : context.kind === "project"
+        ? projects.some(({ id }) => id === context.id)
+          ? null
+          : "This project no longer exists."
+        : tags.some(({ id }) => id === context.id)
+          ? null
+          : "This tag no longer exists.";
+  useVisibleOrder(
+    visibleOrder(
+      section === "list" && missingContext === null
+        ? viewGroups.map((group) => group.tasks)
+        : [],
+      childrenByParent,
+    ),
+    list.onVisibleOrderChange,
   );
-  // Every task's editor is several hundred nodes with the tag list, the
-  // planning and schedule forms and the link and recurrence panels; a long
-  // list renders them only for the tasks the owner opened.
-  const [editing, setEditing] = useState<ReadonlySet<string>>(() => new Set());
-  const isEditing = (id: string) => editorsOpen || editing.has(id);
-  const toggleEditing = (id: string) =>
-    setEditing((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const renderTask = (task: Task, siblings: readonly Task[]): ReactElement => (
-    <li
-      key={task.id}
-      className={[
-        task.status === "completed" ? "task--completed" : "",
-        task.parentId == null ? "" : "task--child",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <div className="task-heading">
-        <strong>{task.title}</strong>
-        <small>
-          {task.status === "completed" ? "Completed" : "Open"} · Revision{" "}
-          {task.revision}
-        </small>
-      </div>
-      {task.notes !== "" &&
-        (markdownInNotes ? (
-          <NoteMarkdown content={task.notes} />
-        ) : (
-          <span>{task.notes}</span>
-        ))}
-      {provenance[task.id] !== undefined && (
-        <p className="template-provenance">Created from a reusable template.</p>
-      )}
-      {task.plannedStart != null && (
-        <p className="planned-time">
-          Planned {new Date(task.plannedStart).toLocaleString()} ·{" "}
-          {task.estimateMinutes} minutes
-        </p>
-      )}
-      {task.plannedStart == null && task.plannedDay != null && (
-        <p className="planned-time">
-          Planned for {task.plannedDay} · no time set
-        </p>
-      )}
-      {isEditing(task.id) && (
-        <>
-          <form
-            className="task-edit"
-            onSubmit={(event) => void onSubmitTaskEdit(event, task)}
-          >
-            <Field
-              label="Title"
-              name="title"
-              autoComplete="off"
-              defaultValue={task.title}
-            />
-            <Field
-              label="Notes"
-              name="notes"
-              autoComplete="off"
-              defaultValue={task.notes}
-              required={false}
-            />
-            <label className="field">
-              <span>Estimate minutes</span>
-              <Input
-                name="estimateMinutes"
-                type="number"
-                min="1"
-                max="720"
-                defaultValue={task.estimateMinutes ?? ""}
-              />
-            </label>
-            <DeadlineFields
-              key={JSON.stringify(task.deadline)}
-              deadline={task.deadline}
-            />
-            <Button disabled={busy}>Save task</Button>
-          </form>
-          <TaskPlacementControls
-            task={task}
-            siblings={siblings}
-            parents={parentCandidates}
-            parentTitle={
-              task.parentId == null
-                ? null
-                : (titleById.get(task.parentId) ?? null)
-            }
-            hasChildren={(allChildren.get(task.id)?.length ?? 0) > 0}
-            busy={busy}
-            onMoveTask={onMoveTask}
-          />
-          <TimeBlockForm
-            task={task}
-            calendars={baikalCalendars}
-            busy={busy}
-            available={calendarActionsAvailable}
-            onSubmit={onSubmitTimeBlock}
-            onRemove={onRemoveTimeBlock}
-          />
-          {onSubmitTaskPlanning !== undefined && (
-            <TaskPlanningForm
-              key={`${task.id}:${String(task.revision)}`}
-              task={task}
-              timeZone={timeZone}
-              busy={busy}
-              available={true}
-              remindersAvailable={calendarActionsAvailable}
-              onSubmit={onSubmitTaskPlanning}
-            />
-          )}
-          <form
-            className="task-edit"
-            onSubmit={(event) => void onSubmitTaskOrganization(event, task)}
-          >
-            <label className="field">
-              <span>Project</span>
-              <NativeSelect
-                name="projectId"
-                defaultValue={task.projectId ?? ""}
-              >
-                <option value="">No project</option>
-                {projects
-                  .filter((project) => project.archivedAt === null)
-                  .map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-              </NativeSelect>
-            </label>
-            <fieldset>
-              <legend>Tags</legend>
-              {tags
-                .filter((tag) => tag.archivedAt === null)
-                .map((tag) => (
-                  <label key={tag.id}>
-                    <Checkbox
-                      name="tagIds"
-                      value={tag.id}
-                      defaultChecked={task.tagIds?.includes(tag.id) === true}
-                    />
-                    {tag.displayName}
-                  </label>
-                ))}
-            </fieldset>
-            <Button disabled={busy}>Save organization</Button>
-          </form>
-          <div>
-            <strong>Checklist</strong>
-            <ul>
-              {(subtasks[task.id] ?? []).map((subtask, index, items) => (
-                <li key={subtask.id}>
-                  {subtask.completed ? "✓" : "○"} {subtask.title}
-                  <Button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onChangeSubtask(subtask, "toggle")}
-                  >
-                    {subtask.completed ? "Reopen" : "Complete"}
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={busy || index === 0}
-                    onClick={() => void onChangeSubtask(subtask, "up")}
-                  >
-                    Move up
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={busy || index === items.length - 1}
-                    onClick={() => void onChangeSubtask(subtask, "down")}
-                  >
-                    Move down
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={busy}
-                    onClick={() => void onChangeSubtask(subtask, "delete")}
-                  >
-                    Delete item
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            <form onSubmit={(event) => void onSubmitSubtask(event, task)}>
-              <Field
-                label="New checklist item"
-                name="title"
-                autoComplete="off"
-              />
-              <Button disabled={busy}>Add item</Button>
-            </form>
-          </div>
-        </>
-      )}
-      {task.parentId == null && (
-        <details
-          className="task-children-disclosure"
-          open={(allChildren.get(task.id) ?? []).length > 0}
-        >
-          <summary aria-label={`Child tasks of “${task.title}”`}>
-            {(allChildren.get(task.id) ?? []).length === 0
-              ? "Add child tasks"
-              : `${String((allChildren.get(task.id) ?? []).length)} child ${(allChildren.get(task.id) ?? []).length === 1 ? "task" : "tasks"}`}
-          </summary>
-          <TaskChildrenSection
-            parent={task}
-            items={childrenByParent.get(task.id) ?? []}
-            allItems={allChildren.get(task.id) ?? []}
-            busy={busy}
-            renderChild={(child) =>
-              renderTask(child, allChildren.get(task.id) ?? [])
-            }
-            onCreateChildTask={onCreateChildTask}
-          />
-        </details>
-      )}
-      {isEditing(task.id) && organization !== undefined && (
-        <TaskLinksPanel
-          taskId={task.id}
-          csrfToken={organization.csrfToken}
-          online={organization.online}
-        />
-      )}
-      {isEditing(task.id) && organization !== undefined && (
-        <TaskRecurrencePanel
-          task={task}
-          csrfToken={organization.csrfToken}
-          online={organization.online}
-          today={today}
-          tags={tags}
-        />
-      )}
-      <div className="task-actions">
-        <Button
-          type="button"
-          variant={isEditing(task.id) ? "default" : "outline"}
-          aria-expanded={isEditing(task.id)}
-          aria-label={`${isEditing(task.id) ? "Close editor for" : "Edit"} “${task.title}”`}
-          onClick={() => toggleEditing(task.id)}
-        >
-          {isEditing(task.id) ? "Close editor" : "Edit"}
-        </Button>
-        <Button
-          type="button"
-          disabled={busy}
-          onClick={() => void onSaveTaskAsTemplate(task)}
-        >
-          Save as template
-        </Button>
-        <Button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            void onChangeTaskStatus(
-              task,
-              task.status === "completed" ? "reopen" : "complete",
-            )
-          }
-        >
-          {task.status === "completed" ? "Reopen" : "Complete"}
-        </Button>
-        {onArchiveTask !== undefined && task.parentId == null && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || organization?.online === false}
-            title="Move this task and its children to History"
-            onClick={() => void onArchiveTask(task)}
-          >
-            Archive
-          </Button>
-        )}
-        <Button
-          variant="destructive"
-          type="button"
-          disabled={busy}
-          onClick={() => void onRemoveTask(task)}
-        >
-          Delete
-        </Button>
-      </div>
-    </li>
-  );
+  const rowContext: TaskListContext = {
+    at: new Date().toISOString(),
+    timeZone,
+    today,
+    projects,
+    tags,
+    activeSession,
+    calendars: baikalCalendars,
+    busy,
+    calendarActionsAvailable,
+    focusActionsAvailable,
+    actions,
+    list,
+  };
+  const stateOf = (task: Task) =>
+    task.status === "completed"
+      ? "completed"
+      : task.plannedStart != null
+        ? "scheduled"
+        : task.plannedDay != null
+          ? "planned-day"
+          : "planning";
   return (
     <>
       <PageHeader
@@ -591,6 +299,19 @@ export const TasksPage = ({
       )}
       {section === "list" && (
         <>
+          {onSubmitTask !== undefined && missingContext === null && (
+            <AddTaskBar
+              busy={busy}
+              online={organization?.online === true}
+              csrfToken={
+                organization?.online === true
+                  ? organization.csrfToken
+                  : undefined
+              }
+              onSubmit={onSubmitTask}
+              onTasksCreated={onTasksCreated}
+            />
+          )}
           <Card
             className="task-filter-bar"
             role="search"
@@ -622,76 +343,80 @@ export const TasksPage = ({
                   <option value="completed">Completed</option>
                 </NativeSelect>
               </label>
-              <label>
-                Project
-                <NativeSelect
-                  value={taskProjectFilter}
-                  onChange={(event) =>
-                    onTaskProjectFilterChange(event.currentTarget.value)
-                  }
-                >
-                  <option value="">All projects</option>
-                  {groupByFolder(
-                    projects.filter(
-                      (project) =>
-                        !project.hiddenFromMenu ||
-                        project.id === taskProjectFilter,
-                    ),
-                    folders,
-                    "project",
-                  ).map((group) =>
-                    group.folder === null ? (
-                      group.items.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.title}
-                        </option>
-                      ))
-                    ) : (
-                      <optgroup
-                        key={group.folder.id}
-                        label={`${"· ".repeat(group.depth)}${group.folder.title}`}
-                      >
-                        {group.items.map((project) => (
+              {context?.kind !== "project" && (
+                <label>
+                  Project
+                  <NativeSelect
+                    value={taskProjectFilter}
+                    onChange={(event) =>
+                      onTaskProjectFilterChange(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">All projects</option>
+                    {groupByFolder(
+                      projects.filter(
+                        (project) =>
+                          !project.hiddenFromMenu ||
+                          project.id === taskProjectFilter,
+                      ),
+                      folders,
+                      "project",
+                    ).map((group) =>
+                      group.folder === null ? (
+                        group.items.map((project) => (
                           <option key={project.id} value={project.id}>
                             {project.title}
                           </option>
-                        ))}
-                      </optgroup>
-                    ),
-                  )}
-                </NativeSelect>
-              </label>
-              <label>
-                Tag
-                <NativeSelect
-                  value={taskTagFilter}
-                  onChange={(event) =>
-                    onTaskTagFilterChange(event.currentTarget.value)
-                  }
-                >
-                  <option value="">All tags</option>
-                  {groupByFolder(tags, folders, "tag").map((group) =>
-                    group.folder === null ? (
-                      group.items.map((tag) => (
-                        <option key={tag.id} value={tag.id}>
-                          {tag.displayName}
-                        </option>
-                      ))
-                    ) : (
-                      <optgroup
-                        key={group.folder.id}
-                        label={`${"· ".repeat(group.depth)}${group.folder.title}`}
-                      >
-                        {group.items.map((tag) => (
+                        ))
+                      ) : (
+                        <optgroup
+                          key={group.folder.id}
+                          label={`${"· ".repeat(group.depth)}${group.folder.title}`}
+                        >
+                          {group.items.map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.title}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ),
+                    )}
+                  </NativeSelect>
+                </label>
+              )}
+              {context?.kind !== "tag" && (
+                <label>
+                  Tag
+                  <NativeSelect
+                    value={taskTagFilter}
+                    onChange={(event) =>
+                      onTaskTagFilterChange(event.currentTarget.value)
+                    }
+                  >
+                    <option value="">All tags</option>
+                    {groupByFolder(tags, folders, "tag").map((group) =>
+                      group.folder === null ? (
+                        group.items.map((tag) => (
                           <option key={tag.id} value={tag.id}>
                             {tag.displayName}
                           </option>
-                        ))}
-                      </optgroup>
-                    ),
-                  )}
-                </NativeSelect>
-              </label>
+                        ))
+                      ) : (
+                        <optgroup
+                          key={group.folder.id}
+                          label={`${"· ".repeat(group.depth)}${group.folder.title}`}
+                        >
+                          {group.items.map((tag) => (
+                            <option key={tag.id} value={tag.id}>
+                              {tag.displayName}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ),
+                    )}
+                  </NativeSelect>
+                </label>
+              )}
             </CardContent>
           </Card>
           {organization !== undefined && (
@@ -742,8 +467,10 @@ export const TasksPage = ({
             </Button>
           )}
           <SectionHeading as="h2" title="Captured tasks" />
-          {visibleTasks.length === 0 ||
-          viewGroups.every((group) => group.tasks.length === 0) ? (
+          {missingContext !== null ? (
+            <EmptyState title={missingContext} />
+          ) : visibleTasks.length === 0 ||
+            viewGroups.every((group) => group.tasks.length === 0) ? (
             <EmptyState title="No tasks match these filters." />
           ) : (
             viewGroups.map((group) => (
@@ -754,16 +481,13 @@ export const TasksPage = ({
                     title={`${group.label} (${String(group.tasks.length)})`}
                   />
                 )}
-                <ul className="tasks">
-                  {group.tasks.map((task) =>
-                    renderTask(
-                      task,
-                      task.parentId == null
-                        ? []
-                        : (allChildren.get(task.parentId) ?? []),
-                    ),
-                  )}
-                </ul>
+                <TaskRows
+                  tasks={group.tasks}
+                  childrenByParent={childrenByParent}
+                  stateOf={stateOf}
+                  context={rowContext}
+                  label={group.label === "" ? "Captured tasks" : group.label}
+                />
               </div>
             ))
           )}

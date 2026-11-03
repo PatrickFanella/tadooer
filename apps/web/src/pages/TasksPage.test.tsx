@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { noopActions, noopList } from "../components/tasks/test-support.ts";
 import { TasksPage, type TasksPageProps } from "./TasksPage.tsx";
 
 // Issue #171: the list and Organize are separate sections of the page.
@@ -9,8 +10,6 @@ const props: TasksPageProps = {
   recovery: [],
   projects: [],
   tags: [],
-  subtasks: {},
-  provenance: {},
   baikalCalendars: [],
   taskQuery: "",
   taskStatusFilter: "all",
@@ -23,18 +22,10 @@ const props: TasksPageProps = {
   onTaskProjectFilterChange: () => undefined,
   onTaskTagFilterChange: () => undefined,
   onSubmitOrganization: () => Promise.resolve(),
-  onSubmitTaskEdit: () => Promise.resolve(),
-  onSubmitTimeBlock: () => Promise.resolve(),
-  onRemoveTimeBlock: () => Promise.resolve(),
-  onSubmitTaskOrganization: () => Promise.resolve(),
-  onSubmitSubtask: () => Promise.resolve(),
-  onChangeSubtask: () => Promise.resolve(),
-  onSaveTaskAsTemplate: () => Promise.resolve(),
-  onChangeTaskStatus: () => Promise.resolve(true),
-  onRemoveTask: () => Promise.resolve(),
   onRecoverTask: () => Promise.resolve(),
-  onCreateChildTask: () => Promise.resolve(),
-  onMoveTask: () => Promise.resolve(),
+  actions: noopActions,
+  list: noopList,
+  onSubmitTask: () => Promise.resolve(),
   organization: {
     csrfToken: "token",
     online: false,
@@ -62,6 +53,47 @@ describe("TasksPage sections (issue #171)", () => {
     expect(html).toContain("Sidebar folders");
     expect(html).not.toContain('aria-label="Filter tasks"');
     expect(html).not.toContain("Captured tasks");
+  });
+
+  it("fixes the filter on a context route and names a missing context (issue #194)", () => {
+    const project = {
+      id: "p1",
+      ownerId: "owner",
+      title: "Website",
+      revision: 1,
+      createdAt: "2026-11-03T12:00:00.000Z",
+      updatedAt: "2026-11-03T12:00:00.000Z",
+      archivedAt: null,
+      color: null,
+      icon: null,
+      position: 0,
+      hiddenFromMenu: false,
+      completedAt: null,
+      backlogEnabled: false,
+      backlogTaskIds: [],
+    };
+    const known = renderToStaticMarkup(
+      <TasksPage
+        {...props}
+        projects={[project]}
+        taskProjectFilter="p1"
+        context={{ kind: "project", id: "p1" }}
+      />,
+    );
+    expect(known).not.toContain("All projects");
+    expect(known).toContain("All tags");
+    expect(known).toContain('aria-label="Add a task"');
+    expect(known).not.toContain("no longer exists");
+    const gone = renderToStaticMarkup(
+      <TasksPage
+        {...props}
+        projects={[project]}
+        taskProjectFilter="gone"
+        context={{ kind: "project", id: "gone" }}
+      />,
+    );
+    expect(gone).toContain("This project no longer exists.");
+    expect(gone).not.toContain('aria-label="Add a task"');
   });
 
   it("marks the selected section in the header tabs", () => {

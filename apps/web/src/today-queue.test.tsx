@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Task } from "@suite/contracts";
+import { listContext } from "./components/tasks/test-support.ts";
 import { TodayQueue } from "./today-queue.tsx";
 
 const task = (
@@ -41,15 +42,7 @@ const render = (withPreferences = true) =>
         task("future", "Future task title", "2026-08-11T05:00:00.000Z"),
         task("inbox", "Inbox note", null),
       ]}
-      activeSession={null}
-      calendars={[]}
-      busy={false}
-      calendarActionsAvailable={false}
-      focusActionsAvailable={false}
-      onStartFocus={() => undefined}
-      onChangeTaskStatus={async () => await Promise.resolve(true)}
-      onSubmitTimeBlock={async () => await Promise.resolve()}
-      onRemoveTimeBlock={async () => await Promise.resolve()}
+      context={listContext()}
       onViewTasks={() => undefined}
     />,
   );
@@ -65,8 +58,7 @@ describe("TodayQueue", () => {
     expect(markup).toContain('aria-label="Complete “Quarterly report”"');
     expect(markup).toContain('aria-label="Start focus on “Quarterly report”"');
     expect(markup).toContain('aria-label="Complete “Inbox note”"');
-    expect(markup).toContain("Reconnect to start focus");
-    expect(markup).toContain("Reconnect to change calendar blocks");
+    expect(markup).toContain("Reconnect to start focus.");
   });
 
   it("hides scheduled titles without cached preferences", () => {
@@ -84,15 +76,7 @@ describe("TodayQueue", () => {
         at="2026-08-10T15:00:00.000Z"
         preferences={preferences}
         tasks={[task("inbox", "Inbox note", null)]}
-        activeSession={null}
-        calendars={[]}
-        busy={false}
-        calendarActionsAvailable={false}
-        focusActionsAvailable={false}
-        onStartFocus={() => undefined}
-        onChangeTaskStatus={async () => await Promise.resolve(true)}
-        onSubmitTimeBlock={async () => await Promise.resolve()}
-        onRemoveTimeBlock={async () => await Promise.resolve()}
+        context={listContext()}
         onViewTasks={() => undefined}
       />,
     );
@@ -108,15 +92,7 @@ describe("TodayQueue", () => {
         at="2026-08-10T15:00:00.000Z"
         preferences={preferences}
         tasks={[]}
-        activeSession={null}
-        calendars={[]}
-        busy={false}
-        calendarActionsAvailable={false}
-        focusActionsAvailable={false}
-        onStartFocus={() => undefined}
-        onChangeTaskStatus={async () => await Promise.resolve(true)}
-        onSubmitTimeBlock={async () => await Promise.resolve()}
-        onRemoveTimeBlock={async () => await Promise.resolve()}
+        context={listContext()}
         onViewTasks={() => undefined}
       />,
     );
@@ -124,69 +100,55 @@ describe("TodayQueue", () => {
   });
 });
 
-describe("TodayQueue inline edit and child tasks (issue #170)", () => {
+describe("TodayQueue inline edit and child tasks (issues #170, #194)", () => {
   const parent = task("parent", "Plan trip", null);
   const child: Task = {
     ...task("child", "Book train", null),
     parentId: "parent",
     childPosition: 1024,
   };
-  const renderWith = (extra: Record<string, unknown>) =>
+  const renderWith = (tasks: readonly Task[], context = listContext()) =>
     renderToStaticMarkup(
       <TodayQueue
         at="2026-08-10T15:00:00.000Z"
         preferences={preferences}
-        tasks={[parent, child]}
-        activeSession={null}
-        calendars={[]}
-        busy={false}
-        calendarActionsAvailable={false}
-        focusActionsAvailable={false}
-        onStartFocus={() => undefined}
-        onChangeTaskStatus={async () => await Promise.resolve(true)}
-        onSubmitTimeBlock={async () => await Promise.resolve()}
-        onRemoveTimeBlock={async () => await Promise.resolve()}
+        tasks={tasks}
+        context={context}
         onViewTasks={() => undefined}
-        {...extra}
       />,
     );
 
   it("nests a child under its listed parent instead of listing it twice", () => {
-    const markup = renderWith({ onCreateChildTask: () => Promise.resolve() });
+    const markup = renderWith([parent, child]);
     expect(markup).toContain('aria-label="Child tasks of “Plan trip”"');
-    expect(markup).toContain("1 of 1 child task open");
+    expect(markup).toContain("Hide 1 child task of “Plan trip”");
     expect(markup).toContain('aria-label="Complete “Book train”"');
-    expect(markup).not.toContain('aria-label="Start focus on “Book train”"');
-    expect(markup).toContain('aria-label="Add a child task to Plan trip"');
+    expect(markup.split('data-task-id="child"')).toHaveLength(2);
   });
 
-  it("offers an inline editor only when an edit handler is given", () => {
-    expect(renderWith({})).not.toContain('aria-label="Edit “Plan trip”"');
-    const markup = renderWith({ onSubmitTaskEdit: () => Promise.resolve() });
-    expect(markup).toContain('aria-label="Edit “Plan trip”"');
+  it("edits the title in place for the row the list names", () => {
+    expect(renderWith([parent, child])).not.toContain("task-row--editing");
+    const markup = renderWith(
+      [parent, child],
+      listContext({
+        list: {
+          selectedIds: ["parent"],
+          editingId: "parent",
+          onSelect: () => undefined,
+          onBeginEdit: () => undefined,
+          onEndEdit: () => undefined,
+          onVisibleOrderChange: () => undefined,
+        },
+      }),
+    );
+    expect(markup).toContain("task-row--editing");
+    expect(markup).toContain('aria-label="Title of “Plan trip”"');
     expect(markup).toContain('value="Plan trip"');
-    expect(markup).toContain("Save task");
+    expect(markup).toContain("task-row--selected");
   });
 
   it("lists a child as its own row when its parent is not in the queue", () => {
-    const markup = renderToStaticMarkup(
-      <TodayQueue
-        at="2026-08-10T15:00:00.000Z"
-        preferences={preferences}
-        tasks={[{ ...parent, status: "completed" }, child]}
-        activeSession={null}
-        calendars={[]}
-        busy={false}
-        calendarActionsAvailable={false}
-        focusActionsAvailable={false}
-        onStartFocus={() => undefined}
-        onChangeTaskStatus={async () => await Promise.resolve(true)}
-        onSubmitTimeBlock={async () => await Promise.resolve()}
-        onRemoveTimeBlock={async () => await Promise.resolve()}
-        onViewTasks={() => undefined}
-        onCreateChildTask={() => Promise.resolve()}
-      />,
-    );
+    const markup = renderWith([{ ...parent, status: "completed" }, child]);
     expect(markup).toContain('aria-label="Start focus on “Book train”"');
     expect(markup).not.toContain("Child tasks of");
   });

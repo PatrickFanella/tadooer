@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AppShell } from "../components/shell/AppShell.tsx";
+import { Header } from "../components/shell/Header.tsx";
 import {
   liveSyncStatusDescription,
   liveSyncStatusDot,
@@ -17,18 +17,24 @@ const statuses: readonly LiveSyncStatus[] = [
 
 const shell = (liveStatus?: LiveSyncStatus): string =>
   renderToStaticMarkup(
-    <AppShell
-      route="today"
-      onNavigate={() => undefined}
-      syncStatus="online"
-      liveStatus={liveStatus}
+    <Header
+      title="Today"
+      focus={{
+        session: null,
+        taskTitle: null,
+        clientId: null,
+        busy: false,
+        online: true,
+        timer: undefined,
+        onCommand: () => undefined,
+      }}
+      sync={{ syncStatus: "online", liveStatus, baikalConnected: false }}
       conflictCount={0}
-      baikalConnected={false}
-      formError={null}
+      commandTrigger={null}
+      ownerName="Owner"
       onSignOut={() => undefined}
-    >
-      <p>Content</p>
-    </AppShell>,
+      formError={null}
+    />,
   );
 
 describe("live sync status", () => {

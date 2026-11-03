@@ -1,6 +1,7 @@
 # Tadooer design system
 
-Status: adopted 2026-09-23 for the web app; identity section added 2026-10-02.
+Status: adopted 2026-09-23 for the web app; identity section added 2026-10-02;
+workspace shell, task row and add bar rules added 2026-11-03 (issue #194).
 The stylesheet `apps/web/src/styles.css` is the source of truth for values;
 `tokens.css` beside this file restates them as plain custom properties, and
 `examples/01-specimen.html` shows them without the app. The Studio brand pack
@@ -175,8 +176,61 @@ cached or empty state rather than a placeholder that never resolves.
 
 ## Component rules
 
-- Pages use `PageHeader`, `Card`, `SectionHeading`, and `EmptyState`; controls
-  use the primitives in `components/ui`.
+- The frame (issue #194) is a desktop layout: a 15rem sidebar on `--mantle`
+  that collapses to a 3rem icon rail (remembered per browser under
+  `tadooer.sidebar:collapsed`), a 2.75rem header spanning the main and
+  detail columns, the main column at 56rem, and a 22rem detail column on
+  `--surface-0` that exists only while one task is selected. Below 64rem the
+  sidebar is the scrolling row and the detail panel is a bottom `Sheet`. The
+  components are `WorkspaceShell`, `Sidebar`, `Header`, `FocusStrip`,
+  `SyncIndicator` and `TaskDetailPanel` under `components/shell`.
+- The sidebar lists Today, Inbox, Planner, Tasks, Boards and Habits, then
+  Projects and Tags as navigable contexts (`/projects/<id>`, `/tags/<id>`;
+  the Tasks list with that filter fixed and its dropdown hidden), then
+  Records and Setup (issue #175). Today and Inbox carry open-task counts;
+  every project and tag shows its swatch and count. Groups remember their
+  state under `tadooer.sidebar-group:<id>` and open while they hold the
+  current location. The command bar lists the same contexts.
+- The header holds the view title, the focus strip (title, countdown in
+  `--pink` with a 1.5px underline while running, pause, break and complete;
+  "No session" otherwise; a follower sees Take over), one sync dot coloured
+  by the worst of task sync, live updates and Baikal with the three states
+  as text in a status region and in a popover, a conflict badge only when
+  conflicts need action, the command bar trigger and the account menu.
+- Task rows (`TaskRow`) are one line at 2.25rem: a round complete toggle,
+  the title, metadata in mono (`Overdue` or planned time, estimate as
+  `45m`, `due Fri` within a week), the project chip with its swatch, up to
+  three tag chips with `+n`, and actions that appear on hover, focus or
+  selection: Start focus (a `Running` badge when the task owns the session),
+  Schedule (a popover with the time block form, only while calendar actions
+  are available), day-order arrows where a saved order exists, and a menu
+  with Edit title, Add child task, Save as template, Archive and Delete.
+  Clicking the body selects (`--primary-tint` fill, 2px `--purple` bar,
+  `aria-selected`, roving tab stop); Shift extends and Ctrl toggles; two or
+  more selected rows replace the add bar with the bulk bar (Complete,
+  Archive, Delete, Move to project), which runs the per-task writes in order
+  and names the first failure. Double-click, Enter or the menu edit the title
+  in place; Escape restores it. Children nest one level under a chevron;
+  a child whose parent is filtered out renders at top level without indent.
+- The add bar (`AddTaskBar`) is one input pinned to the top of Today, Inbox,
+  Tasks and the context routes, with More for notes, estimate, new-tag
+  consent and the markers switch. Markers are on by default while online
+  (issue #184) and remembered under `tadooer.capture:markers`; offline, the
+  bar says "Offline: plain capture". "Paste a list" opens a dialog; the
+  captured-links preference lives in Settings.
+- The detail panel shows the selected task: an in-place title, Start focus,
+  then Plan (planned day and time, time block, estimate and deadline),
+  Organize (project, tags, placement), Notes (rendered, with an edit
+  toggle), Child tasks, Checklist, Links and Recurrence (the last two need a
+  session token), and a footer with Save as template, Archive and Delete.
+  Escape or the close button clears the selection.
+- Keyboard: ArrowUp and ArrowDown move the selection through the visible
+  order, Enter edits the title, D completes, Y toggles focus, S opens the
+  schedule in the panel, Shift+N adds a child, O opens details, Delete
+  deletes, Escape clears, Shift+A focuses the add bar. Every binding is
+  owner-editable in Settings; unmodified keys stay inert in inputs.
+- Other pages use `PageHeader`, `Card`, `SectionHeading`, and `EmptyState`;
+  controls use the primitives in `components/ui`.
 - Use `Button` variants for primary, secondary, ghost, and destructive actions.
   Set `type="button"` for actions inside a form that do not submit it.
 - `NativeSelect` preserves native form submission. Named `Checkbox` controls
@@ -184,20 +238,14 @@ cached or empty state rather than a placeholder that never resolves.
 - Associate each `FieldLabel` with a unique control ID.
 - Use `Alert` for feedback and `Badge` for compact state labels. Preserve
   explicit status and alert roles where they convey asynchronous updates.
-- Task rows retain their workflow-specific layout and overdue/focus indicators.
 - The Tasks page has two sections selected by tabs in the page header and
-  kept in the URL (issue #171): **Tasks** (`/tasks`) holds the filter bar,
-  saved views, sections and the list, with recently deleted tasks behind a
-  disclosure; **Organize** (`/tasks/organize`) holds project and tag
-  creation, lifecycle and appearance, sidebar folders and recurring series.
-  Configuration never shares a scroll with the list. Settings stays for
-  owner preferences and connections, not for records.
-- The sidebar (issue #175) lists the daily views flat and keeps Records
-  (History, Worklog, Counters, Reuse) and Setup (Connections, Settings) in
-  collapsible groups that open while their view is current. Empty Today
-  sections are omitted, and the Tasks list keeps the saved view and each
-  row's child-task form behind disclosures. The route audit and screenshots
-  are in [information-architecture.md](information-architecture.md).
+  kept in the URL (issue #171): **Tasks** (`/tasks`) holds the add bar, the
+  filter bar, saved views, sections and the list, with recently deleted
+  tasks behind a disclosure; **Organize** (`/tasks/organize`) holds project
+  and tag creation, lifecycle and appearance, sidebar folders and recurring
+  series. Configuration never shares a scroll with the list. Settings stays
+  for owner preferences and connections, not for records. The route audit
+  and screenshots are in [information-architecture.md](information-architecture.md).
 - A board's Gitea project (issue #174, ADR 0054) lives in a disclosure under
   the board's header, closed until a mapping exists. Sync results list moved
   tasks and conflicts in plain sentences; a conflict is never auto-resolved.
@@ -205,8 +253,8 @@ cached or empty state rather than a placeholder that never resolves.
   data type, no library: the unplanned-tasks drawer's rows are draggable,
   planner days and board panels are drop targets with a dashed purple
   outline while hovered. Every drop has an equivalent control: the drawer's
-  select-and-place form, the day-order Up/Down buttons and the board Move
-  button, so nothing depends on a pointer. A drop on a board runs the same
+  select-and-place form, the day-order arrows on Today rows and the board
+  Move button, so nothing depends on a pointer. A drop on a board runs the same
   previewed move as the button. dnd-kit was considered and left out until a
   reorder-by-drag need appears; the native API covers placement.
 - The Planner uses a day, three-day, or week time grid with separate all-day

@@ -9,6 +9,8 @@ import {
 } from "./TaskHierarchy.tsx";
 import { createTaskHierarchyActions } from "./task-hierarchy-actions.ts";
 import { TasksPage, type TasksPageProps } from "../../pages/TasksPage.tsx";
+import { TaskDetailPanel } from "../shell/TaskDetailPanel.tsx";
+import { noopActions, noopList } from "./test-support.ts";
 
 const task = (id: string, extra: Partial<Task> = {}): Task => ({
   id,
@@ -158,8 +160,6 @@ it("nests children under their parent and keeps filtered-out parents' children v
     recovery: [],
     projects: [],
     tags: [],
-    subtasks: {},
-    provenance: {},
     baikalCalendars: [],
     taskQuery: "",
     taskStatusFilter: "all",
@@ -172,27 +172,46 @@ it("nests children under their parent and keeps filtered-out parents' children v
     onTaskProjectFilterChange: noop,
     onTaskTagFilterChange: noop,
     onSubmitOrganization: noop,
-    onSubmitTaskEdit: noop,
-    onSubmitTimeBlock: noop,
-    onRemoveTimeBlock: noop,
-    onSubmitTaskOrganization: noop,
-    onSubmitSubtask: noop,
-    onChangeSubtask: noop,
-    onSaveTaskAsTemplate: noop,
-    onChangeTaskStatus: noop,
-    onRemoveTask: noop,
     onRecoverTask: noop,
-    onCreateChildTask: noop,
-    onMoveTask: noop,
+    actions: noopActions,
+    list: noopList,
   } satisfies TasksPageProps;
-  const nested = renderToStaticMarkup(<TasksPage {...props} editorsOpen />);
+  const nested = renderToStaticMarkup(<TasksPage {...props} />);
   const list = nested.slice(nested.indexOf("Plan trip"));
   expect(list.indexOf("Book train")).toBeLessThan(list.indexOf("Book hotel"));
-  expect(nested).toContain('class="task--child"');
+  expect(nested).toContain("task-row--child");
+  expect(nested).toContain('aria-label="Child tasks of “Plan trip”"');
   // Filtering out the parent leaves its matching child at top level.
   const filtered = renderToStaticMarkup(
-    <TasksPage {...props} visibleTasks={[second]} editorsOpen />,
+    <TasksPage {...props} visibleTasks={[second]} />,
   );
   expect(filtered).toContain("Book hotel");
-  expect(filtered).toContain("Child of &quot;Plan trip&quot;");
+  expect(filtered).not.toContain("task-row--child");
+  // The placement sits in the detail panel (issue #194).
+  const panel = renderToStaticMarkup(
+    <TaskDetailPanel
+      task={second}
+      tasks={[parent, other, first, second]}
+      projects={[]}
+      tags={[]}
+      subtasks={[]}
+      provenance={undefined}
+      calendars={[]}
+      timeZone="UTC"
+      today="2026-09-24"
+      busy={false}
+      online={false}
+      csrfToken={undefined}
+      calendarActionsAvailable={false}
+      focusState="idle"
+      focusActionsAvailable={false}
+      actions={noopActions}
+      onSubmitTaskEdit={noop}
+      onSubmitTaskOrganization={noop}
+      onSubmitSubtask={noop}
+      onChangeSubtask={noop}
+      onClose={noop}
+    />,
+  );
+  expect(panel).toContain("Child of &quot;Plan trip&quot;");
 });
