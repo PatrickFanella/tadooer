@@ -1,6 +1,6 @@
 # Release candidate 0.15.0-rc.1 qualification, 2026-09-29
 
-Issue: [#37](https://git.subcult.tv/PatrickFanella/productivity-suite/issues/37).
+Issue: [#37](https://git.subcult.tv/subculture-collective/tadooer/issues/37).
 This candidate is built and rehearsed. It is **not deployed**. Production and
 its soak were read, not changed.
 
