@@ -231,7 +231,8 @@ jobs:
           unzip -q "$tools" -d "$ANDROID_HOME/cmdline-tools"
           mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$sdk" --licenses >/dev/null
+          # Tools 23 accept the SDK licence themselves and read no input; piping
+          # `yes` into them ends in SIGPIPE, which pipefail turns into a failure.
           "$sdk" --install "platforms;android-36" "platform-tools" "build-tools;35.0.0" >/dev/null
 
       - name: Install dependencies
