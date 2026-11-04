@@ -924,6 +924,9 @@ export const getSyncSnapshot = async (
     if (changed) continue;
     return {
       snapshots,
+      ...(page.contentGeneration === undefined
+        ? {}
+        : { contentGeneration: page.contentGeneration }),
       nextCursor: page.nextCursor,
       hasMore: false,
       protocolVersion: 2 as const,

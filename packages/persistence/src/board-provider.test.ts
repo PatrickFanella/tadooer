@@ -70,7 +70,7 @@ describe("board provider mappings (issue #174)", () => {
   it("stores one mapping per board, scoped to the owner", async () => {
     await withTemporaryDirectory((directory) => {
       const { db, connectionId, board } = setup(join(directory, "a.sqlite"));
-      expect(db.state().appliedMigrationCount).toBe(53);
+      expect(db.state().appliedMigrationCount).toBe(54);
       const panel = board.panels[1];
       if (panel === undefined) throw new Error("kanban has three panels");
       const mapping = mappingFor(board.id, connectionId, panel.id);

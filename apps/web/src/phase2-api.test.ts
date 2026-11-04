@@ -226,6 +226,7 @@ describe("Phase 2 API transport", () => {
                     },
                   ]
                 : [],
+            contentGeneration: "6519c805-e478-486b-a918-616fc6d9ea98",
             nextCursor: "sync-v1.epoch.2.tag",
             hasMore: calls.length === 1,
             protocolVersion: 2 as const,
@@ -242,6 +243,7 @@ describe("Phase 2 API transport", () => {
       "/api/sync/snapshot?offset=1",
     ]);
     expect(snapshot).toMatchObject({
+      contentGeneration: "6519c805-e478-486b-a918-616fc6d9ea98",
       nextCursor: "sync-v1.epoch.2.tag",
       hasMore: false,
     });
