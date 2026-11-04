@@ -157,6 +157,7 @@ describe("Suite HTTP server", () => {
       const webRoot = join(directory, "web");
       await mkdir(webRoot);
       await writeFile(join(webRoot, "index.html"), "<h1>Suite shell</h1>");
+      await writeFile(join(webRoot, "og.png"), "png");
 
       const config: ServerConfig = {
         host: "127.0.0.1",
@@ -214,6 +215,9 @@ describe("Suite HTTP server", () => {
           shell.headers.get("content-security-policy"),
         );
         expect(await secondShell.text()).toContain("Suite shell");
+
+        const preview = await fetch(`${server.baseUrl}/og.png`);
+        expect(preview.headers.get("content-type")).toBe("image/png");
 
         const missingApi = await fetch(`${server.baseUrl}/api/nope`);
         expect(missingApi.status).toBe(404);
