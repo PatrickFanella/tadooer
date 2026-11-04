@@ -655,10 +655,11 @@
     },
     {
       "id": "feeds",
-      "action": "Read-only calendar feed create/list/revoke",
+      "action": "Read-only calendar feed create/list/revoke and busy-only preview",
       "webApi": [
         "listCalendarFeeds",
         "createCalendarFeed",
+        "previewCalendarFeed",
         "revokeCalendarFeed"
       ],
       "catalog": ["calendar_feeds.list", "calendar_feeds.revoke"],
