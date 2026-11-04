@@ -2,12 +2,15 @@ import { useEffect, useState, type SyntheticEvent } from "react";
 import type {
   CalendarCollection,
   CalendarFeedCapability,
+  CalendarFeedPreviewResponse,
+  CalendarFeedVisibility,
   CalendarImportJob,
 } from "@suite/contracts";
 import {
   applyCalendarImport,
   createCalendarFeed,
   listCalendarFeeds,
+  previewCalendarFeed,
   previewCalendarImport,
   revokeCalendarFeed,
 } from "./api.ts";
@@ -19,6 +22,10 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useLiveRevision } from "./live-sync/views.ts";
+import {
+  FeedRecipientPreview,
+  feedVisibilityLabel,
+} from "./components/FeedRecipientPreview.tsx";
 
 const maximumCalendarFileBytes = 4 * 1024 * 1024;
 
@@ -58,10 +65,30 @@ export const CalendarMigration = ({
   const [importActivity, setImportActivity] = useState<
     "reading" | "previewing" | "applying" | null
   >(null);
+  const [feedCalendarId, setFeedCalendarId] = useState(calendars[0]?.id ?? "");
+  const [feedVisibility, setFeedVisibility] =
+    useState<CalendarFeedVisibility>("busy");
+  const [feedPreview, setFeedPreview] =
+    useState<CalendarFeedPreviewResponse | null>(null);
   const liveFeeds = useLiveRevision("calendarFeeds");
   useEffect(() => {
     void listCalendarFeeds().then(({ capabilities }) => setFeeds(capabilities));
   }, [liveFeeds]);
+  useEffect(() => {
+    if (!calendars.some((calendar) => calendar.id === feedCalendarId))
+      setFeedCalendarId(calendars[0]?.id ?? "");
+  }, [calendars, feedCalendarId]);
+  useEffect(() => {
+    setFeedPreview(null);
+    if (feedCalendarId === "") return;
+    let current = true;
+    void previewCalendarFeed(feedCalendarId).then((result) => {
+      if (current) setFeedPreview(result);
+    });
+    return () => {
+      current = false;
+    };
+  }, [feedCalendarId, liveFeeds]);
   const previewImport = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage(null);
@@ -156,6 +183,7 @@ export const CalendarMigration = ({
     const result = await createCalendarFeed(
       value(data, "calendarId"),
       value(data, "label"),
+      feedVisibility,
       csrfToken,
     );
     setFeeds([...feeds, result.capability]);
@@ -310,7 +338,13 @@ export const CalendarMigration = ({
       <form onSubmit={(event) => void issueFeed(event)}>
         <Field className="field">
           <FieldLabel htmlFor="feed-calendar">Published calendar</FieldLabel>
-          <NativeSelect id="feed-calendar" name="calendarId" required>
+          <NativeSelect
+            id="feed-calendar"
+            name="calendarId"
+            required
+            value={feedCalendarId}
+            onChange={(event) => setFeedCalendarId(event.currentTarget.value)}
+          >
             {calendars.map((calendar) => (
               <option key={calendar.id} value={calendar.id}>
                 {calendar.displayName}
@@ -322,6 +356,33 @@ export const CalendarMigration = ({
           <FieldLabel htmlFor="feed-label">Feed label</FieldLabel>
           <Input id="feed-label" name="label" required maxLength={100} />
         </Field>
+        <fieldset className="grid gap-1">
+          <legend className="text-sm font-medium">What recipients see</legend>
+          {(["busy", "full"] as const).map((option) => (
+            <label key={option} className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="visibility"
+                value={option}
+                checked={feedVisibility === option}
+                onChange={() => setFeedVisibility(option)}
+              />
+              {option === "busy"
+                ? "Busy only: when you're occupied, nothing else"
+                : "Full details: every event as stored"}
+            </label>
+          ))}
+        </fieldset>
+        <FeedRecipientPreview
+          visibility={feedVisibility}
+          preview={
+            feedPreview?.calendarId === feedCalendarId ? feedPreview : null
+          }
+        />
+        <p className="hint">
+          A feed keeps this choice. To change it, create a new feed and revoke
+          the old one.
+        </p>
         <Button>Create revocable read-only feed</Button>
       </form>
       {issuedUrl !== null && (
@@ -337,7 +398,8 @@ export const CalendarMigration = ({
       <ul>
         {feeds.map((feed) => (
           <li key={feed.id}>
-            {feed.label} · {feed.revokedAt === null ? "active" : "revoked"}
+            {feed.label} · {feedVisibilityLabel(feed.visibility)} ·{" "}
+            {feed.revokedAt === null ? "active" : "revoked"}
             {feed.revokedAt === null && (
               <Button
                 type="button"

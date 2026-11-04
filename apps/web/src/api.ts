@@ -63,6 +63,8 @@ import {
   calendarFeedCreateRequestSchema,
   calendarFeedCreateResponseSchema,
   calendarFeedListResponseSchema,
+  calendarFeedPreviewResponseSchema,
+  type CalendarFeedVisibility,
   googleAuthorizationResponseSchema,
   googleConnectorStatusResponseSchema,
   googleSyncResponseSchema,
@@ -1483,15 +1485,23 @@ export const listCalendarFeeds = () =>
 export const createCalendarFeed = (
   calendarId: string,
   label: string,
+  visibility: CalendarFeedVisibility,
   csrfToken: string,
 ) =>
   request("/api/calendar-feeds", calendarFeedCreateResponseSchema, {
     method: "POST",
     headers: { "X-CSRF-Token": csrfToken },
     body: JSON.stringify(
-      calendarFeedCreateRequestSchema.parse({ calendarId, label }),
+      calendarFeedCreateRequestSchema.parse({ calendarId, label, visibility }),
     ),
   });
+
+/** Issue #189: what full and busy-only feeds of a calendar would publish now. */
+export const previewCalendarFeed = (calendarId: string) =>
+  request(
+    `/api/calendars/${calendarId}/feed-preview`,
+    calendarFeedPreviewResponseSchema,
+  );
 
 export const revokeCalendarFeed = (id: string, csrfToken: string) =>
   requestEmpty(`/api/calendar-feeds/${id}`, {

@@ -152,6 +152,7 @@ const feedBody = (
     database.getOwnedCalendar(record.ownerId, record.calendarId)?.displayName ??
     null,
   label: record.label,
+  visibility: record.visibility,
   createdAt: record.createdAt,
   revokedAt: record.revokedAt,
   active: record.revokedAt === null,
