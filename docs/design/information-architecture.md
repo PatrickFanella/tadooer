@@ -29,9 +29,13 @@ views and Records. A project or tag opens `/projects/<id>` or `/tags/<id>`,
 which renders the Tasks list with that filter fixed and the matching
 dropdown hidden; `/tasks` still means every task. The add bar sits at the
 top of Today, Inbox, Tasks and the context routes, and a selected row opens
-the detail panel in a third column (a bottom sheet on phones). The
+the detail panel in a third column (a bottom sheet on phones). Most
 screenshots below predate that change and show the card layout; the rows
 and headings they document are now `TaskRow` lists under eyebrow headings.
+The Planner, Boards and Settings screenshots and the Planner phone
+screenshot were retaken for issue #196, where every route lost its card
+stack and second page title, and Planner and Boards open a task in the
+detail panel.
 
 ## Audit by route
 

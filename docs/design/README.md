@@ -229,8 +229,18 @@ cached or empty state rather than a placeholder that never resolves.
   schedule in the panel, Shift+N adds a child, O opens details, Delete
   deletes, Escape clears, Shift+A focuses the add bar. Every binding is
   owner-editable in Settings; unmodified keys stay inert in inputs.
-- Other pages use `PageHeader`, `Card`, `SectionHeading`, and `EmptyState`;
-  controls use the primitives in `components/ui`.
+- The shell header's `h1` is the only page title (issue #196). A view opens
+  with `ViewIntro`: a one-line description and its actions, no heading.
+- Views group content in `ViewSection` (`ViewSectionHeader`,
+  `ViewSectionBody`): a `section` on `--base` with a `SectionHeading` `h2` and
+  a bottom `--line`, not a bordered card. Rows and panels inside keep
+  `--surface-0`. `Card` stays for contained objects, not page sections.
+- A task title shown outside the task lists (Planner day order, the
+  unplanned drawer, board panels) is a `TaskTitleButton` that opens the task
+  in the detail panel. On Planner, a task entry or a calendar block linked to
+  a task opens the panel; a plain event opens the Planner's details sheet.
+- Use `SectionHeading` and `EmptyState` inside sections; controls use the
+  primitives in `components/ui`.
 - Use `Button` variants for primary, secondary, ghost, and destructive actions.
   Set `type="button"` for actions inside a form that do not submit it.
 - `NativeSelect` preserves native form submission. Named `Checkbox` controls
