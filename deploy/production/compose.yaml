@@ -25,7 +25,8 @@ services:
     volumes:
       - /srv/apps/productivity/data/tadooer:/data
     tmpfs:
-      - /tmp:size=16m,mode=1777
+      # Allow SQLite to retain rollback data for large atomic content resets.
+      - /tmp:size=128m,mode=1777
     networks:
       productivity: {}
       tadooer-baikal: {}

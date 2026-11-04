@@ -145,7 +145,7 @@ rehearse_start() {
   local out=""
   docker rm -f "$REHEARSAL" >/dev/null 2>&1 || true
   docker run -d --name "$REHEARSAL" --network none --read-only --user 1000:1000 --cap-drop ALL \
-    --security-opt no-new-privileges:true --tmpfs /tmp:size=16m,mode=1777 -v "$WORK/data:/data" \
+    --security-opt no-new-privileges:true --tmpfs /tmp:size=128m,mode=1777 -v "$WORK/data:/data" \
     -e SUITE_PUBLIC_ORIGIN=http://127.0.0.1:8080 -e SUITE_CREDENTIAL_KEY_PATH=/data/credential.key \
     -e SUITE_CALENDAR_BRIDGE_WORKER=false "$1" >/dev/null
   for _ in $(seq 1 90); do
