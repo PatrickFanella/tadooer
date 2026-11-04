@@ -2318,6 +2318,24 @@
   .task-row--selected:hover {
     background: color-mix(in srgb, var(--purple) 18%, var(--surface-0));
   }
+  /* Issue #196: a task title outside the task lists that opens the panel. */
+  .task-title-button {
+    all: unset;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+  }
+  .task-title-button:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+  .task-title-button:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+  .board-panel-tasks > li[data-selected] {
+    background: var(--primary-tint);
+    box-shadow: inset 2px 0 0 var(--purple);
+  }
   .task-row__main {
     display: flex;
     align-items: center;
@@ -2791,9 +2809,18 @@
       padding: 0.4rem max(var(--spacing-page), env(safe-area-inset-right, 0px))
         0.4rem max(var(--spacing-page), env(safe-area-inset-left, 0px));
     }
-    .header__account,
-    .header__title {
+    .header__account {
       display: none;
+    }
+    /* Issue #196: the sidebar row marks the view; the title stays the
+       page's only h1 for assistive technology. */
+    .header__title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
     .focus-strip {
       justify-content: flex-start;

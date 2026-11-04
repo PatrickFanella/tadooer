@@ -19,14 +19,18 @@ import {
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import {
   NativeSelect,
   NativeSelectOption,
 } from "../components/ui/native-select.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import {
   addTimeEntry,
   canEditEntry,
@@ -155,8 +159,8 @@ export const WorklogView = ({
           );
           return (
             <li key={day.date}>
-              <Card>
-                <CardHeader>
+              <ViewSection>
+                <ViewSectionHeader>
                   <h3>
                     {dayLabel(day.date)} · {formatClockDuration(day.totalMs)}
                   </h3>
@@ -171,8 +175,8 @@ export const WorklogView = ({
                         : ` (${formatClockDuration(day.breakMs)})`}
                     </p>
                   )}
-                </CardHeader>
-                <CardContent>
+                </ViewSectionHeader>
+                <ViewSectionBody>
                   <ul
                     className="worklog-entries"
                     aria-label={`Entries on ${day.date}`}
@@ -291,17 +295,17 @@ export const WorklogView = ({
                       );
                     })}
                   </ul>
-                </CardContent>
-              </Card>
+                </ViewSectionBody>
+              </ViewSection>
             </li>
           );
         })}
       </ul>
-      <Card>
-        <CardHeader>
+      <ViewSection>
+        <ViewSectionHeader>
           <h3>Tasks</h3>
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           <table className="worklog-table">
             <thead>
               <tr>
@@ -332,13 +336,13 @@ export const WorklogView = ({
               ))}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
+        </ViewSectionBody>
+      </ViewSection>
+      <ViewSection>
+        <ViewSectionHeader>
           <h3>Projects</h3>
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           <table className="worklog-table">
             <thead>
               <tr>
@@ -357,8 +361,8 @@ export const WorklogView = ({
               ))}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
     </>
   );
 };
@@ -556,9 +560,8 @@ export const WorklogPage = ({
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="worklog-heading"
     >
-      <PageHeader
+      <ViewIntro
         id="worklog-heading"
-        title="Worklog"
         description="Tracked time by day, task and project: focus sessions, imported Super Productivity history and manual entries. Days follow your planning time zone."
       />
       {!online && (
@@ -583,8 +586,8 @@ export const WorklogPage = ({
           <AlertDescription>{state.notice}</AlertDescription>
         </Alert>
       )}
-      <Card>
-        <CardHeader>
+      <ViewSection>
+        <ViewSectionHeader>
           <div className="worklog-controls">
             <label className="field">
               Period
@@ -634,8 +637,8 @@ export const WorklogPage = ({
               Export CSV
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           <form className="worklog-add" aria-label="Add time" onSubmit={add}>
             <label className="field">
               Task
@@ -697,8 +700,8 @@ export const WorklogPage = ({
             time that kept running. A day&apos;s time on a task stays between 0
             and 24 hours.
           </p>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
       {report !== null && (
         <WorklogView
           report={report}

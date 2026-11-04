@@ -15,8 +15,12 @@ import { GooglePlanning } from "../google-planning.tsx";
 import { NotificationSettings } from "../notification-settings.tsx";
 import { FocusSettings, type FocusSettingsProps } from "../focus-settings.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 import {
   liveSyncStatusDescription,
@@ -88,10 +92,7 @@ export const SettingsPage = ({
 }: SettingsPageProps) => {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader
-        title="Settings"
-        description="Preferences, reminders, your data and sync."
-      />
+      <ViewIntro description="Preferences, reminders, your data and sync." />
       {google !== undefined &&
         planningPreferences !== undefined &&
         dayPlan !== undefined &&
@@ -143,18 +144,18 @@ export const SettingsPage = ({
         />
       )}
       {csrfToken !== undefined && (
-        <Card aria-labelledby="capture-links-title">
-          <CardHeader>
+        <ViewSection aria-labelledby="capture-links-title">
+          <ViewSectionHeader>
             <SectionHeading
               id="capture-links-title"
               title="Captured links"
               eyebrow="Capture"
             />
-          </CardHeader>
-          <CardContent>
+          </ViewSectionHeader>
+          <ViewSectionBody>
             <CaptureLinkPreference csrfToken={csrfToken} />
-          </CardContent>
-        </Card>
+          </ViewSectionBody>
+        </ViewSection>
       )}
       {csrfToken !== undefined && onRestored !== undefined && (
         <DataExportRestore
@@ -178,15 +179,15 @@ export const SettingsPage = ({
       >
         Sync now
       </Button>
-      <Card aria-labelledby="settings-health-title">
-        <CardHeader>
+      <ViewSection aria-labelledby="settings-health-title">
+        <ViewSectionHeader>
           <SectionHeading
             as="h3"
             id="settings-health-title"
             title="Client and service health"
           />
-        </CardHeader>
-        <CardContent className="grid gap-3">
+        </ViewSectionHeader>
+        <ViewSectionBody className="grid gap-3">
           <dl className="settings-health">
             <div>
               <dt>Task sync</dt>
@@ -221,8 +222,8 @@ export const SettingsPage = ({
           >
             Export redacted sync diagnostics
           </Button>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
     </div>
   );
 };

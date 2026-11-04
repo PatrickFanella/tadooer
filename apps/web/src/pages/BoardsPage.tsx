@@ -11,6 +11,7 @@ import {
   draggedTaskId,
   useDrawerOpen,
 } from "../components/tasks/UnplannedTasksDrawer.tsx";
+import { TaskTitleButton } from "../components/tasks/TaskTitleButton.tsx";
 import {
   ApiRequestError,
   boardMarkerSchema,
@@ -34,13 +35,17 @@ import {
 import { BoardProviderSection } from "../components/boards/BoardProviderSection.tsx";
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import { LoadingList } from "../components/ui/loading-list.tsx";
 import { NativeSelect } from "../components/ui/native-select.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 import { useLiveRefetch } from "../live-sync/views.ts";
 
@@ -56,6 +61,10 @@ export interface BoardsPageProps {
   readonly tasks: readonly Task[];
   readonly projects: readonly Project[];
   readonly tags: readonly Tag[];
+  /** Issue #196: the task open in the detail panel, if any. */
+  readonly selectedTaskId?: string | null;
+  /** Issue #196: opens a task in the detail panel. */
+  readonly onSelectTask?: (task: Task) => void;
 }
 
 const emptyFilter: BoardPanelFilter = {
@@ -404,6 +413,8 @@ export const BoardsPage = ({
   tasks,
   projects,
   tags,
+  selectedTaskId = null,
+  onSelectTask,
 }: BoardsPageProps) => {
   const [boards, setBoards] = useState<readonly Board[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -684,8 +695,7 @@ export const BoardsPage = ({
 
   return (
     <div className={drawerOpen ? "page-with-drawer" : "contents"}>
-      <PageHeader
-        title="Boards"
+      <ViewIntro
         description="Filtered panels with an optional manual order. Moving a task into a panel changes its tags, markers, state or project; the change list is shown first."
         actions={
           <Button
@@ -711,11 +721,11 @@ export const BoardsPage = ({
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       )}
-      <Card aria-labelledby="board-list-title">
-        <CardHeader>
+      <ViewSection aria-labelledby="board-list-title">
+        <ViewSectionHeader>
           <SectionHeading id="board-list-title" as="h2" title="Your boards" />
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           {boards.length === 0 ? (
             <EmptyState title="No boards yet. Add a template or a blank board." />
           ) : (
@@ -779,11 +789,11 @@ export const BoardsPage = ({
             </label>
             <Button disabled={busy || !online}>Add board</Button>
           </form>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
       {selected !== null && draft === null && (
-        <Card aria-labelledby="board-view-title">
-          <CardHeader>
+        <ViewSection aria-labelledby="board-view-title">
+          <ViewSectionHeader>
             <SectionHeading
               id="board-view-title"
               as="h2"
@@ -799,8 +809,8 @@ export const BoardsPage = ({
                 </small>
               </p>
             </SectionHeading>
-          </CardHeader>
-          <CardContent>
+          </ViewSectionHeader>
+          <ViewSectionBody>
             <BoardProviderSection
               boardId={selected.id}
               panels={selected.panels}
@@ -887,8 +897,22 @@ export const BoardsPage = ({
                               )?.id ??
                               "";
                             return (
-                              <li key={taskId}>
-                                <strong>{title}</strong>
+                              <li
+                                key={taskId}
+                                data-selected={
+                                  taskId === selectedTaskId ? "" : undefined
+                                }
+                              >
+                                {task === undefined ? (
+                                  <strong>{title}</strong>
+                                ) : (
+                                  <TaskTitleButton
+                                    task={task}
+                                    onSelect={onSelectTask}
+                                  >
+                                    <strong>{title}</strong>
+                                  </TaskTitleButton>
+                                )}
                                 {task?.status === "completed" && (
                                   <small> · Completed</small>
                                 )}
@@ -981,19 +1005,19 @@ export const BoardsPage = ({
                 })}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </ViewSectionBody>
+        </ViewSection>
       )}
       {selected !== null && draft !== null && (
-        <Card aria-labelledby="board-edit-title">
-          <CardHeader>
+        <ViewSection aria-labelledby="board-edit-title">
+          <ViewSectionHeader>
             <SectionHeading
               id="board-edit-title"
               as="h2"
               title={`Edit ${selected.title}`}
             />
-          </CardHeader>
-          <CardContent>
+          </ViewSectionHeader>
+          <ViewSectionBody>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -1130,8 +1154,8 @@ export const BoardsPage = ({
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+          </ViewSectionBody>
+        </ViewSection>
       )}
       {drawerOpen && (
         <UnplannedTasksDrawer
@@ -1149,6 +1173,7 @@ export const BoardsPage = ({
           available={online && selected !== null}
           busy={busy}
           onPlace={(task, panelId) => move(task.id, panelId)}
+          onSelectTask={onSelectTask}
           onClose={() => setDrawerOpen(false)}
         />
       )}
