@@ -42,8 +42,13 @@ the release tag names the server version.
 
 ## The deploy on nuc
 
-The `server` job holds one SSH key, stored as the repository secret
-`NUC_DEPLOY_KEY` with nuc's host key in `NUC_KNOWN_HOSTS`. On nuc the key's
+The `server` job holds one SSH key, stored base64-encoded on one line as the
+repository secret `NUC_DEPLOY_KEY_B64`, with nuc's host key in
+`NUC_KNOWN_HOSTS`. Keep every secret on one line: the runner prints each
+step's environment, and Gitea masks a secret only where the printed text
+matches it exactly. The first key was stored with its line breaks, appeared in
+the `server` job logs of the public repository, and was replaced on
+2026-11-04. On nuc the key's
 `authorized_keys` entry is
 `restrict,from="10.0.0.50",command="/usr/local/sbin/tadooer-release-ssh"`: it
 works only from Kvant (both CI runners leave through Kvant's address) and can
@@ -53,6 +58,9 @@ run only:
   label and pushes it to nuc's registry `127.0.0.1:5000`;
 - `deploy <version> <revision>`: the release itself;
 - `status`: the public build and readiness.
+
+A version is "already live" when the running image carries the same version
+and revision labels; a rebuild of the same tag gets a new digest.
 
 `deploy` (`deploy/production/tadooer-release.sh`, installed as
 `/usr/local/sbin/tadooer-release`) does what the per-release scripts did up to

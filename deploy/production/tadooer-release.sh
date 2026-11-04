@@ -32,6 +32,7 @@ die() {
 valid_version() { [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]]; }
 valid_revision() { [[ $1 =~ ^[0-9a-f]{40}$ ]]; }
 label() { docker image inspect "$1" --format "{{index .Config.Labels \"$2\"}}"; }
+container_label() { docker inspect "$CONTAINER" --format "{{index .Config.Labels \"$1\"}}"; }
 fingerprint() { python3 "$LIB/fingerprint.py" "$1"; }
 registry_digest() {
   docker image inspect "$1" --format '{{range .RepoDigests}}{{println .}}{{end}}' |
@@ -352,8 +353,12 @@ deploy() {
   [ "$(label "$NEW" org.opencontainers.image.version)" = "$VERSION" ] || die "image version label mismatch"
   [ "$(label "$NEW" org.opencontainers.image.revision)" = "$REVISION" ] || die "image revision label mismatch"
   OLD=$(docker inspect "$CONTAINER" --format '{{.Config.Image}}')
-  if [ "$OLD" = "$NEW" ]; then
-    echo "already deployed: $NEW"
+  # A rebuilt image has a new digest; the labels say what it was built from.
+  # The container's config holds its image's labels, even when that image's
+  # registry name now points at a rebuild.
+  if [ "$(container_label org.opencontainers.image.version)" = "$VERSION" ] &&
+    [ "$(container_label org.opencontainers.image.revision)" = "$REVISION" ]; then
+    echo "already deployed: $VERSION ($REVISION) as $OLD"
     status
     return 0
   fi
