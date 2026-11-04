@@ -2519,16 +2519,35 @@ export const calendarImportMutationResponseSchema = z.object({
   job: calendarImportJobSchema,
   replayed: z.boolean(),
 });
+/**
+ * What a feed recipient receives (issue #189, ADR 0055). `full` publishes the
+ * stored events as they are; `busy` publishes occupied intervals only. Fixed
+ * at creation, so an existing capability never broadens its exposure.
+ */
+export const calendarFeedVisibilitySchema = z.enum(["full", "busy"]);
 export const calendarFeedCreateRequestSchema = z.object({
   calendarId: entityIdSchema,
   label: z.string().trim().min(1).max(100),
+  visibility: calendarFeedVisibilitySchema.default("full"),
 });
 export const calendarFeedCapabilitySchema = z.object({
   id: entityIdSchema,
   calendarId: entityIdSchema,
   label: z.string(),
+  visibility: calendarFeedVisibilitySchema,
   createdAt: z.iso.datetime(),
   revokedAt: z.iso.datetime().nullable(),
+});
+/** Owner-only preview of what a feed of each visibility would publish now. */
+export const calendarFeedPreviewResponseSchema = z.object({
+  calendarId: entityIdSchema,
+  full: z.object({ events: z.number().int().nonnegative() }),
+  busy: z.object({
+    published: z.number().int().nonnegative(),
+    omittedCancelled: z.number().int().nonnegative(),
+    omittedFree: z.number().int().nonnegative(),
+    unsupported: z.number().int().nonnegative(),
+  }),
 });
 export const calendarFeedCreateResponseSchema = z.object({
   capability: calendarFeedCapabilitySchema,
@@ -4608,6 +4627,12 @@ export type CalendarImportMutationResponse = z.infer<
 >;
 export type CalendarFeedCapability = z.infer<
   typeof calendarFeedCapabilitySchema
+>;
+export type CalendarFeedVisibility = z.infer<
+  typeof calendarFeedVisibilitySchema
+>;
+export type CalendarFeedPreviewResponse = z.infer<
+  typeof calendarFeedPreviewResponseSchema
 >;
 export type SetupStatusResponse = z.infer<typeof setupStatusResponseSchema>;
 export type OwnerSetupRequest = z.infer<typeof ownerSetupRequestSchema>;

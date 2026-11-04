@@ -851,6 +851,10 @@ export interface CalendarFeedCapabilityRecord {
   readonly ownerId: string;
   readonly calendarId: string;
   readonly label: string;
+  /** Issue #189: fixed at creation; `busy` publishes occupied intervals only. */
+  readonly visibility: "full" | "busy";
+  /** Per-feed secret that keys busy-only output UIDs; null for full feeds. */
+  readonly identitySalt: string | null;
   readonly secretHash: string;
   readonly createdAt: string;
   readonly revokedAt: string | null;
@@ -1881,6 +1885,16 @@ const migrations: readonly Migration[] = [
   completeReadonlyFeedMigration,
   boardProjectMigration,
   boardProviderMappingsMigration,
+  {
+    // Issue #189 / ADR 0055: busy-only publication. Existing feeds stay full.
+    id: "0058_calendar_feed_visibility",
+    sql: `
+      ALTER TABLE calendar_feed_capabilities ADD COLUMN visibility TEXT NOT NULL DEFAULT 'full'
+        CHECK (visibility IN ('full', 'busy'));
+      ALTER TABLE calendar_feed_capabilities ADD COLUMN identity_salt TEXT
+        CHECK ((visibility = 'busy') = (identity_salt IS NOT NULL));
+    `,
+  },
 ];
 
 /**
@@ -2614,13 +2628,15 @@ export class SuiteDatabase {
       throw new Error("Calendar not found");
     this.#database
       .prepare(
-        `INSERT INTO calendar_feed_capabilities (id,owner_id,calendar_id,label,secret_hash,created_at,revoked_at) VALUES (?,?,?,?,?,?,?)`,
+        `INSERT INTO calendar_feed_capabilities (id,owner_id,calendar_id,label,visibility,identity_salt,secret_hash,created_at,revoked_at) VALUES (?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         record.id,
         record.ownerId,
         record.calendarId,
         record.label,
+        record.visibility,
+        record.identitySalt,
         record.secretHash,
         record.createdAt,
         record.revokedAt,
@@ -2670,6 +2686,8 @@ export class SuiteDatabase {
       ownerId: String(row.owner_id),
       calendarId: String(row.calendar_id),
       label: String(row.label),
+      visibility: row.visibility === "busy" ? "busy" : "full",
+      identitySalt: row.identity_salt ?? null,
       secretHash: String(row.secret_hash),
       createdAt: String(row.created_at),
       revokedAt: row.revoked_at === null ? null : String(row.revoked_at),

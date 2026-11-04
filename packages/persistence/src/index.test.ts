@@ -268,8 +268,8 @@ describe("SuiteDatabase", () => {
       const upgraded = SuiteDatabase.open(path);
       expect(upgraded.state()).toMatchObject({
         install: { instanceId: "d1054acd-c04d-4bd8-a814-254b007154ba" },
-        appliedMigrationCount: 52,
-        expectedMigrationCount: 52,
+        appliedMigrationCount: 53,
+        expectedMigrationCount: 53,
       });
       expect(upgraded.setupRequired()).toBe(true);
       upgraded.close();
@@ -288,8 +288,8 @@ describe("SuiteDatabase", () => {
       reopened.close();
 
       expect(reopenedState).toEqual(firstState);
-      expect(reopenedState.appliedMigrationCount).toBe(52);
-      expect(reopenedState.expectedMigrationCount).toBe(52);
+      expect(reopenedState.appliedMigrationCount).toBe(53);
+      expect(reopenedState.expectedMigrationCount).toBe(53);
     });
   });
 
@@ -1532,6 +1532,8 @@ describe("SuiteDatabase", () => {
         ownerId: "import-owner",
         calendarId: calendar.id,
         label: "Phone",
+        visibility: "full",
+        identitySalt: null,
         secretHash: "digest",
         createdAt: now,
         revokedAt: null,
@@ -1539,6 +1541,36 @@ describe("SuiteDatabase", () => {
       expect(
         database.listCalendarFeedCapabilities("import-owner"),
       ).toHaveLength(1);
+      // Issue #189: a busy-only feed keeps its salt; the pair is enforced.
+      database.createCalendarFeedCapability({
+        id: "00000000-0000-4000-8000-000000000074",
+        ownerId: "import-owner",
+        calendarId: calendar.id,
+        label: "Shared availability",
+        visibility: "busy",
+        identitySalt: "salt",
+        secretHash: "busy-digest",
+        createdAt: now,
+        revokedAt: null,
+      });
+      expect(
+        database.getCalendarFeedCapability(
+          "00000000-0000-4000-8000-000000000074",
+        ),
+      ).toMatchObject({ visibility: "busy", identitySalt: "salt" });
+      expect(() =>
+        database.createCalendarFeedCapability({
+          id: "00000000-0000-4000-8000-000000000075",
+          ownerId: "import-owner",
+          calendarId: calendar.id,
+          label: "Unsalted",
+          visibility: "busy",
+          identitySalt: null,
+          secretHash: "unsalted-digest",
+          createdAt: now,
+          revokedAt: null,
+        }),
+      ).toThrow();
       expect(
         database.revokeCalendarFeedCapability(
           "import-owner",
