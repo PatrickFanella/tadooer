@@ -256,4 +256,5 @@ export * from "./super-productivity-counters.ts";
 export * from "./super-productivity-day-order.ts";
 export * from "./super-productivity-config.ts";
 export * from "./ical-feed.ts";
+export * from "./busy-feed.ts";
 export * from "./super-productivity-calendar.ts";
