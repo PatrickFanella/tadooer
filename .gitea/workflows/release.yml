@@ -1,0 +1,187 @@
+name: release
+
+# A version tag (v0.15.0-rc.7) verifies the tagged commit, deploys it to
+# production on nuc and publishes the desktop packages on a Gitea release.
+# "Run workflow" with an existing tag builds and deploys that tag again; a tag
+# that is already live is left as it is. See docs/operations/releases.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example v0.15.0-rc.7
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: docker.gitea.com/runner-images:ubuntu-24.04
+      options: --shm-size=512m
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Check the tag
+        shell: bash
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]] || { echo "Not a release tag: $TAG"; exit 1; }
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        env:
+          TMPDIR: /dev/shm
+          VITEST_MAX_WORKERS: "2"
+        run: pnpm verify
+
+  server:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: docker.gitea.com/runner-images:ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Build the image
+        shell: bash
+        run: |
+          VERSION="${TAG#v}"
+          REVISION="$(git rev-parse HEAD)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "REVISION=$REVISION" >> "$GITHUB_ENV"
+          docker build --pull -t "tadooer:$VERSION" \
+            --build-arg "SUITE_VERSION=$VERSION" \
+            --build-arg "SUITE_REVISION=$REVISION" \
+            --build-arg "SUITE_BUILD_DATE=$(date -u +%FT%TZ)" .
+
+      - name: Deploy to nuc
+        shell: bash
+        env:
+          NUC_DEPLOY_KEY: ${{ secrets.NUC_DEPLOY_KEY }}
+          NUC_KNOWN_HOSTS: ${{ secrets.NUC_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/nuc-deploy-key"
+          trap 'rm -f "$key" "$RUNNER_TEMP/nuc-known-hosts"' EXIT
+          printf '%s\n' "$NUC_DEPLOY_KEY" > "$key"
+          printf '%s\n' "$NUC_KNOWN_HOSTS" > "$RUNNER_TEMP/nuc-known-hosts"
+          nuc=(ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$RUNNER_TEMP/nuc-known-hosts" -o ServerAliveInterval=30 onnwee@10.0.0.56)
+          echo "Sending tadooer:$VERSION to nuc"
+          docker save "tadooer:$VERSION" | "${nuc[@]}" receive "$VERSION"
+          "${nuc[@]}" deploy "$VERSION" "$REVISION"
+
+      - name: Remove the local image
+        if: always()
+        shell: bash
+        run: docker image rm "tadooer:${TAG#v}" >/dev/null 2>&1 || true
+
+  desktop-linux:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: docker.gitea.com/runner-images:ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package
+        shell: bash
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          pnpm package:desktop
+
+      - name: Publish
+        shell: bash
+        env:
+          GITEA_SERVER_URL: ${{ github.server_url }}
+          GITEA_REPOSITORY: ${{ github.repository }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: node deploy/release-assets.mjs "$TAG" apps/desktop/dist-packages/*.tar.gz apps/desktop/dist-packages/*.tar.gz.sha256
+
+  desktop-mac:
+    needs: verify
+    runs-on: macos-arm64
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          test "$(node -p 'process.versions.node.split(".")[0]')" -ge 24
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package
+        shell: bash
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          pnpm package:desktop:mac:universal
+
+      - name: Publish
+        shell: bash
+        env:
+          GITEA_SERVER_URL: ${{ github.server_url }}
+          GITEA_REPOSITORY: ${{ github.repository }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          cd apps/desktop/dist-packages
+          node ../../../deploy/release-assets.mjs "$TAG" *.zip *.zip.sha256 *.dmg *.dmg.sha256
