@@ -359,8 +359,8 @@ container check.
   action and the Java package; a test checks they agree.
 - **Signing key.** Owner-held, never committed.
 - **Distribution**: sideload, F-Droid or Play (`docs/operations/mobile.md`).
-- **iOS.** Not started. The policy package, the setup adapter and the page
-  bridge are written to be reused; the native half is not.
+- **iOS.** Built on 2026-11-04 as ADR 0056, reusing the policy package, the
+  setup adapter and the page bridge; the Suite runs in its own web view there.
 
 ## What has not run
 

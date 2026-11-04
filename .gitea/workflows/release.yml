@@ -274,3 +274,53 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
           GITEA_ORIGIN_ADDRESS: 10.0.0.200
         run: node deploy/release-assets.mjs "$TAG" dist-android/*.apk dist-android/*.apk.sha256
+
+  ios:
+    needs: verify
+    runs-on: macos-arm64
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          test "$(node -p 'process.versions.node.split(".")[0]')" -ge 24
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the Swift policy against the shared policy
+        run: pnpm --filter @suite/mobile exec vitest run src/native-policy.test.mjs
+
+      - name: Build an unsigned iPhone app
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @suite/mobile ios:sync
+          version="${TAG#v}"
+          # CFBundleShortVersionString takes digits and dots only.
+          xcodebuild -project apps/mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination "generic/platform=iOS" -derivedDataPath "$RUNNER_TEMP/ios" \
+            CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="${version%%-*}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" build > "$RUNNER_TEMP/xcodebuild.log" 2>&1 \
+            || { tail -40 "$RUNNER_TEMP/xcodebuild.log"; exit 1; }
+          name="tadooer-ios-$version-unsigned.ipa"
+          mkdir -p dist-ios "$RUNNER_TEMP/ipa/Payload"
+          ditto "$RUNNER_TEMP/ios/Build/Products/Release-iphoneos/App.app" "$RUNNER_TEMP/ipa/Payload/Tadooer.app"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$OLDPWD/dist-ios/$name" Payload)
+          (cd dist-ios && shasum -a 256 "$name" > "$name.sha256" && cat "$name.sha256")
+
+      - name: Publish
+        shell: bash
+        env:
+          GITEA_SERVER_URL: ${{ github.server_url }}
+          GITEA_REPOSITORY: ${{ github.repository }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_ORIGIN_ADDRESS: 10.0.0.200
+        run: node deploy/release-assets.mjs "$TAG" dist-ios/*.ipa dist-ios/*.ipa.sha256

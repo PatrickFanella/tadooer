@@ -11,6 +11,7 @@ export default tseslint.config(
       // Built bundles and the Capacitor-generated Android project.
       "apps/mobile/www/**",
       "apps/mobile/android/**",
+      "apps/mobile/ios/**",
     ],
   },
   eslint.configs.recommended,

@@ -1,14 +1,32 @@
-# Android app
+# Phone apps
 
 The Android app is a Capacitor WebView around one Suite server (ADR 0049). It
 adds a server setup page, `tadooer://` links, a share target and Back
 handling. It keeps no tasks and no credentials of its own. Reminders reach
-the phone through the ntfy app, as before.
+the phone through the ntfy app, as before. The iPhone app is the same shell
+with the Suite in its own web view (ADR 0056); see [iPhone](#iphone).
 
-No APK has been built from this project yet. The machine it was written on
-has no Android SDK; see "What has not run" in
-[ADR 0049](../adr/0049-mobile-shell.md). The first build on a machine with
-the SDK is also the first time the Java sources are compiled.
+Each release tag publishes both: a signed APK and an unsigned iPhone build,
+on the Gitea release next to the desktop packages
+([releases.md](releases.md)).
+
+## What has run, 2026-11-04
+
+- On Kvant (JDK 21, Android SDK platform 36): `android:doctor`,
+  `android:test`, `android:debug` and `android:release` all pass; the first
+  APK built from this project is 3.8 MB.
+- On the Android 15 emulator: the debug APK showed the setup page, connected
+  to `https://tadooer.subcult.tv` and showed its sign-in page. Against a local
+  test server (through `adb reverse`, `http://127.0.0.1:18765`) it signed in,
+  showed Today, and a task added in the app reached the server. The signed
+  release APK (version `0.15.0-rc.9`, code 18100) installed and connected to
+  production.
+- On Soyuz (Xcode 27.2): the iPhone app builds for the simulator and, unsigned,
+  for devices; the Swift policy matches the shared JavaScript on every case.
+- Not yet: a real phone, Back, rotation, the keyboard, deep links, the share
+  target, the Google handoff, offline capture, and the iOS app running in a
+  simulator (Soyuz needs Xcode's first-launch install, which asks for an
+  administrator password).
 
 ## Versions
 
@@ -128,6 +146,17 @@ tried on a phone yet; add it to the first-build checklist results.
 
 ## Signing
 
+The release key was created on 2026-11-04: `tadooer-release.jks`, alias
+`tadooer`, RSA 4096, PKCS12, certificate SHA-256
+`70:5E:A5:73:5C:EE:C6:36:C4:6D:92:0A:A2:34:6E:F5:47:04:87:21:3A:0F:6D:AB:EA:53:A4:87:F3:BB:7F:BB`.
+The keystore and its password file are in
+`~/.local/state/tadooer-android-signing/` on Kvant (mode 600), and in the
+repository secrets `ANDROID_KEYSTORE_B64` and `ANDROID_KEYSTORE_PASSWORD`,
+which the release workflow uses. Keep a third copy in the password vault: a
+lost key means every installed copy must be uninstalled, with its data, before
+a new key's APK installs. The release job refuses an APK signed with any other
+certificate.
+
 The signing key is the owner's. It is never committed:
 `apps/mobile/android/.gitignore` excludes `*.jks`, `*.keystore` and
 `keystore.properties`, and no build file reads a password.
@@ -158,8 +187,11 @@ signature is an upload key's and Google holds the app key. Capacitor's own `cap 
 can build and sign in one step, but it takes the passwords as command-line
 arguments or from `capacitor.config.json`; prefer the commands above.
 
-Before a release, raise `versionCode` (an integer that must increase) and
-`versionName` in `apps/mobile/android/app/build.gradle`.
+`versionCode` and `versionName` come from the Gradle properties
+`tadooerVersionCode` and `tadooerVersionName` (in CI,
+`ORG_GRADLE_PROJECT_tadooerVersionCode` and so on). The release workflow sets
+the code to its run number, which only grows, and the name to the tag. A
+local build without them is `1` and `0.1.0`.
 
 ## Distribution
 
@@ -252,3 +284,39 @@ On a machine with the SDK, in this order, and record the results on #117:
    reaches the server.
 9. Enter a wrong address and an unreachable one on the setup page; stop the
    server and reopen the app.
+
+## iPhone
+
+The iOS project is `apps/mobile/ios/App` (Capacitor 8.5.2, Swift Package
+Manager, iOS 15 and later). The design is ADR 0056: Capacitor shows only the
+setup page; the Suite runs in a plain `WKWebView` with the page bridge and
+nothing else.
+
+Build on a Mac with Xcode:
+
+```sh
+pnpm install
+pnpm --filter @suite/mobile ios:sync          # bundles the pages, copies them in
+open apps/mobile/ios/App/App.xcodeproj        # or xcodebuild, as below
+xcodebuild -project apps/mobile/ios/App/App.xcodeproj -scheme App \
+  -sdk iphoneos -destination generic/platform=iOS CODE_SIGNING_ALLOWED=NO build
+```
+
+The simulator needs Xcode's first-launch install once
+(`sudo xcodebuild -runFirstLaunch`, or open Xcode and accept it).
+
+To install on your iPhone:
+
+- **From Xcode, with your Apple ID.** Open the project, choose your team under
+  Signing & Capabilities, connect the phone and run. A free Apple ID's
+  install stops opening after seven days; run it again to renew it.
+- **The release's unsigned build.** `tadooer-ios-<version>-unsigned.ipa` from
+  the Gitea release, signed by a sideloading tool (such as Sideloadly or
+  AltStore) with your Apple ID, under the same seven-day limit.
+- **With a paid Apple Developer account** (about $99 a year), the release
+  workflow can sign the build and upload it to TestFlight (#153). Not set up.
+
+What iOS does not have yet: the share target (it needs a Share Extension) and
+native notifications. Reminders arrive through the ntfy app. Plaintext HTTP to
+a private address needs no rebuild on iOS: App Transport Security allows local
+addresses, and the setup page asks for consent.
