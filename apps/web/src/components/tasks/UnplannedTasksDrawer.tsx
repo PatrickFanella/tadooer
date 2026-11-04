@@ -1,6 +1,7 @@
 import { useEffect, useState, type DragEvent } from "react";
 import type { Task } from "@suite/contracts";
 import { Button } from "../ui/button.tsx";
+import { TaskTitleButton } from "./TaskTitleButton.tsx";
 import { EmptyState } from "../ui/empty-state.tsx";
 import { Input } from "../ui/input.tsx";
 import { NativeSelect } from "../ui/native-select.tsx";
@@ -69,6 +70,8 @@ export interface UnplannedTasksDrawerProps {
   readonly available: boolean;
   readonly busy: boolean;
   readonly onPlace: (task: Task, targetId: string) => void;
+  /** Issue #196: opens a task in the detail panel. */
+  readonly onSelectTask?: ((task: Task) => void) | undefined;
   readonly onClose: () => void;
 }
 
@@ -80,6 +83,7 @@ export const UnplannedTasksDrawer = ({
   available,
   busy,
   onPlace,
+  onSelectTask,
   onClose,
 }: UnplannedTasksDrawerProps) => {
   const [query, setQuery] = useState("");
@@ -143,7 +147,9 @@ export const UnplannedTasksDrawer = ({
                   event.dataTransfer.effectAllowed = "move";
                 }}
               >
-                <strong>{task.title}</strong>
+                <TaskTitleButton task={task} onSelect={onSelectTask}>
+                  <strong>{task.title}</strong>
+                </TaskTitleButton>
                 {task.estimateMinutes !== null && (
                   <small>{String(task.estimateMinutes)} min</small>
                 )}
