@@ -334,7 +334,7 @@ unchanged. The mobile bundles alias `node:url` to the WebView's global `URL`.
 
 The native side needs the rules where no JavaScript runs. `ShellPolicy.java`
 is a second, stricter reading with no Android import.
-`apps/mobile/src/android-policy.test.mjs` compiles it with a plain JDK and
+`apps/mobile/src/native-policy.test.mjs` compiles it with a plain JDK and
 runs it and the JavaScript over the same inputs. It fails when the Java
 accepts something the JavaScript refuses or returns a different result. The
 test is skipped where no JDK is installed, which includes the repository's
@@ -359,8 +359,8 @@ container check.
   action and the Java package; a test checks they agree.
 - **Signing key.** Owner-held, never committed.
 - **Distribution**: sideload, F-Droid or Play (`docs/operations/mobile.md`).
-- **iOS.** Not started. The policy package, the setup adapter and the page
-  bridge are written to be reused; the native half is not.
+- **iOS.** Built on 2026-11-04 as ADR 0056, reusing the policy package, the
+  setup adapter and the page bridge; the Suite runs in its own web view there.
 
 ## What has not run
 

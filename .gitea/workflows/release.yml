@@ -189,3 +189,138 @@ jobs:
         run: |
           cd apps/desktop/dist-packages
           node ../../../deploy/release-assets.mjs "$TAG" *.zip *.zip.sha256 *.dmg *.dmg.sha256
+
+  android:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    container:
+      image: docker.gitea.com/runner-images:ubuntu-24.04
+    env:
+      ANDROID_HOME: /opt/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-21-openjdk-amd64
+      # The certificate every Tadooer APK is signed with (docs/operations/mobile.md).
+      SIGNING_CERT_SHA256: 705ea5735ceec636c46d920aa2346ef5470487213a0f6dabea53a487f3bb7fbb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Install JDK 21 and the Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update -qq
+          apt-get install -y -qq openjdk-21-jdk-headless unzip >/dev/null
+          tools="$RUNNER_TEMP/commandlinetools.zip"
+          curl -fsSL -o "$tools" https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
+          echo "0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8  $tools" | sha256sum -c -
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          unzip -q "$tools" -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses >/dev/null
+          "$sdk" --install "platforms;android-36" "platform-tools" "build-tools;35.0.0" >/dev/null
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_tadooerVersionCode: ${{ github.run_number }}
+        run: |
+          export ORG_GRADLE_PROJECT_tadooerVersionName="${TAG#v}"
+          pnpm --filter @suite/mobile android:release
+
+      - name: Sign
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ks="$RUNNER_TEMP/tadooer-release.jks"
+          pw="$RUNNER_TEMP/keystore-password"
+          trap 'rm -f "$ks" "$pw" "$RUNNER_TEMP/aligned.apk"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$ks"
+          printf '%s\n' "$ANDROID_KEYSTORE_PASSWORD" > "$pw"
+          bt="$ANDROID_HOME/build-tools/35.0.0"
+          name="tadooer-android-${TAG#v}.apk"
+          mkdir -p dist-android
+          "$bt/zipalign" -p 4 apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" sign --ks "$ks" --ks-key-alias tadooer --ks-pass "file:$pw" --out "dist-android/$name" "$RUNNER_TEMP/aligned.apk"
+          "$bt/apksigner" verify --print-certs "dist-android/$name" | grep -q "SHA-256 digest: $SIGNING_CERT_SHA256" || { echo "Signed with an unexpected certificate"; exit 1; }
+          (cd dist-android && sha256sum "$name" > "$name.sha256" && cat "$name.sha256")
+
+      - name: Publish
+        shell: bash
+        env:
+          GITEA_SERVER_URL: ${{ github.server_url }}
+          GITEA_REPOSITORY: ${{ github.repository }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_ORIGIN_ADDRESS: 10.0.0.200
+        run: node deploy/release-assets.mjs "$TAG" dist-android/*.apk dist-android/*.apk.sha256
+
+  ios:
+    needs: verify
+    runs-on: macos-arm64
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          test "$(node -p 'process.versions.node.split(".")[0]')" -ge 24
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the Swift policy against the shared policy
+        run: pnpm --filter @suite/mobile exec vitest run src/native-policy.test.mjs
+
+      - name: Build an unsigned iPhone app
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @suite/mobile ios:sync
+          version="${TAG#v}"
+          # CFBundleShortVersionString takes digits and dots only.
+          xcodebuild -project apps/mobile/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination "generic/platform=iOS" -derivedDataPath "$RUNNER_TEMP/ios" \
+            CODE_SIGNING_ALLOWED=NO MARKETING_VERSION="${version%%-*}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" build > "$RUNNER_TEMP/xcodebuild.log" 2>&1 \
+            || { tail -40 "$RUNNER_TEMP/xcodebuild.log"; exit 1; }
+          name="tadooer-ios-$version-unsigned.ipa"
+          mkdir -p dist-ios "$RUNNER_TEMP/ipa/Payload"
+          ditto "$RUNNER_TEMP/ios/Build/Products/Release-iphoneos/App.app" "$RUNNER_TEMP/ipa/Payload/Tadooer.app"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$OLDPWD/dist-ios/$name" Payload)
+          (cd dist-ios && shasum -a 256 "$name" > "$name.sha256" && cat "$name.sha256")
+
+      - name: Publish
+        shell: bash
+        env:
+          GITEA_SERVER_URL: ${{ github.server_url }}
+          GITEA_REPOSITORY: ${{ github.repository }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_ORIGIN_ADDRESS: 10.0.0.200
+        run: node deploy/release-assets.mjs "$TAG" dist-ios/*.ipa dist-ios/*.ipa.sha256

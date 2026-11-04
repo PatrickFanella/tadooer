@@ -13,11 +13,13 @@
     "android:debug": "node scripts/android.mjs debug",
     "android:release": "node scripts/android.mjs release",
     "android:test": "node scripts/android.mjs test",
-    "android:cleartext": "node scripts/cleartext.mjs"
+    "android:cleartext": "node scripts/cleartext.mjs",
+    "ios:sync": "pnpm build:www && cap sync ios"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
     "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "@suite/shell-policy": "workspace:*"
   },
   "devDependencies": {

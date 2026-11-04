@@ -18,12 +18,14 @@ channel refuses a version it has already recorded.
 
 `.gitea/workflows/release.yml` then runs:
 
-| Job             | Runner                | Does                                                                                                                                                                                                   |
-| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `verify`        | `ubuntu-24.04`        | `pnpm verify` on the tagged commit. Every other job waits for it.                                                                                                                                      |
-| `server`        | `ubuntu-24.04`        | Builds the image with `SUITE_VERSION` and `SUITE_REVISION`, sends it to nuc over SSH, and runs the deploy there.                                                                                       |
-| `desktop-linux` | `ubuntu-24.04`        | `pnpm package:desktop`; uploads the tar.gz and its checksum to the Gitea release.                                                                                                                      |
-| `desktop-mac`   | `macos-arm64` (Soyuz) | `pnpm package:desktop:mac:universal`; uploads the zip, the disk image and their checksums. The app is signed ad hoc, not with a Developer ID; see [desktop.md](desktop.md#what-an-unsigned-app-means). |
+| Job             | Runner                | Does                                                                                                                                                                                                            |
+| --------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify`        | `ubuntu-24.04`        | `pnpm verify` on the tagged commit. Every other job waits for it.                                                                                                                                               |
+| `server`        | `ubuntu-24.04`        | Builds the image with `SUITE_VERSION` and `SUITE_REVISION`, sends it to nuc over SSH, and runs the deploy there.                                                                                                |
+| `desktop-linux` | `ubuntu-24.04`        | `pnpm package:desktop`; uploads the tar.gz and its checksum to the Gitea release.                                                                                                                               |
+| `desktop-mac`   | `macos-arm64` (Soyuz) | `pnpm package:desktop:mac:universal`; uploads the zip, the disk image and their checksums. The app is signed ad hoc, not with a Developer ID; see [desktop.md](desktop.md#what-an-unsigned-app-means).          |
+| `android`       | `ubuntu-24.04`        | Installs JDK 21 and the Android SDK (pinned checksum), builds the release APK with the run number as `versionCode`, signs it with the release key and checks the certificate; uploads the APK and its checksum. |
+| `ios`           | `macos-arm64` (Soyuz) | Checks the Swift policy against the shared policy, builds an unsigned iPhone app and uploads it as `tadooer-ios-<version>-unsigned.ipa` with its checksum. See [mobile.md](mobile.md#iphone).                   |
 
 The desktop jobs upload over plain HTTP to Almaz on the LAN
 (`GITEA_ORIGIN_ADDRESS=10.0.0.200`, with `git.subcult.tv` as the host name)

@@ -15,6 +15,9 @@ import { fileURLToPath } from "node:url";
  *   ic_launcher_foreground.png  the glyph alone inside the adaptive icon's
  *                               safe zone; the background is the colour in
  *                               res/values/ic_launcher_background.xml
+ *
+ * and the iOS app icon: one opaque 1024 px square, which iOS rounds itself
+ * (ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png).
  */
 
 const packageDirectory = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -64,6 +67,10 @@ export const iconVariants = (svg) => {
     round: wrap(
       `<circle cx="256" cy="256" r="256" fill="${background[1]}"/>${scaled(0.8)}`,
     ),
+    // iOS masks the corners itself and wants no transparency.
+    ios: wrap(
+      `<rect width="512" height="512" fill="${background[1]}"/>${scaled(0.8)}`,
+    ),
     // The adaptive icon is 108dp with a 66dp safe zone, 61% of the canvas.
     // The glyph's diagonal is 66% of the canvas, so 0.85 keeps it inside.
     foreground: wrap(scaled(0.85)),
@@ -98,6 +105,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       join(directory, "ic_launcher_foreground.png"),
     );
   }
+  render(
+    variants.ios,
+    1024,
+    join(
+      packageDirectory,
+      "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png",
+    ),
+  );
   console.log(
     `Wrote launcher icons for ${Object.keys(densities).join(", ")}; background ${variants.background}.`,
   );
