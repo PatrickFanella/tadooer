@@ -9,35 +9,77 @@ import {
   classifyServerAddress,
   deepLinkTarget,
 } from "@suite/shell-policy";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 /**
- * Compares the Android shell's Java policy with the shared JavaScript policy
- * over the same inputs (ADR 0049). The Java class has no Android import, so
- * a plain JDK compiles and runs it; no Android SDK is involved.
+ * Compares the native shells' policies with the shared JavaScript policy over
+ * the same inputs (ADR 0049): the Android shell's Java class and the iOS
+ * shell's Swift file. Neither imports a platform framework, so a plain JDK or
+ * `swiftc` builds and runs them; no Android SDK or Xcode project is involved.
  *
- * The Java reading is allowed to be stricter, never looser: whatever it
+ * A native reading is allowed to be stricter, never looser: whatever it
  * accepts, the JavaScript must accept with the same result. A list of
- * ordinary inputs must be accepted by both.
+ * ordinary inputs must be accepted by all of them.
  *
- * Without `javac` on the PATH the suite is skipped, which is the case in the
- * repository's container check. Run it on a machine with a JDK.
+ * Each native suite is skipped where its compiler is missing: the repository's
+ * container check has neither. The Java suite runs where a JDK is installed,
+ * the Swift suite on a Mac (the release workflow's iOS job).
  */
 
-const javaDirectory = join(import.meta.dirname, "..", "android", "app", "src");
-const sources = [
-  join(javaDirectory, "main/java/tv/subcult/tadooer/ShellPolicy.java"),
-  join(javaDirectory, "test/java/tv/subcult/tadooer/PolicyCheck.java"),
-];
+const mobileDirectory = join(import.meta.dirname, "..");
+const javaDirectory = join(mobileDirectory, "android", "app", "src");
+const available = (command, args) =>
+  spawnSync(command, args, { encoding: "utf8" }).status === 0;
 
-const hasJdk =
-  spawnSync("javac", ["-version"], { encoding: "utf8" }).status === 0 &&
-  spawnSync("java", ["-version"], { encoding: "utf8" }).status === 0;
+const runners = [
+  {
+    name: "Android (Java)",
+    available:
+      available("javac", ["-version"]) && available("java", ["-version"]),
+    build: (directory) => {
+      const compiled = spawnSync(
+        "javac",
+        [
+          "-Xlint:all",
+          "-Werror",
+          "-d",
+          directory,
+          join(javaDirectory, "main/java/tv/subcult/tadooer/ShellPolicy.java"),
+          join(javaDirectory, "test/java/tv/subcult/tadooer/PolicyCheck.java"),
+        ],
+        { encoding: "utf8" },
+      );
+      return {
+        compiled,
+        command: ["java", ["-cp", directory, "tv.subcult.tadooer.PolicyCheck"]],
+      };
+    },
+  },
+  {
+    name: "iOS (Swift)",
+    available: available("swiftc", ["--version"]),
+    build: (directory) => {
+      const binary = join(directory, "policy-check");
+      const compiled = spawnSync(
+        "swiftc",
+        [
+          "-warnings-as-errors",
+          "-o",
+          binary,
+          join(mobileDirectory, "ios/App/App/ShellPolicy.swift"),
+          join(mobileDirectory, "ios/PolicyCheck/main.swift"),
+        ],
+        { encoding: "utf8" },
+      );
+      return { compiled, command: [binary, []] };
+    },
+  },
+];
 
 const encode = (value) =>
   value === null ? "-" : Buffer.from(value, "utf8").toString("base64");
 
-let classes;
+let built;
 
 const runJava = (calls) => {
   const input = calls
@@ -52,11 +94,11 @@ const runJava = (calls) => {
       ].join("\t"),
     )
     .join("\n");
-  const result = spawnSync(
-    "java",
-    ["-cp", classes, "tv.subcult.tadooer.PolicyCheck"],
-    { input: `${input}\n`, encoding: "utf8" },
-  );
+  const [command, args] = built.command;
+  const result = spawnSync(command, args, {
+    input: `${input}\n`,
+    encoding: "utf8",
+  });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
   const lines = result.stdout.split("\n").slice(0, -1);
@@ -246,21 +288,23 @@ const navigations = [
   ["", false],
 ];
 
-describe.skipIf(!hasJdk)("Android policy against the shared policy", () => {
+describe.each(runners)("$name policy against the shared policy", (runner) => {
+  let directory;
   beforeAll(() => {
-    classes = mkdtempSync(join(tmpdir(), "tadooer-policy-"));
-    const compiled = spawnSync(
-      "javac",
-      ["-Xlint:all", "-Werror", "-d", classes, ...sources],
-      { encoding: "utf8" },
-    );
-    expect(compiled.stderr).toBe("");
-    expect(compiled.status).toBe(0);
-  }, 120_000);
+    if (!runner.available) return;
+    directory = mkdtempSync(join(tmpdir(), "tadooer-policy-"));
+    built = runner.build(directory);
+    expect(built.compiled.stderr).toBe("");
+    expect(built.compiled.status).toBe(0);
+  }, 300_000);
 
   afterAll(() => {
-    if (classes !== undefined)
-      rmSync(classes, { recursive: true, force: true });
+    if (directory !== undefined)
+      rmSync(directory, { recursive: true, force: true });
+  });
+
+  beforeEach((context) => {
+    if (!runner.available) context.skip();
   });
 
   it("classifies a canonical origin as the JavaScript does", () => {

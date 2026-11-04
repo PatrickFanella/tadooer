@@ -10,7 +10,7 @@ import org.junit.Test;
 /**
  * Fixed cases for {@link ShellPolicy}, run by {@code ./gradlew
  * testDebugUnitTest}. The wider comparison with the JavaScript policy is
- * {@code apps/mobile/src/android-policy.test.mjs}.
+ * {@code apps/mobile/src/native-policy.test.mjs}.
  */
 public class ShellPolicyTest {
 

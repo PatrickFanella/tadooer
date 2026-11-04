@@ -8,7 +8,7 @@ import java.util.Base64;
 /**
  * Runs {@link ShellPolicy} over inputs from standard input, one call per
  * line, and prints one result per line. {@code apps/mobile/src/
- * android-policy.test.mjs} compiles this with a plain JDK and compares the
+ * native-policy.test.mjs} compiles this with a plain JDK and compares the
  * results with the shared JavaScript policy.
  *
  * A line is a function name and its arguments, tab-separated, each argument

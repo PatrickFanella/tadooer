@@ -12,7 +12,7 @@ import java.net.URLDecoder;
  * page uses through {@code @suite/shell-policy}. This class is a second,
  * stricter reading of them: it accepts only text that is already in the
  * canonical form the JavaScript produces, and refuses everything else. The
- * test {@code apps/mobile/src/android-policy.test.mjs} runs both over the
+ * test {@code apps/mobile/src/native-policy.test.mjs} runs both over the
  * same inputs and fails when this class accepts something the JavaScript
  * refuses or returns a different result.
  *
