@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "version": "0.15.0-rc.6",
+  "createdAt": "2026-11-04T01:55:23Z",
+  "deployedAt": "2026-11-04T01:56:05Z",
+  "sourceCommit": "e81ecea7f34f6e43de4460952f4079709cb0d6f1",
+  "image": "127.0.0.1:5000/subculture-collective/productivity-suite@sha256:ed9e6b7cbf6428588618c8b3067be4c65fdc79008153adc41dc6357682d7dcbb",
+  "publicOrigin": "https://tadooer.subcult.tv",
+  "status": "deployed",
+  "migrationCount": 53,
+  "reason": "Owner-requested deploy: workspace shell #194 and #196 (PRs 195, 199), busy-only calendar feeds #189 (PR 198, migration 0058), SEO metadata PRs 190-191, licensing PR 192"
+}
