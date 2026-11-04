@@ -90,14 +90,16 @@ jobs:
       - name: Deploy to nuc
         shell: bash
         env:
-          NUC_DEPLOY_KEY: ${{ secrets.NUC_DEPLOY_KEY }}
+          # One line of base64: Gitea masks a secret in the log only when the
+          # printed text matches it exactly, which a multi-line key does not.
+          NUC_DEPLOY_KEY_B64: ${{ secrets.NUC_DEPLOY_KEY_B64 }}
           NUC_KNOWN_HOSTS: ${{ secrets.NUC_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           umask 077
           key="$RUNNER_TEMP/nuc-deploy-key"
           trap 'rm -f "$key" "$RUNNER_TEMP/nuc-known-hosts"' EXIT
-          printf '%s\n' "$NUC_DEPLOY_KEY" > "$key"
+          printf '%s' "$NUC_DEPLOY_KEY_B64" | base64 -d > "$key"
           printf '%s\n' "$NUC_KNOWN_HOSTS" > "$RUNNER_TEMP/nuc-known-hosts"
           nuc=(ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes
             -o "UserKnownHostsFile=$RUNNER_TEMP/nuc-known-hosts" -o ServerAliveInterval=30 onnwee@10.0.0.56)
