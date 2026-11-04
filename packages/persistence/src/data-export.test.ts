@@ -703,3 +703,271 @@ describe("data export", () => {
     });
   });
 });
+
+describe("integration-preserving content reset", () => {
+  it("clears working and historical content, preserving preferences, grants and other owners", async () => {
+    await withTemporaryDirectory((directory) => {
+      const db = openWithOwner(directory, "owner-a", "reset");
+      const sqlite = raw(directory, "reset");
+      try {
+        seed(db, "owner-a");
+        sqlite
+          .prepare(
+            "INSERT INTO owner_accounts (id,username,display_name,password_hash,created_at,disabled_at) VALUES (?,?,?,?,?,?)",
+          )
+          .run("owner-b", "other", "Other", "other-secret", now, now);
+        createTask(db, "owner-b", id(999), "Other owner's task");
+        db.counters.writeEvaluation({
+          ownerId: "owner-a",
+          day: "2026-09-24",
+          expectedRevision: 0,
+          patch: { reflection: "Old history", impact: 3 },
+          newId: () => id(450),
+          now,
+        });
+        sqlite
+          .prepare(
+            "INSERT INTO plugin_data_entries (id,owner_id,plugin_id,data_key,data_json,byte_length,format,source_kind,revision,imported_at,updated_at) VALUES (?,?,?,NULL,?,2,'text','super_productivity',1,?,?)",
+          )
+          .run(id(451), "owner-a", "brain-dump", "{}", now, now);
+        db.issues.putConnection({
+          id: id(452),
+          ownerId: "owner-a",
+          provider: "github",
+          origin: "https://github.com",
+          repository: "fixture/issues",
+          tokenScope: "repository",
+          writeBack: true,
+          credential: "synthetic-encrypted-grant",
+          state: "connected",
+          lastSuccessfulSyncAt: null,
+        });
+        const encrypted = {
+          credentialKeyId: "fixture-key",
+          credentialNonce: new Uint8Array(12),
+          credentialCiphertext: new Uint8Array([1, 2, 3]),
+          credentialTag: new Uint8Array(16),
+        };
+        db.putBaikalConnector({
+          ...encrypted,
+          id: id(453),
+          ownerId: "owner-a",
+          endpoint: "https://cal.example.test/dav/",
+          username: "owner",
+          verifiedAt: now,
+          updatedAt: now,
+        });
+        db.putGoogleConnector({
+          ...encrypted,
+          id: id(454),
+          ownerId: "owner-a",
+          grantedScopes: ["calendar.readonly"],
+          accountLabel: "owner@example.test",
+          state: "connected",
+          createdAt: now,
+          updatedAt: now,
+          revokedAt: null,
+          writeConsentAt: now,
+        });
+        db.ensureCalendarProvider("owner-a", "baikal", id(453), now);
+        const baikal = db.getBaikalConnector("owner-a");
+        const google = db.getGoogleConnector("owner-a");
+        const app = db.applicationPreferences.get("owner-a");
+        db.applicationPreferences.mutate({
+          ownerId: "owner-a",
+          expectedRevision: app.revision,
+          preferences: {
+            ...app.preferences,
+            theme: "light",
+            defaultProjectId: ids.project,
+          },
+          now,
+        });
+        const grant = sqlite.prepare("SELECT * FROM issue_connections").all();
+        const preferences = db.getPlanningPreferences("owner-a");
+        const beforeEpoch = db.getSyncState("owner-a").epoch;
+        const preview = db.dataExport.previewContentReset("owner-a");
+        expect(preview.blockers).toEqual([]);
+        expect(preview.counts).toContainEqual({
+          table: "daily_evaluations",
+          rows: 1,
+        });
+        expect(preview.counts).toContainEqual({
+          table: "plugin_data_entries",
+          rows: 1,
+        });
+        const outcome = db.dataExport.resetContent(
+          "owner-a",
+          preview.fingerprint,
+          later,
+        );
+        expect(outcome.deletedRows).toBeGreaterThan(0);
+        const remaining = db.dataExport.export("owner-a", later, source);
+        expect(
+          Object.entries(remaining.tables)
+            .filter(([table]) => !table.startsWith("owner_"))
+            .flatMap(([, rows]) => rows),
+        ).toEqual([]);
+        expect(sqlite.prepare("SELECT * FROM issue_connections").all()).toEqual(
+          grant,
+        );
+        expect(db.getPlanningPreferences("owner-a")).toEqual(preferences);
+        expect(db.getBaikalConnector("owner-a")).toEqual(baikal);
+        expect(db.getGoogleConnector("owner-a")).toEqual(google);
+        expect(
+          db.applicationPreferences.get("owner-a").preferences,
+        ).toMatchObject({ theme: "light", defaultProjectId: null });
+        expect(db.getNotificationPreferences("owner-a").enabled).toBe(true);
+        expect(db.getTask("owner-b", id(999))).toBeDefined();
+        expect(
+          sqlite
+            .prepare("SELECT id FROM owner_accounts WHERE id=?")
+            .get("owner-a"),
+        ).toEqual({ id: "owner-a" });
+        expect(db.getSyncState("owner-a").epoch).not.toBe(beforeEpoch);
+        expect(sqlite.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      } finally {
+        sqlite.close();
+        db.close();
+      }
+    });
+  });
+
+  it("keeps provider-mapped board scaffolding and referenced taxonomy without retaining tasks", async () => {
+    await withTemporaryDirectory((directory) => {
+      const db = openWithOwner(directory, "owner-a", "mapped-reset");
+      const sqlite = raw(directory, "mapped-reset");
+      try {
+        seed(db, "owner-a");
+        const board = db.boards.listBoards("owner-a")[0];
+        if (!board) throw new Error("Missing board fixture");
+        sqlite
+          .prepare("UPDATE boards SET project_id=? WHERE id=?")
+          .run(ids.project, board.id);
+        sqlite
+          .prepare(
+            "UPDATE board_panels SET filter_json=json_set(filter_json,'$.includedTagIds',json(?)) WHERE board_id=?",
+          )
+          .run(JSON.stringify([ids.tag]), board.id);
+        db.issues.putConnection({
+          id: id(452),
+          ownerId: "owner-a",
+          provider: "gitea",
+          origin: "https://git.example.test",
+          repository: "fixture/issues",
+          tokenScope: "repository",
+          writeBack: true,
+          credential: "synthetic-encrypted-grant",
+          state: "connected",
+          lastSuccessfulSyncAt: null,
+        });
+        db.boardProviders.put("owner-a", {
+          boardId: board.id,
+          connectionId: id(452),
+          provider: "gitea",
+          projectId: 4,
+          projectTitle: "Provider project",
+          columns: [],
+          writeBack: true,
+          state: "idle",
+          message: null,
+          lastSyncedAt: null,
+          placements: {},
+          updatedAt: now,
+        });
+        const mapping = db.boardProviders.get("owner-a", board.id);
+        const preview = db.dataExport.previewContentReset("owner-a");
+        expect(preview.preservedIntegrationBoards).toBe(1);
+        db.dataExport.resetContent("owner-a", preview.fingerprint, later);
+        expect(db.boardProviders.get("owner-a", board.id)).toEqual(mapping);
+        expect(db.boards.listBoards("owner-a")).toHaveLength(1);
+        expect(db.boards.listBoards("owner-a")[0]?.panels).toHaveLength(3);
+        expect(db.listProjects("owner-a").map((x) => x.id)).toEqual([
+          ids.project,
+        ]);
+        expect(db.listTags("owner-a").map((x) => x.id)).toEqual([ids.tag]);
+        expect(db.listTasks("owner-a")).toEqual([]);
+        expect(sqlite.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      } finally {
+        sqlite.close();
+        db.close();
+      }
+    });
+  });
+
+  it("refuses a reset while a notification is in flight", async () => {
+    await withTemporaryDirectory((directory) => {
+      const db = openWithOwner(directory, "owner-a", "sending-reset");
+      const sqlite = raw(directory, "sending-reset");
+      try {
+        seed(db, "owner-a");
+        const delivery = db.queueNotificationTest("owner-a", id(460), now);
+        sqlite
+          .prepare(
+            "UPDATE notification_deliveries SET state='sending' WHERE id=?",
+          )
+          .run(delivery.id);
+        const preview = db.dataExport.previewContentReset("owner-a");
+        expect(preview.blockers).toEqual([
+          "Wait for the in-flight notification delivery before resetting content.",
+        ]);
+        expect(() =>
+          db.dataExport.resetContent("owner-a", preview.fingerprint, later),
+        ).toThrow("in-flight");
+        expect(db.getTask("owner-a", ids.parent)).toBeDefined();
+      } finally {
+        sqlite.close();
+        db.close();
+      }
+    });
+  });
+
+  it("rejects content edits even when the number of rows is unchanged", async () => {
+    await withTemporaryDirectory((directory) => {
+      const db = openWithOwner(directory, "owner-a", "stale-reset");
+      const sqlite = raw(directory, "stale-reset");
+      try {
+        seed(db, "owner-a");
+        const preview = db.dataExport.previewContentReset("owner-a");
+        sqlite
+          .prepare("UPDATE tasks SET notes='Edited after preview' WHERE id=?")
+          .run(ids.parent);
+        expect(() =>
+          db.dataExport.resetContent("owner-a", preview.fingerprint, later),
+        ).toThrow("changed");
+        expect(db.getTask("owner-a", ids.parent)?.notes).toBe(
+          "Edited after preview",
+        );
+      } finally {
+        sqlite.close();
+        db.close();
+      }
+    });
+  });
+
+  it("rolls back every deletion and the sync epoch when a deletion fails", async () => {
+    await withTemporaryDirectory((directory) => {
+      const db = openWithOwner(directory, "owner-a", "rollback-reset");
+      const sqlite = raw(directory, "rollback-reset");
+      try {
+        seed(db, "owner-a");
+        const original = db.dataExport.export("owner-a", now, source);
+        const epoch = db.getSyncState("owner-a").epoch;
+        sqlite.exec(
+          "CREATE TRIGGER fixture_reset_failure BEFORE DELETE ON tasks BEGIN SELECT RAISE(ABORT, 'fixture reset failure'); END;",
+        );
+        const preview = db.dataExport.previewContentReset("owner-a");
+        expect(() =>
+          db.dataExport.resetContent("owner-a", preview.fingerprint, later),
+        ).toThrow("fixture reset failure");
+        expect(db.dataExport.export("owner-a", now, source).tables).toEqual(
+          original.tables,
+        );
+        expect(db.getSyncState("owner-a").epoch).toBe(epoch);
+      } finally {
+        sqlite.close();
+        db.close();
+      }
+    });
+  });
+});

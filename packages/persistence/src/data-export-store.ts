@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite";
 import {
   dataExportFormat,
@@ -46,6 +46,15 @@ const via = (table: string, column: string, parent: string): TableSpec => ({
   table,
   scope: { column, parent },
 });
+
+/** Distinguishes an explicit content reset from ordinary snapshot recovery. */
+export const contentResetStateMigration = {
+  id: "0059_content_reset_generation",
+  sql: `CREATE TABLE owner_content_reset_state (
+    owner_id TEXT PRIMARY KEY REFERENCES owner_accounts(id) ON DELETE CASCADE,
+    generation TEXT NOT NULL, reset_at TEXT NOT NULL
+  ) STRICT;`,
+};
 
 /** Included tables in restore (dependency) order. */
 export const dataExportInventory: readonly TableSpec[] = [
@@ -110,6 +119,7 @@ export const dataExportInventory: readonly TableSpec[] = [
 
 /** Tables that never leave the database, with the reason in ADR 0034. */
 export const dataExportExcludedTables: readonly string[] = [
+  "owner_content_reset_state",
   "schema_migrations",
   "install_metadata",
   "owner_accounts",
@@ -345,6 +355,145 @@ export class SqliteDataExportStore {
       issues,
       canApply: issues.length === 0,
     };
+  }
+
+  contentGeneration(ownerId: string): string | null {
+    const row = this.db
+      .prepare(
+        "SELECT generation FROM owner_content_reset_state WHERE owner_id=?",
+      )
+      .get(ownerId);
+    return row === undefined ? null : String(row.generation);
+  }
+
+  /** A content-only snapshot: secrets and connector grants are never hashed or returned. */
+  previewContentReset(ownerId: string) {
+    const hash = createHash("sha256").update(
+      `content-reset-v1:${ownerId}:${this.contentGeneration(ownerId) ?? "initial"}`,
+    );
+    const counts: { table: string; rows: number }[] = [];
+    for (const spec of dataExportInventory.filter((item) => !item.singleton)) {
+      const keys = this.#columnsOf(spec.table)
+        .filter(({ pk }) => pk > 0)
+        .map(({ name }) => `t.${quote(name)}`);
+      const rows = this.db
+        .prepare(
+          `SELECT t.* FROM ${quote(spec.table)} t WHERE ${this.#resetWhere(spec)}${keys.length ? ` ORDER BY ${keys.join(",")}` : ""}`,
+        )
+        .all(ownerId);
+      hash.update(JSON.stringify([spec.table, rows]));
+      if (rows.length) counts.push({ table: spec.table, rows: rows.length });
+    }
+    hash.update(
+      JSON.stringify(
+        this.db
+          .prepare(
+            "SELECT preferences_json,revision FROM owner_application_preferences WHERE owner_id=?",
+          )
+          .get(ownerId) ?? null,
+      ),
+    );
+    const blockers: string[] = [];
+    for (const [query, message] of [
+      [
+        "SELECT 1 FROM active_sessions WHERE owner_id=? AND ended_at IS NULL LIMIT 1",
+        "Complete the active focus session before resetting content.",
+      ],
+      [
+        "SELECT 1 FROM task_calendar_blocks WHERE owner_id=? LIMIT 1",
+        "Remove task time blocks through the calendar workflow before resetting content.",
+      ],
+      [
+        "SELECT 1 FROM notification_deliveries WHERE owner_id=? AND state='sending' LIMIT 1",
+        "Wait for the in-flight notification delivery before resetting content.",
+      ],
+    ] as const)
+      if (this.db.prepare(query).get(ownerId)) blockers.push(message);
+    const preservedIntegrationBoards = Number(
+      this.db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM board_provider_mappings WHERE owner_id=?",
+        )
+        .get(ownerId)?.n ?? 0,
+    );
+    return {
+      fingerprint: hash.digest("hex"),
+      counts,
+      totalRows: counts.reduce((n, item) => n + item.rows, 0),
+      preservedIntegrationBoards,
+      blockers,
+    };
+  }
+
+  /** Uses a savepoint so reset, automation receipt and audit can commit together. */
+  resetContent(ownerId: string, expectedFingerprint: string, now: string) {
+    this.db.exec("SAVEPOINT content_reset;");
+    try {
+      const preview = this.previewContentReset(ownerId);
+      if (preview.fingerprint !== expectedFingerprint)
+        throw new Error("Content changed after the reset preview");
+      if (preview.blockers.length) throw new Error(preview.blockers.join(" "));
+      this.db
+        .prepare(
+          "UPDATE tasks SET archived_at=NULL WHERE owner_id=? AND archived_at IS NOT NULL",
+        )
+        .run(ownerId);
+      for (const table of replaceClearedTables)
+        this.db
+          .prepare(`DELETE FROM ${quote(table)} WHERE owner_id=?`)
+          .run(ownerId);
+      this.db
+        .prepare("DELETE FROM owner_focus_reminder_state WHERE owner_id=?")
+        .run(ownerId);
+      for (const spec of dataExportInventory.toReversed()) {
+        if (spec.singleton) continue;
+        this.db
+          .prepare(
+            `DELETE FROM ${quote(spec.table)} AS t WHERE ${this.#resetWhere(spec)}`,
+          )
+          .run(ownerId);
+      }
+      // Keep preferences, clearing only a reference to a project that was removed.
+      this.db
+        .prepare(
+          `UPDATE owner_application_preferences SET preferences_json=json_set(preferences_json,'$.defaultProjectId',NULL),revision=revision+1,updated_at=? WHERE owner_id=? AND json_extract(preferences_json,'$.defaultProjectId') IS NOT NULL AND json_extract(preferences_json,'$.defaultProjectId') NOT IN (SELECT id FROM projects WHERE owner_id=?)`,
+        )
+        .run(now, ownerId, ownerId);
+      this.db
+        .prepare(
+          "INSERT INTO owner_content_reset_state (owner_id,generation,reset_at) VALUES (?,?,?) ON CONFLICT(owner_id) DO UPDATE SET generation=excluded.generation,reset_at=excluded.reset_at",
+        )
+        .run(ownerId, randomUUID(), now);
+      this.#resetSyncEpoch(ownerId, now);
+      this.db.exec("RELEASE SAVEPOINT content_reset;");
+      return { deletedRows: preview.totalRows, resetAt: now };
+    } catch (error) {
+      this.db.exec(
+        "ROLLBACK TO SAVEPOINT content_reset; RELEASE SAVEPOINT content_reset;",
+      );
+      throw error;
+    }
+  }
+
+  #resetWhere(spec: TableSpec): string {
+    let where =
+      spec.scope === "owner"
+        ? "t.owner_id=?"
+        : `t.${quote(spec.scope.column)} IN (SELECT id FROM ${quote(spec.scope.parent)} WHERE owner_id=?)`;
+    // Provider mappings require these empty board/panel/project shells to survive.
+    if (spec.table === "boards")
+      where +=
+        " AND t.id NOT IN (SELECT board_id FROM board_provider_mappings WHERE owner_id=t.owner_id)";
+    if (spec.table === "board_panels")
+      where +=
+        " AND t.board_id NOT IN (SELECT board_id FROM board_provider_mappings WHERE owner_id=t.owner_id)";
+    if (spec.table === "projects")
+      where +=
+        " AND t.id NOT IN (SELECT b.project_id FROM boards b JOIN board_provider_mappings m ON m.board_id=b.id WHERE m.owner_id=t.owner_id AND b.project_id IS NOT NULL)";
+    if (spec.table === "projects" || spec.table === "tags")
+      where +=
+        " AND t.id NOT IN (SELECT j.value FROM board_panels p JOIN board_provider_mappings m ON m.board_id=p.board_id JOIN json_tree(p.filter_json) j WHERE m.owner_id=t.owner_id AND j.type='text')";
+    return where;
   }
 
   /**

@@ -1067,9 +1067,22 @@ export const handleAutomation: RouteHandler = async (
         return true;
       }
     }
+    if (command.operation === "data.reset") {
+      command = {
+        ...command,
+        input: {
+          expectedFingerprint:
+            command.input.expectedFingerprint ??
+            database.dataExport.previewContentReset(token.ownerId).fingerprint,
+        },
+      };
+    }
     let taskSummary: string | undefined;
+    let contentReset:
+      ReturnType<typeof database.dataExport.previewContentReset> | undefined;
     const affected: {
       entityKind:
+        | "owner_content"
         | "planning_preferences"
         | "notification_preferences"
         | "focus_preferences"
@@ -1135,7 +1148,33 @@ export const handleAutomation: RouteHandler = async (
       entityId: string;
       revision: number;
     }[] = [];
-    if (command.operation === "notifications.send_test") {
+    if (command.operation === "data.reset") {
+      const reset = database.dataExport.previewContentReset(token.ownerId);
+      if (reset.blockers.length) {
+        sendError(
+          response,
+          409,
+          "CONTENT_RESET_BLOCKED",
+          reset.blockers.join(" "),
+        );
+        return true;
+      }
+      if (
+        command.input.expectedFingerprint !== undefined &&
+        command.input.expectedFingerprint !== reset.fingerprint
+      ) {
+        sendError(
+          response,
+          412,
+          "AUTOMATION_PREVIEW_STALE",
+          "Content changed before the reset preview",
+        );
+        return true;
+      }
+      affected.push({ entityKind: "owner_content", entityId: token.ownerId });
+      contentReset = reset;
+      taskSummary = `Permanently reset ${String(reset.totalRows)} content records across ${String(reset.counts.length)} data families (see contentReset.counts). Preserve account access, credentials, integration grants, calendar configuration and preferences, including ${String(reset.preservedIntegrationBoards)} integration-bound board shells. Clear a removed default project reference and discard pre-reset offline queues on every device. External calendar records and messages are unchanged.`;
+    } else if (command.operation === "notifications.send_test") {
       if (ctx.ntfy === undefined) {
         sendError(
           response,
@@ -2043,6 +2082,7 @@ export const handleAutomation: RouteHandler = async (
       id: randomUUID(),
       operation: command.operation,
       inputHash,
+      ...(contentReset === undefined ? {} : { contentReset }),
       summary:
         taskSummary ??
         `Confirm ${command.operation} affecting ${String(affected.length)} resource(s)`,
@@ -2300,7 +2340,29 @@ export const handleAutomation: RouteHandler = async (
     let result: AutomationConfirmationResponse["result"] | undefined;
     let applyLocalMutation:
       (() => AutomationConfirmationResponse["result"]) | undefined;
-    if (command.operation === "notifications.send_test") {
+    if (command.operation === "data.reset") {
+      const reset = database.dataExport.previewContentReset(token.ownerId);
+      if (
+        command.input.expectedFingerprint !== reset.fingerprint ||
+        reset.blockers.length
+      ) {
+        sendError(
+          response,
+          412,
+          "AUTOMATION_PREVIEW_STALE",
+          reset.blockers.join(" ") || "Content changed after the reset preview",
+        );
+        return undefined;
+      }
+      const fingerprint = reset.fingerprint;
+      applyLocalMutation = () => ({
+        contentReset: database.dataExport.resetContent(
+          token.ownerId,
+          fingerprint,
+          ctx.sessionClock.now().toISOString(),
+        ),
+      });
+    } else if (command.operation === "notifications.send_test") {
       if (ctx.ntfy === undefined) {
         sendError(
           response,

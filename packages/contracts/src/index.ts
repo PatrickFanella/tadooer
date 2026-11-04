@@ -2284,6 +2284,7 @@ export const syncChangeSchema = z.object({
 export const syncRoundRequestSchema = z
   .object({
     cursor: syncCursorSchema.nullable(),
+    contentGeneration: entityIdSchema.optional(),
     operations: z.array(syncOperationSchema).max(100),
     pullLimit: z.number().int().min(1).max(200),
   })
@@ -2311,6 +2312,7 @@ export const syncCursorExpiredSchema = apiErrorSchema.extend({
 
 export const syncSnapshotResponseSchema = z.object({
   protocolVersion: z.literal(2),
+  contentGeneration: entityIdSchema.nullable().optional(),
   snapshots: z.array(syncEntitySnapshotSchema).max(200),
   nextCursor: syncCursorSchema,
   hasMore: z.boolean(),
@@ -2692,6 +2694,7 @@ export const automationCalendarFeedRevocationResponseSchema = z
   .strict();
 
 export const automationTokenScopeSchema = z.enum([
+  "data:reset",
   "notifications:test",
   "notifications:read",
   "notifications:write",
@@ -2802,6 +2805,7 @@ export const automationTokenListResponseSchema = z
   .strict();
 
 export const automationOperationSchema = z.enum([
+  "data.reset",
   "planning.update_preferences",
   "application.update_preferences",
   "notifications.send_test",
@@ -3047,9 +3051,48 @@ export const notificationTestQueuedSchema = z
   })
   .strict();
 
+export const automationContentResetInputSchema = z
+  .object({
+    expectedFingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+  })
+  .strict();
+
+export const contentResetPreviewSchema = z
+  .object({
+    fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    counts: z
+      .array(
+        z
+          .object({
+            table: z.string().min(1),
+            rows: z.number().int().nonnegative(),
+          })
+          .strict(),
+      )
+      .max(128),
+    totalRows: z.number().int().nonnegative(),
+    preservedIntegrationBoards: z.number().int().nonnegative(),
+    blockers: z.array(z.string()).max(10),
+  })
+  .strict();
+
+export const contentResetOutcomeSchema = z
+  .object({
+    deletedRows: z.number().int().nonnegative(),
+    resetAt: z.iso.datetime(),
+  })
+  .strict();
+
 export const automationPreviewCommandSchema = z.discriminatedUnion(
   "operation",
   [
+    z.object({
+      operation: z.literal("data.reset"),
+      input: automationContentResetInputSchema,
+    }),
     z.object({
       operation: z.literal("notifications.send_test"),
       input: notificationTestInputSchema,
@@ -3314,6 +3357,11 @@ export const automationPreviewCommandSchema = z.discriminatedUnion(
 const automationToolCommandSchema = (
   operation: z.infer<typeof automationOperationSchema>,
 ): z.ZodObject => {
+  if (operation === "data.reset")
+    return z.object({
+      operation: z.literal(operation),
+      input: automationContentResetInputSchema,
+    });
   if (operation === "notifications.send_test")
     return z.object({
       operation: z.literal(operation),
@@ -3668,6 +3716,7 @@ export const automationConfirmationRules: Readonly<
     AutomationOperationConfirmationRule
   >
 > = {
+  "data.reset": consequentialRule("irreversible"),
   "planning.update_preferences": ordinaryRule,
   "application.update_preferences": ordinaryRule,
   "notifications.send_test": consequentialRule("external_effect"),
@@ -3816,6 +3865,7 @@ const automationToolInputSchema = (
 export const automationAffectedEntitySchema = z
   .object({
     entityKind: z.enum([
+      "owner_content",
       "planning_preferences",
       "notification_preferences",
       "focus_preferences",
@@ -3917,6 +3967,7 @@ export const automationPreviewSchema = z
     operation: automationOperationSchema,
     inputHash: z.string().regex(/^[a-f0-9]{64}$/),
     summary: z.string().trim().min(1).max(1_000),
+    contentReset: contentResetPreviewSchema.optional(),
     affected: z
       .array(automationAffectedEntitySchema)
       .max(automationBatchBounds.affectedRecords),
@@ -3956,6 +4007,7 @@ export const calendarSubscriptionConversionResponseSchema = z
   .strict();
 
 export const automationExecutionResultSchema = z.union([
+  z.object({ contentReset: contentResetOutcomeSchema }).strict(),
   notificationTestQueuedSchema,
   automationCalendarImportApplyResponseSchema,
   automationCalendarFeedRevocationResponseSchema,
@@ -4566,7 +4618,9 @@ export const automationCatalog = [
                                         : id.startsWith("placeholders.") ||
                                             id.startsWith("pools.")
                                           ? "pools:write"
-                                          : "focus:write",
+                                          : id === "data.reset"
+                                            ? "data:reset"
+                                            : "focus:write",
     ] as const,
     confirmationRequired: true,
     confirmation: automationConfirmationRules[id],
@@ -4579,6 +4633,7 @@ export const automationCatalog = [
     id: "automation.confirm",
     kind: "tool",
     scopes: [
+      "data:reset",
       "notifications:test",
       "planning:write",
       "application:write",

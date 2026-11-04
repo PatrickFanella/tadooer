@@ -281,6 +281,7 @@ export const automationOperationFamilies: Readonly<
 > = {
   "planning.update_preferences": feedOnly,
   "application.update_preferences": feedOnly,
+  "data.reset": ["all"],
   "notifications.send_test": ["notification_preferences"],
   "notifications.update_preferences": feedOnly,
   "subtasks.mutate": feedOnly,

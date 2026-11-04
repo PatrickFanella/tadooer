@@ -100,6 +100,7 @@ export interface CachedEntity {
 }
 
 export interface LocalClientIdentity {
+  readonly contentGeneration?: string | null;
   readonly installationId: string;
   readonly clientId: string;
   readonly clientCredential: string;
@@ -1791,9 +1792,18 @@ export class LocalStore {
       throw new Error("A registered client is required before resetting sync");
     }
 
-    const outbox = (await requestResult(
-      transaction.objectStore(outboxStore).getAll(),
-    )) as LocalOutboxEntry[];
+    const contentReset =
+      response.contentGeneration != null &&
+      response.contentGeneration !== metadata.contentGeneration;
+    const outbox = contentReset
+      ? []
+      : ((await requestResult(
+          transaction.objectStore(outboxStore).getAll(),
+        )) as LocalOutboxEntry[]);
+    if (contentReset) {
+      transaction.objectStore(outboxStore).clear();
+      transaction.objectStore(conflictStore).clear();
+    }
     const taskSnapshots = new Map<string, SyncTaskSnapshot>();
     const structural = new Map<string, CachedEntity>();
     entities.clear();
@@ -1998,6 +2008,8 @@ export class LocalStore {
       {
         ...metadata,
         cursor: response.nextCursor,
+        contentGeneration:
+          response.contentGeneration ?? metadata.contentGeneration ?? null,
         syncProtocolVersion: 2,
         resetRequired: false,
         // ADR 0050: the count restarts with the cache it describes.

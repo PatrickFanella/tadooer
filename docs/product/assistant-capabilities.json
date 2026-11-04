@@ -799,6 +799,16 @@
       "issue": 30,
       "authority": "Owner session and CSRF; repository credentials and shared provider tokens remain owner-only and are never exposed to the assistant catalog.",
       "source": "apps/server/src/routes/issues.ts"
+    },
+    {
+      "id": "content-reset",
+      "action": "Reset all owner content while preserving integrations and account access",
+      "webApi": [],
+      "catalog": ["data.reset"],
+      "status": "covered",
+      "issue": 209,
+      "authority": "Dedicated data:reset permission and explicit consequential confirmation of a fingerprint-bound preview. Provider credentials, sessions, automation grants and calendar configuration survive; active focus, task time blocks and in-flight delivery block execution.",
+      "source": "apps/server/src/routes/automation.ts"
     }
   ]
 }

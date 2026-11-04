@@ -73,6 +73,9 @@ export class SyncEngine {
     const outbox = await this.store.loadOutbox();
     const request = {
       cursor: client.cursor,
+      ...(client.contentGeneration
+        ? { contentGeneration: client.contentGeneration }
+        : {}),
       operations: outbox
         .filter(({ state }) => state === "queued" || state === "sending")
         .map(({ operation }) => operation),
@@ -88,9 +91,19 @@ export class SyncEngine {
         await this.transport.snapshot(client),
       );
       const resetClient = await this.ensureClient();
+      const remaining = await this.store.loadOutbox();
       response = await this.#send(
         resetClient,
-        { ...request, cursor: resetClient.cursor },
+        {
+          ...request,
+          cursor: resetClient.cursor,
+          ...(resetClient.contentGeneration
+            ? { contentGeneration: resetClient.contentGeneration }
+            : {}),
+          operations: remaining
+            .filter(({ state }) => state === "queued" || state === "sending")
+            .map(({ operation }) => operation),
+        },
         trigger,
       );
     }

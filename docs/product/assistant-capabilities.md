@@ -180,3 +180,9 @@ The remaining #114 local record families now enter the read-only offline feed
 evaluations, links/attachments, archived history and recurring series. Their
 assistant authorization and revision checks are unchanged. Provider projections,
 connector secrets and automation tokens remain outside the feed.
+
+## Integration-preserving content reset (#209)
+
+`data.reset` is a consequential automation command requiring the dedicated `data:reset` grant. A preview returns exact per-table content counts and a fingerprint; confirmation refuses a changed snapshot. The atomic reset preserves account access, connector grants, calendar configuration, owner preferences and provider-mapped board scaffolding while clearing working and historical content, including evaluations and imported plugin payloads. Active focus, remaining task time blocks and in-flight notifications block execution.
+
+A new sync epoch and content generation refresh device caches and discard pre-reset offline queues. Old cached clients must reload before writing. Replay returns the original receipt and cannot erase newly created content. See ADR 0057 for the complete preservation boundary and production sequence. This is separate from owner-only portable data export and restore.

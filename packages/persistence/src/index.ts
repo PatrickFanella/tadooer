@@ -67,6 +67,7 @@ import type { NoteCreateInput, NotePatch, NoteRecord } from "./note-store.ts";
 import { captureMigration, SqliteCaptureStore } from "./capture-store.ts";
 import {
   DataRestoreError,
+  contentResetStateMigration,
   SqliteDataExportStore,
   dataExportExcludedTables,
   dataExportInventory,
@@ -1895,6 +1896,7 @@ const migrations: readonly Migration[] = [
         CHECK ((visibility = 'busy') = (identity_salt IS NOT NULL));
     `,
   },
+  contentResetStateMigration,
 ];
 
 /**

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ClientRegistrationResponse,
   SyncRoundResponse,
+  SyncRoundRequest,
 } from "@suite/contracts";
 import { LocalStore } from "./local-store.ts";
 import {
@@ -177,4 +178,64 @@ describe("SyncEngine", () => {
     remove();
     expect(listeners.has("online")).toBe(false);
   });
+});
+
+it("does not resend pre-reset queued work after a content reset generation changes", async () => {
+  store = new LocalStore({ indexedDb: indexedDB });
+  await store.ensureClient(() => Promise.resolve(registration));
+  const base = {
+    snapshots: [],
+    nextCursor: "old-cursor",
+    hasMore: false,
+    protocolVersion: 2 as const,
+    serverTimestamp: "2026-11-04T12:00:00.000Z",
+  };
+  await store.replaceFromSnapshot(base);
+  await store.queueTaskCreate({ title: "Queued before the explicit reset" });
+  const seen: SyncRoundRequest[] = [];
+  const engine = new SyncEngine(store, {
+    registerClient: () => Promise.resolve(registration),
+    snapshot: () =>
+      Promise.resolve({
+        ...base,
+        nextCursor: "new-cursor",
+        contentGeneration: "6519c805-e478-486b-a918-616fc6d9ea98",
+      }),
+    syncRound: (_client, request) => {
+      seen.push(request);
+      if (seen.length === 1)
+        return Promise.reject(new SyncCursorResetRequired());
+      return Promise.resolve({
+        protocolVersion: 2 as const,
+        outcomes: [],
+        changes: [],
+        nextCursor: "new-cursor",
+        hasMore: false,
+        serverTimestamp: base.serverTimestamp,
+      });
+    },
+  });
+  await engine.sync();
+  expect(seen[0]?.operations).toHaveLength(1);
+  expect(seen[1]?.operations).toEqual([]);
+  expect(await store.loadOutbox()).toEqual([]);
+  expect(await store.loadCachedTasks()).toEqual([]);
+});
+
+it("preserves new offline work when later snapshots have the same reset generation", async () => {
+  store = new LocalStore({ indexedDb: indexedDB });
+  await store.ensureClient(() => Promise.resolve(registration));
+  const snapshot = {
+    snapshots: [],
+    nextCursor: "cursor",
+    hasMore: false,
+    protocolVersion: 2 as const,
+    contentGeneration: "6519c805-e478-486b-a918-616fc6d9ea98",
+    serverTimestamp: "2026-11-04T12:00:00.000Z",
+  };
+  await store.replaceFromSnapshot(snapshot);
+  await store.queueTaskCreate({ title: "Created after learning the reset" });
+  await store.replaceFromSnapshot(snapshot);
+  expect(await store.loadOutbox()).toHaveLength(1);
+  expect(await store.loadCachedTasks()).toHaveLength(1);
 });

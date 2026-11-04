@@ -514,6 +514,9 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
         .slice(offset, offset + 200)
         .map((build) => build());
       const body: SyncSnapshotResponse = {
+        contentGeneration: database.dataExport.contentGeneration(
+          session.owner.id,
+        ),
         snapshots,
         nextCursor: cursorFor(snapshot.cursor),
         hasMore: offset + snapshots.length < allSnapshots.length,
@@ -555,6 +558,21 @@ export const handleSync: RouteHandler = async (request, response, url, ctx) => {
         requestId: randomUUID(),
         action: "replace_cache_from_snapshot",
       });
+      return true;
+    }
+    const contentGeneration = database.dataExport.contentGeneration(
+      session.owner.id,
+    );
+    if (
+      contentGeneration !== null &&
+      parsed.data.contentGeneration !== contentGeneration
+    ) {
+      sendError(
+        response,
+        426,
+        "CONTENT_RESET_CLIENT_UPDATE_REQUIRED",
+        "Content was reset. Reload Tadooer and replace this device's cache before sending queued work.",
+      );
       return true;
     }
     const outcomes = parsed.data.operations.map((operation) => {
