@@ -5,7 +5,6 @@ import { Button } from "./button.tsx";
 import { Checkbox } from "./checkbox.tsx";
 import { Input } from "./input.tsx";
 import { NativeSelect } from "./native-select.tsx";
-import { PageHeader } from "./page-header.tsx";
 
 describe("UI primitives", () => {
   it("renders disabled buttons with native semantics", () => {
@@ -71,21 +70,5 @@ describe("UI primitives", () => {
     expect(success).toContain("bg-success/15");
     expect(plain).toContain('data-variant="default"');
     expect(plain).not.toContain("destructive");
-  });
-
-  it("renders the page header title as an h1", () => {
-    const markup = renderToStaticMarkup(
-      <PageHeader
-        eyebrow="Step 1"
-        title="Today"
-        description="Plan the day."
-        actions={<Button>New task</Button>}
-      />,
-    );
-
-    expect(markup).toContain('data-slot="page-header"');
-    expect(markup).toMatch(/<h1[^>]*>Today<\/h1>/);
-    expect(markup).toContain("Step 1");
-    expect(markup).toContain('data-slot="page-header-actions"');
   });
 });

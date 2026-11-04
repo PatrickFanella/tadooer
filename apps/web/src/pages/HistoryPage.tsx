@@ -8,11 +8,15 @@ import { getTaskHistory, unarchiveTask } from "../api.ts";
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { LoadingList } from "../components/ui/loading-list.tsx";
 import { Input } from "../components/ui/input.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import {
   emptyHistory,
   loadMoreHistory,
@@ -177,8 +181,8 @@ export const HistoryList = ({
       <ul className="history-list">
         {state.entries.map((entry) => (
           <li key={entry.task.id}>
-            <Card>
-              <CardContent>
+            <ViewSection>
+              <ViewSectionBody>
                 <ArchivedTaskSummary
                   item={entry}
                   timeZone={timeZone}
@@ -208,8 +212,8 @@ export const HistoryList = ({
                 >
                   Restore to Tasks
                 </Button>
-              </CardContent>
-            </Card>
+              </ViewSectionBody>
+            </ViewSection>
           </li>
         ))}
       </ul>
@@ -298,9 +302,8 @@ export const HistoryPage = ({
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="history-heading"
     >
-      <PageHeader
+      <ViewIntro
         id="history-heading"
-        title="History"
         description="Archived tasks keep their original dates and stay out of Today, the Planner and reminders. Restore returns a task and its children to Tasks."
       />
       {!online && (
@@ -320,8 +323,8 @@ export const HistoryPage = ({
           <AlertDescription>{state.notice}</AlertDescription>
         </Alert>
       )}
-      <Card>
-        <CardHeader>
+      <ViewSection>
+        <ViewSectionHeader>
           <form className="history-search" role="search" onSubmit={search}>
             <label className="field">
               Search titles and notes
@@ -337,8 +340,8 @@ export const HistoryPage = ({
               Search
             </Button>
           </form>
-        </CardHeader>
-      </Card>
+        </ViewSectionHeader>
+      </ViewSection>
       <HistoryList
         state={state}
         online={online}

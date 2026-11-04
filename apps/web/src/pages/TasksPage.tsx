@@ -1,4 +1,4 @@
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import type { SyntheticEvent } from "react";
 import { groupTaskHierarchy, zonedCalendarDate } from "@suite/domain";
 import type {
@@ -20,7 +20,11 @@ import {
 import type { ListSelectionProps } from "../components/tasks/TaskRow.tsx";
 import { Field } from "../field.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import { NativeSelect } from "../components/ui/native-select.tsx";
@@ -220,8 +224,7 @@ export const TasksPage = ({
           : "planning";
   return (
     <>
-      <PageHeader
-        title="Tasks"
+      <ViewIntro
         description={
           section === "organize"
             ? "Projects, tags, sidebar folders and recurring series."
@@ -241,15 +244,15 @@ export const TasksPage = ({
       />
       {section === "organize" && (
         <>
-          <Card aria-labelledby="organization-title">
-            <CardHeader>
+          <ViewSection aria-labelledby="organization-title">
+            <ViewSectionHeader>
               <SectionHeading
                 id="organization-title"
                 as="h2"
                 title="Projects and tags"
               />
-            </CardHeader>
-            <CardContent>
+            </ViewSectionHeader>
+            <ViewSectionBody>
               <div className="task-actions">
                 <form
                   onSubmit={(event) =>
@@ -266,8 +269,8 @@ export const TasksPage = ({
                   <Button disabled={busy}>Add tag</Button>
                 </form>
               </div>
-            </CardContent>
-          </Card>
+            </ViewSectionBody>
+          </ViewSection>
           {organization !== undefined && (
             <OrganizationPanel
               projects={projects}
@@ -312,12 +315,12 @@ export const TasksPage = ({
               onTasksCreated={onTasksCreated}
             />
           )}
-          <Card
+          <ViewSection
             className="task-filter-bar"
             role="search"
             aria-label="Filter tasks"
           >
-            <CardContent className="flex flex-wrap items-end gap-2 pt-4">
+            <ViewSectionBody className="flex flex-wrap items-end gap-2 pt-4">
               <label>
                 Search
                 <Input
@@ -417,8 +420,8 @@ export const TasksPage = ({
                   </NativeSelect>
                 </label>
               )}
-            </CardContent>
-          </Card>
+            </ViewSectionBody>
+          </ViewSection>
           {organization !== undefined && (
             <TaskViewControls
               view={savedView.view}

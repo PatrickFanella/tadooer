@@ -481,6 +481,9 @@ export const App = ({ initialState, initialPath }: AppProps) => {
           : selectSingle(task.id),
     );
   };
+  // Issue #196: Planner and Boards open one task at a time.
+  const selectOnlyTask = (task: Task): void =>
+    selectTask(task, { shift: false, toggle: false });
   const clearSelection = (): void => {
     setSelection(emptySelection);
     setEditingId(null);
@@ -1893,7 +1896,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         crypto.randomUUID(),
       );
       replaceTask(result.task);
-      const window = plannerWindow();
+      // Issue #196: reload the range the Planner shows, if one is loaded.
+      const window = state.planner?.window ?? plannerWindow();
       const [planner, dayPlan] = await Promise.all([
         getPlanner(window.from, window.to),
         getDayPlan(),
@@ -1968,7 +1972,8 @@ export const App = ({ initialState, initialPath }: AppProps) => {
         state.session.csrfToken,
       );
       replaceTask(result.task);
-      const window = plannerWindow();
+      // Issue #196: reload the range the Planner shows, if one is loaded.
+      const window = state.planner?.window ?? plannerWindow();
       const [planner, dayPlan] = await Promise.all([
         getPlanner(window.from, window.to),
         getDayPlan(),
@@ -3485,6 +3490,7 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             dayOrderActions={
               state.client === undefined ? undefined : dayOrderActions
             }
+            onSelectTask={selectOnlyTask}
           />
         )}
         {route === "tasks" && (
@@ -3575,6 +3581,10 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             tasks={state.tasks.filter((task) => task.deletedAt === null)}
             projects={projects}
             tags={tags}
+            selectedTaskId={
+              selectedTasks.length === 1 ? (selectedTasks[0]?.id ?? null) : null
+            }
+            onSelectTask={selectOnlyTask}
           />
         )}
         {route === "counters" && (

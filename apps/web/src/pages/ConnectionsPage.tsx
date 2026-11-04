@@ -14,9 +14,13 @@ import { ImportedPluginData } from "../components/ImportedPluginData.tsx";
 import { CalendarSubscriptions } from "../components/CalendarSubscriptions.tsx";
 import { CalendarBridge } from "../components/CalendarBridge.tsx";
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 
 export interface ConnectionsPageProps {
@@ -61,10 +65,7 @@ export const ConnectionsPage = ({
   const [imports, setImports] = useState(0);
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader
-        title="Connections"
-        description="Calendars, imports and assistant access."
-      />
+      <ViewIntro description="Calendars, imports and assistant access." />
       <AssistantAccess csrfToken={csrfToken} />
       <IssueConnections
         getCsrfToken={getIssueCsrfToken}
@@ -118,15 +119,15 @@ export const ConnectionsPage = ({
         />
       )}
       <CalendarSubscriptions csrfToken={csrfToken} />
-      <Card aria-labelledby="connections-calendars-title">
-        <CardHeader>
+      <ViewSection aria-labelledby="connections-calendars-title">
+        <ViewSectionHeader>
           <SectionHeading
             as="h3"
             id="connections-calendars-title"
             title="Discovered calendars"
           />
-        </CardHeader>
-        <CardContent className="grid gap-3">
+        </ViewSectionHeader>
+        <ViewSectionBody className="grid gap-3">
           {baikal.calendars.length === 0 ? (
             <EmptyState title="Baikal returned no calendars." />
           ) : (
@@ -156,8 +157,8 @@ export const ConnectionsPage = ({
             elsewhere. Calendar and focus changes need a connection and are
             never queued.
           </p>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
     </div>
   );
 };

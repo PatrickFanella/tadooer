@@ -20,6 +20,7 @@ import {
 import {
   PlannerTimeGrid,
   plannerCalendarDays,
+  type PlannerGridEntry,
 } from "../components/calendar/PlannerTimeGrid.tsx";
 import {
   DayOrderList,
@@ -38,9 +39,13 @@ import {
 } from "../components/ui/alert.tsx";
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { LoadingList } from "../components/ui/loading-list.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 import {
   UnplannedTasksDrawer,
@@ -83,7 +88,24 @@ interface PlannerPageProps {
    */
   readonly dayOrders?: readonly SavedDayOrder[] | undefined;
   readonly dayOrderActions?: DayOrderActions | undefined;
+  /**
+   * Issue #196: opens a task in the shared detail panel. Plain calendar
+   * events still open the Planner's details sheet.
+   */
+  readonly onSelectTask?: ((task: Task) => void) | undefined;
 }
+
+/**
+ * Issue #196: the task a Planner entry stands for, if the detail panel
+ * should open it: a task entry, or a calendar block linked to a loaded task.
+ */
+export const plannerEntryTask = (
+  entry: PlannerGridEntry,
+  tasks: readonly Task[],
+): Task | undefined => {
+  const id = entry.kind === "task" ? entry.task.id : entry.event.linkedTaskId;
+  return id === undefined ? undefined : tasks.find((task) => task.id === id);
+};
 
 const calendarViewLabel: Readonly<Record<CalendarView, string>> = {
   day: "Day",
@@ -117,6 +139,7 @@ export const PlannerPage = ({
   onRemoveTimeBlock,
   dayOrders: savedDayOrders,
   dayOrderActions,
+  onSelectTask,
 }: PlannerPageProps) => {
   const [view, setView] = useState<CalendarView>("week");
   const [anchor, setAnchor] = useState(() => new Date());
@@ -176,9 +199,7 @@ export const PlannerPage = ({
 
   return (
     <div className={drawerOpen ? "today-page page-with-drawer" : "today-page"}>
-      <PageHeader
-        eyebrow="Calendar and tasks"
-        title="Planner"
+      <ViewIntro
         description="Calendar events and planned tasks on one time grid."
         actions={
           <>
@@ -203,8 +224,8 @@ export const PlannerPage = ({
           </>
         }
       />
-      <Card aria-label="Planner controls and calendar">
-        <CardHeader className="gap-3 border-b">
+      <ViewSection aria-label="Planner controls and calendar">
+        <ViewSectionHeader className="gap-3 border-b">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-1">
               <Button
@@ -255,8 +276,8 @@ export const PlannerPage = ({
               </TabsList>
             </Tabs>
           </div>
-        </CardHeader>
-        <CardContent className="grid gap-3 pt-4">
+        </ViewSectionHeader>
+        <ViewSectionBody className="grid gap-3 pt-4">
           {loading && (
             <p
               className="flex items-center gap-2 text-sm text-subtext"
@@ -331,6 +352,14 @@ export const PlannerPage = ({
                 }
                 onDropTask={dayOrders.enabled ? placeTask : undefined}
                 onSelectEntry={(entry) => {
+                  const task =
+                    onSelectTask === undefined
+                      ? undefined
+                      : plannerEntryTask(entry, tasks);
+                  if (task !== undefined && onSelectTask !== undefined) {
+                    onSelectTask(task);
+                    return;
+                  }
                   setOpener(
                     document.activeElement instanceof HTMLElement
                       ? document.activeElement
@@ -341,19 +370,19 @@ export const PlannerPage = ({
               />
             </>
           )}
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
       {orderedDays.length > 0 ? (
-        <Card aria-labelledby="planner-day-order-title">
-          <CardHeader>
+        <ViewSection aria-labelledby="planner-day-order-title">
+          <ViewSectionHeader>
             <SectionHeading
               id="planner-day-order-title"
               as="h2"
               eyebrow="Planned tasks"
               title="Day order"
             />
-          </CardHeader>
-          <CardContent className="grid gap-3">
+          </ViewSectionHeader>
+          <ViewSectionBody className="grid gap-3">
             {!dayOrders.enabled ? (
               <p className="hint">
                 The order of a day can be changed once this device has synced.
@@ -377,11 +406,12 @@ export const PlannerPage = ({
                   onMove={(taskId, direction) =>
                     void dayOrders.move(date, taskId, direction)
                   }
+                  onSelectTask={onSelectTask}
                 />
               </section>
             ))}
-          </CardContent>
-        </Card>
+          </ViewSectionBody>
+        </ViewSection>
       ) : null}
       <PlannerDetailsSheet
         selection={selection}
@@ -413,6 +443,7 @@ export const PlannerPage = ({
           available={dayOrders.enabled}
           busy={busy || dayOrders.pending}
           onPlace={(task, date) => placeTask(task.id, date)}
+          onSelectTask={onSelectTask}
           onClose={() => setDrawerOpen(false)}
         />
       )}

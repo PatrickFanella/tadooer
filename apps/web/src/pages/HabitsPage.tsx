@@ -8,12 +8,16 @@ import { deriveHabitMetrics, habitDateAt, habitDueOn } from "@suite/domain";
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import { NativeSelect } from "../components/ui/native-select.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
 
 const titleFrom = (data: FormData): string => {
@@ -88,9 +92,8 @@ export const HabitsPage = ({
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="habits-heading"
     >
-      <PageHeader
+      <ViewIntro
         id="habits-heading"
-        title="Habits"
         description="Things you repeat. Each habit keeps its history in its own time zone."
       />
       {!online && (
@@ -112,11 +115,11 @@ export const HabitsPage = ({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <Card>
-        <CardHeader>
+      <ViewSection>
+        <ViewSectionHeader>
           <SectionHeading title="Create a habit" />
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           <form onSubmit={(event) => void create(event)}>
             <fieldset disabled={disabled} className="habit-create">
               <label className="field">
@@ -180,8 +183,8 @@ export const HabitsPage = ({
               <Button type="submit">Create habit</Button>
             </fieldset>
           </form>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
       {library.habits.length === 0 && (
         <EmptyState
           title="No habits yet."
@@ -200,12 +203,12 @@ export const HabitsPage = ({
           const due = habitDueOn(habit, today);
           const metrics = deriveHabitMetrics(habit, occurrences, today);
           return (
-            <Card
+            <ViewSection
               className="habit-card"
               key={habit.id}
               aria-label={habit.title}
             >
-              <CardHeader>
+              <ViewSectionHeader>
                 <SectionHeading
                   as="h3"
                   title={habit.title}
@@ -215,8 +218,8 @@ export const HabitsPage = ({
                     ) : undefined
                   }
                 />
-              </CardHeader>
-              <CardContent className="grid gap-3">
+              </ViewSectionHeader>
+              <ViewSectionBody className="grid gap-3">
                 <p>
                   {habit.cadence.kind === "daily"
                     ? "Every day"
@@ -303,8 +306,8 @@ export const HabitsPage = ({
                   {habit.archivedAt === null ? "Archive" : "Restore"}{" "}
                   {habit.title}
                 </Button>
-              </CardContent>
-            </Card>
+              </ViewSectionBody>
+            </ViewSection>
           );
         })}
       </div>

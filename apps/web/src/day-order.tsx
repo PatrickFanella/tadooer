@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SavedDayOrder, Task } from "@suite/contracts";
 import { applyDayOrder, dayOrderMembers, moveInDayOrder } from "@suite/domain";
+import { TaskTitleButton } from "./components/tasks/TaskTitleButton.tsx";
 import { Button } from "./components/ui/button.tsx";
 
 /**
@@ -127,6 +128,8 @@ export interface DayOrderListProps {
   readonly available: boolean;
   readonly busy: boolean;
   readonly onMove: (taskId: string, direction: -1 | 1) => void;
+  /** Issue #196: opens a task in the detail panel. */
+  readonly onSelectTask?: ((task: Task) => void) | undefined;
 }
 
 /** An ordered task list with keyboard-accessible move controls. */
@@ -136,6 +139,7 @@ export const DayOrderList = ({
   available,
   busy,
   onMove,
+  onSelectTask,
 }: DayOrderListProps) => {
   const movable = items.filter(({ movable }) => movable);
   return (
@@ -146,7 +150,9 @@ export const DayOrderList = ({
         );
         return (
           <li key={task.id} className="day-order-row">
-            <span>{task.title}</span>
+            <TaskTitleButton task={task} onSelect={onSelectTask}>
+              <span>{task.title}</span>
+            </TaskTitleButton>
             <span className="day-order-actions">
               <Button
                 type="button"

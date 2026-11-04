@@ -23,14 +23,18 @@ import {
 import { Alert, AlertDescription } from "../components/ui/alert.tsx";
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { Input } from "../components/ui/input.tsx";
 import {
   NativeSelect,
   NativeSelectOption,
 } from "../components/ui/native-select.tsx";
-import { PageHeader } from "../components/ui/page-header.tsx";
+import { ViewIntro } from "../components/shell/ViewIntro.tsx";
 import { Textarea } from "../components/ui/textarea.tsx";
 import {
   addCounter,
@@ -164,8 +168,8 @@ export const CounterToday = ({
         };
         return (
           <li key={counter.id}>
-            <Card>
-              <CardContent className="counter-row">
+            <ViewSection>
+              <ViewSectionBody className="counter-row">
                 <div>
                   <h3>{counter.title}</h3>
                   <p aria-live="polite">
@@ -240,8 +244,8 @@ export const CounterToday = ({
                     </Button>
                   </form>
                 </div>
-              </CardContent>
-            </Card>
+              </ViewSectionBody>
+            </ViewSection>
           </li>
         );
       })}
@@ -531,9 +535,8 @@ export const CountersPage = ({
       className="mx-auto flex w-full max-w-5xl flex-col gap-6"
       aria-labelledby="counters-heading"
     >
-      <PageHeader
+      <ViewIntro
         id="counters-heading"
-        title="Counters"
         description="Daily counts, stopwatch time and a short evaluation of each day. Days follow your planning time zone; streaks are worked out from the recorded days."
       />
       {!online && (
@@ -597,8 +600,8 @@ export const CountersPage = ({
           />
         )}
       </section>
-      <Card>
-        <CardHeader>
+      <ViewSection>
+        <ViewSectionHeader>
           <h2 id="counters-week">Week</h2>
           <div className="worklog-controls">
             <Button
@@ -621,8 +624,8 @@ export const CountersPage = ({
               Next week
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           {history !== null && (
             <CounterWeek
               history={history}
@@ -665,13 +668,13 @@ export const CountersPage = ({
               </Button>
             </form>
           )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
+        </ViewSectionBody>
+      </ViewSection>
+      <ViewSection>
+        <ViewSectionHeader>
           <h2 id="counters-evaluation">Daily evaluation</h2>
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           <label className="field">
             Day
             <NativeSelect
@@ -787,13 +790,13 @@ export const CountersPage = ({
               Save evaluation
             </Button>
           </form>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
+        </ViewSectionBody>
+      </ViewSection>
+      <ViewSection>
+        <ViewSectionHeader>
           <h2 id="counters-manage">Manage counters</h2>
-        </CardHeader>
-        <CardContent>
+        </ViewSectionHeader>
+        <ViewSectionBody>
           {history !== null && history.counters.length > 0 && (
             <ul className="counter-list" aria-label="Your counters">
               {history.counters.map((counter) => (
@@ -1032,8 +1035,8 @@ export const CountersPage = ({
               Add counter
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
     </div>
   );
 };
