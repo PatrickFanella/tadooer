@@ -2,9 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- iOS serves this page from capacitor://localhost, which WebKit's
+         'self' does not match (ADR 0056); Android serves it over HTTPS
+         from localhost. Both name only the page's own origin. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' capacitor://localhost; style-src 'self' capacitor://localhost; img-src 'self' capacitor://localhost; base-uri 'none'; form-action 'none'"
     />
     <meta
       name="viewport"

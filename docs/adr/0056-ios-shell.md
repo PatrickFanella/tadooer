@@ -28,7 +28,10 @@ The iOS app uses two web views and never shows the Suite in Capacitor's.
   the same four calls (`state`, `cleartextPermitted`, `setServer`,
   `cancel`). The page checks the server through Capacitor's native HTTP
   client, as on Android. A call from anything but the bundled page
-  (`capacitor://localhost`) is refused.
+  (`capacitor://localhost`) is refused. The page's content security policy names
+  `capacitor://localhost` beside `'self'`: WebKit's `'self'` does not match
+  Capacitor's custom scheme, so without it the page's own stylesheets and
+  scripts are blocked and the screen stays blank.
 - **The Suite**: `SuiteViewController`, a plain `WKWebView` in the default
   website data store, with no Capacitor at all. It gets one user script,
   `page-bridge.js` from the bundle, behind a stand-in for Android's message

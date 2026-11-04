@@ -205,7 +205,7 @@ describe("bundled pages", () => {
   it("keeps the setup page closed to everything but its own files", () => {
     const html = built("index.html");
     expect(html).toContain(
-      "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'",
+      "default-src 'none'; script-src 'self' capacitor://localhost; style-src 'self' capacitor://localhost; img-src 'self' capacitor://localhost; base-uri 'none'; form-action 'none'",
     );
     expect(html).toContain("viewport-fit=cover");
     expect(html).not.toMatch(/https?:\/\/(?!tasks\.example\.org)/);
