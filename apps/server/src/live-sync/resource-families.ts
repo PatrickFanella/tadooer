@@ -210,6 +210,7 @@ const routeRules: readonly RouteRule[] = [
   ),
   families("*", `calendar-feeds(/${uuid})?`, "publication"),
   none(`calendars/${uuid}/export\\.ics`, readOnly),
+  none(`calendars/${uuid}/feed-preview`, readOnly),
 
   // Imports and restore replace or add records across families.
   families("*", `imports/preview`, "calendar"),

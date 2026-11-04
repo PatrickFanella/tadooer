@@ -9,7 +9,11 @@ import {
   calendarImportReportSchema,
   calendarFeedCreateRequestSchema,
 } from "@suite/contracts";
-import { parseIcsImport, serializeCalendarFeed } from "@suite/import-export";
+import {
+  parseIcsImport,
+  serializeBusyCalendarFeed,
+  serializeCalendarFeed,
+} from "@suite/import-export";
 import {
   sendJson,
   sendError,
@@ -65,12 +69,17 @@ export const handleCalendar: RouteHandler = async (
       );
       return true;
     }
-    const feed = serializeCalendarFeed(
-      database.listPublishedCalendarRaw(
-        capability.ownerId,
-        capability.calendarId,
-      ),
+    const published = database.listPublishedCalendarRaw(
+      capability.ownerId,
+      capability.calendarId,
     );
+    const feed =
+      capability.visibility === "busy" && capability.identitySalt !== null
+        ? serializeBusyCalendarFeed(published, {
+            identitySalt: capability.identitySalt,
+            now: new Date(timestamp),
+          }).ics
+        : serializeCalendarFeed(published);
     response.writeHead(200, {
       ...securityHeaders,
       "Cache-Control": "private, no-store",
@@ -297,6 +306,38 @@ export const handleCalendar: RouteHandler = async (
     return true;
   }
 
+  const feedPreviewMatch =
+    /^\/api\/calendars\/([0-9a-f-]{36})\/feed-preview$/.exec(url.pathname);
+  if (method === "GET" && feedPreviewMatch !== null) {
+    const session = auth.authenticate(request, false);
+    const calendarId = feedPreviewMatch[1] ?? "";
+    if (session === undefined) {
+      sendError(response, 401, "AUTH_REQUIRED", "Owner session required");
+      return true;
+    }
+    if (database.getOwnedCalendar(session.owner.id, calendarId) === undefined) {
+      sendError(response, 404, "CALENDAR_NOT_FOUND", "Calendar not found");
+      return true;
+    }
+    const published = database.listPublishedCalendarRaw(
+      session.owner.id,
+      calendarId,
+    );
+    const full = serializeCalendarFeed(published);
+    sendJson(response, 200, {
+      calendarId,
+      full: {
+        events: full.split("\r\n").filter((line) => line === "BEGIN:VEVENT")
+          .length,
+      },
+      busy: serializeBusyCalendarFeed(published, {
+        identitySalt: randomBytes(32).toString("base64url"),
+        now: new Date(timestamp),
+      }).report,
+    });
+    return true;
+  }
+
   if (url.pathname === "/api/calendar-feeds") {
     const session = auth.authenticate(request, method === "POST");
     if (session === undefined) {
@@ -311,6 +352,7 @@ export const handleCalendar: RouteHandler = async (
             id: record.id,
             calendarId: record.calendarId,
             label: record.label,
+            visibility: record.visibility,
             createdAt: record.createdAt,
             revokedAt: record.revokedAt,
           })),
@@ -357,6 +399,11 @@ export const handleCalendar: RouteHandler = async (
         ownerId: session.owner.id,
         calendarId: parsed.data.calendarId,
         label: parsed.data.label,
+        visibility: parsed.data.visibility,
+        identitySalt:
+          parsed.data.visibility === "busy"
+            ? randomBytes(32).toString("base64url")
+            : null,
         secretHash: createHash("sha256").update(secret).digest("base64url"),
         createdAt: timestamp,
         revokedAt: null,
@@ -366,6 +413,7 @@ export const handleCalendar: RouteHandler = async (
         id: record.id,
         calendarId: record.calendarId,
         label: record.label,
+        visibility: record.visibility,
         createdAt: record.createdAt,
         revokedAt: record.revokedAt,
       };
