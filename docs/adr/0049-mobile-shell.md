@@ -334,7 +334,7 @@ unchanged. The mobile bundles alias `node:url` to the WebView's global `URL`.
 
 The native side needs the rules where no JavaScript runs. `ShellPolicy.java`
 is a second, stricter reading with no Android import.
-`apps/mobile/src/android-policy.test.mjs` compiles it with a plain JDK and
+`apps/mobile/src/native-policy.test.mjs` compiles it with a plain JDK and
 runs it and the JavaScript over the same inputs. It fails when the Java
 accepts something the JavaScript refuses or returns a different result. The
 test is skipped where no JDK is installed, which includes the repository's
