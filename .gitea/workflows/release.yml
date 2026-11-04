@@ -148,6 +148,8 @@ jobs:
           GITEA_SERVER_URL: ${{ github.server_url }}
           GITEA_REPOSITORY: ${{ github.repository }}
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          # Cloudflare refuses uploads over 100 MB; go to Almaz on the LAN.
+          GITEA_ORIGIN_ADDRESS: 10.0.0.200
         run: node deploy/release-assets.mjs "$TAG" apps/desktop/dist-packages/*.tar.gz apps/desktop/dist-packages/*.tar.gz.sha256
 
   desktop-mac:
@@ -182,6 +184,8 @@ jobs:
           GITEA_SERVER_URL: ${{ github.server_url }}
           GITEA_REPOSITORY: ${{ github.repository }}
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          # Cloudflare refuses uploads over 100 MB; go to Almaz on the LAN.
+          GITEA_ORIGIN_ADDRESS: 10.0.0.200
         run: |
           cd apps/desktop/dist-packages
           node ../../../deploy/release-assets.mjs "$TAG" *.zip *.zip.sha256 *.dmg *.dmg.sha256

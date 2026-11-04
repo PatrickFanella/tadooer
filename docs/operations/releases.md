@@ -25,9 +25,15 @@ channel refuses a version it has already recorded.
 | `desktop-linux` | `ubuntu-24.04`        | `pnpm package:desktop`; uploads the tar.gz and its checksum to the Gitea release.                                                                                                                      |
 | `desktop-mac`   | `macos-arm64` (Soyuz) | `pnpm package:desktop:mac:universal`; uploads the zip, the disk image and their checksums. The app is signed ad hoc, not with a Developer ID; see [desktop.md](desktop.md#what-an-unsigned-app-means). |
 
+The desktop jobs upload over plain HTTP to Almaz on the LAN
+(`GITEA_ORIGIN_ADDRESS=10.0.0.200`, with `git.subcult.tv` as the host name)
+instead of through Cloudflare, which refuses request bodies over 100 MB. The
+token on that connection is the workflow's own, which expires with the job.
+
 "Run workflow" on the release action, with an existing tag, runs the same
 jobs for that tag. A tag that is already live is reported and left as it is,
-so this rebuilds the desktop packages without a second deployment.
+so this rebuilds the desktop packages without a second deployment. It checks
+out the tag, so it uses the tools as they were when the tag was made.
 
 The desktop packages keep their own version (`apps/desktop/package.json`);
 the release tag names the server version.
