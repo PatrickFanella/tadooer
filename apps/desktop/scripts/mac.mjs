@@ -1,11 +1,12 @@
 import { Buffer } from "node:buffer";
 import { basename, join } from "node:path";
+import { macShortVersion, stampingHook } from "./release-build.mjs";
 import { deepLinkScheme } from "../src/policy.mjs";
 
 /**
  * What the macOS package is: identifiers, the `Info.plist` additions, the
- * `@electron/packager` options and the entitlements a later signing step
- * would use (ADR 0047, "macOS"). Everything here is pure; the scripts that
+ * `@electron/packager` options and the entitlements the signing step
+ * uses (ADR 0047, "macOS"). Everything here is pure; the scripts that
  * touch the disk are `package-mac.mjs` and `make-mac-assets.mjs`.
  */
 
@@ -75,8 +76,7 @@ export const packageIgnore = Object.freeze([
 ]);
 
 /**
- * Options for one `@electron/packager` run. Nothing is signed here; on a Mac
- * the bundle gets an ad hoc signature afterwards (`mac-sign.mjs`). The
+ * Options for one `@electron/packager` run. Signing runs after resource copying in `mac-sign.mjs`. The
  * universal architecture is accepted only when the host is macOS, because
  * the packager joins the two thin builds with `lipo` there.
  */
@@ -86,6 +86,8 @@ export const macPackagerOptions = ({
   productName,
   arch,
   hostPlatform = "linux",
+  build,
+  environment = {},
 }) => {
   if (!macArchitecturesFor(hostPlatform).includes(arch))
     throw new Error(`Unsupported macOS architecture: ${String(arch)}`);
@@ -95,6 +97,13 @@ export const macPackagerOptions = ({
     name: productName,
     platform: "darwin",
     arch,
+    ...(build
+      ? {
+          appVersion: macShortVersion(build.version),
+          buildVersion: build.buildVersion,
+          afterCopy: [stampingHook(build, "darwin", arch, environment)],
+        }
+      : {}),
     overwrite: true,
     prune: false,
     ignore: [...packageIgnore],
@@ -106,7 +115,7 @@ export const macPackagerOptions = ({
 };
 
 /**
- * Entitlements for a later Developer ID signature with the hardened runtime.
+ * Entitlements for identity signing with the hardened runtime.
  *
  * - `cs.allow-jit` is what V8 needs under the hardened runtime.
  * - `network.client` only has an effect inside the App Sandbox, which a
@@ -148,7 +157,6 @@ export const refusedEntitlements = (entitlements) =>
  * Per-file options in the shape `@electron/osx-sign` takes as
  * `optionsForFile`: the hardened runtime everywhere, the main entitlements
  * for the application and the helper entitlements for everything inside it.
- * Unused until signing is implemented (`mac-sign.mjs`).
  */
 export const macSignOptionsForFile = (filePath, { directory, productName }) => {
   const main = basename(filePath) === `${productName}.app`;
@@ -277,6 +285,8 @@ export const requiredApplicationFiles = Object.freeze([
   "src/main.mjs",
   "src/shell.mjs",
   "src/platform.mjs",
+  "src/updates.mjs",
+  "src/updates-policy.mjs",
   "src/setup/index.html",
   "dist/preload.cjs",
   "dist/setup-preload.cjs",
@@ -301,7 +311,10 @@ export const applicationFileProblems = (paths) => [
  * Compares a packaged `Info.plist` with what the package is meant to be.
  * Returns one sentence per difference; an empty list means it matches.
  */
-export const macInfoPlistProblems = (plist, { productName, version }) => {
+export const macInfoPlistProblems = (
+  plist,
+  { productName, version, buildVersion },
+) => {
   const problems = [];
   const expect = (key, expected) => {
     if (plist[key] !== expected)
@@ -312,7 +325,8 @@ export const macInfoPlistProblems = (plist, { productName, version }) => {
   expect("CFBundleIdentifier", macBundleId);
   expect("CFBundleName", productName);
   expect("CFBundleExecutable", productName);
-  expect("CFBundleShortVersionString", version);
+  expect("CFBundleShortVersionString", macShortVersion(version));
+  if (buildVersion !== undefined) expect("CFBundleVersion", buildVersion);
   expect("CFBundlePackageType", "APPL");
   expect("LSApplicationCategoryType", macCategory);
   expect("LSUIElement", false);

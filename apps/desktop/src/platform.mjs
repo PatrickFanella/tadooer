@@ -117,6 +117,7 @@ export const applicationMenu = ({
   startAtLogin,
   startAtLoginAvailable,
   serverFromEnvironment,
+  updateState = { enabled: false, label: "Check for updates…" },
 }) => {
   const actions = [
     { label: "Quick capture", command: "quick-capture" },
@@ -128,6 +129,11 @@ export const applicationMenu = ({
       : "Change server…",
     enabled: !serverFromEnvironment,
     command: "change-server",
+  };
+  const update = {
+    label: updateState.label,
+    enabled: packaged && updateState.enabled,
+    command: "check-for-updates",
   };
   const toggles = [
     {
@@ -163,6 +169,7 @@ export const applicationMenu = ({
         label: appName,
         submenu: [
           { role: "about" },
+          update,
           separator,
           server,
           ...toggles,
@@ -186,6 +193,7 @@ export const applicationMenu = ({
       label: "App",
       submenu: [
         ...actions,
+        update,
         separator,
         server,
         separator,

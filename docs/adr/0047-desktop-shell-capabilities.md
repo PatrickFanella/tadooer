@@ -4,6 +4,9 @@ status: accepted
 
 # The desktop shell gets host features, not data authority
 
+Update 2026-11-04: ADR 0058 supersedes the deferred desktop update and macOS
+signing decisions below. The original capability and renderer boundaries remain.
+
 Roadmap #112, wave 7D (#116). Builds on ADR 0015 (the desktop is a constrained
 shell around the deployed origin) and ADR 0045 (the web app inside the shell
 already holds the live sync stream). Decided 2026-10-02.

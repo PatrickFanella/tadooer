@@ -10,6 +10,7 @@ import {
   afterPackage,
   missingSigningVariables,
   signingRequested,
+  signingPreflight,
 } from "./mac-sign.mjs";
 import {
   applicationFileProblems,
@@ -596,13 +597,13 @@ describe("signing hook", () => {
     ).toThrow("does not verify");
   });
 
-  it("does nothing for an unsigned build", () => {
-    expect(afterPackage(bundle, {}, "linux")).toEqual({ signed: false });
+  it("does nothing for an unsigned build", async () => {
+    expect(await afterPackage(bundle, {}, "linux")).toEqual({ signed: false });
     for (const value of ["", "0", "false", "no"]) {
       expect(signingRequested({ SUITE_MAC_SIGN: value })).toBe(false);
-      expect(afterPackage(bundle, { SUITE_MAC_SIGN: value }, "darwin")).toEqual(
-        { signed: false },
-      );
+      expect(
+        await afterPackage(bundle, { SUITE_MAC_SIGN: value }, "darwin"),
+      ).toEqual({ signed: false });
     }
     expect(signingRequested({ SUITE_MAC_SIGN: "1" })).toBe(true);
   });
@@ -626,7 +627,7 @@ describe("signing hook", () => {
     ]);
     let message = "";
     try {
-      afterPackage(bundle, partial, "darwin");
+      signingPreflight(partial, "darwin");
     } catch (error) {
       message = error.message;
     }
@@ -648,14 +649,60 @@ describe("signing hook", () => {
   });
 
   it("refuses to sign on a host without codesign", () => {
-    expect(() =>
-      afterPackage(bundle, { ...identity, ...apiKey }, "linux"),
-    ).toThrow("signing needs macOS");
+    expect(() => signingPreflight({ ...identity, ...apiKey }, "linux")).toThrow(
+      "signing needs macOS",
+    );
   });
 
-  it("stops a build that asks for a signature it cannot make", () => {
-    expect(() =>
-      afterPackage(bundle, { ...identity, ...apiKey }, "darwin"),
-    ).toThrow("not implemented");
+  it("signs development builds with the restricted entitlements and verifies them", async () => {
+    let options;
+    const calls = [];
+    const environment = {
+      SUITE_MAC_SIGN: "development",
+      SUITE_MAC_SIGN_IDENTITY: "test identity",
+    };
+    expect(missingSigningVariables(environment)).toEqual([]);
+    await expect(
+      afterPackage(
+        { ...bundle, directory: "/work", productName: "Tadooer" },
+        environment,
+        "darwin",
+        {
+          sign: async (value) => {
+            options = value;
+            calls.push("sign");
+          },
+          notarize: async () => {
+            throw new Error("Development builds must not be notarized");
+          },
+          run: (_command, args) => {
+            calls.push(args[0]);
+            return { status: 0 };
+          },
+        },
+      ),
+    ).resolves.toEqual({ signed: true, notarized: false });
+    expect(calls).toEqual(["sign", "--verify"]);
+    expect(options.type).toBe("development");
+    expect(options.preAutoEntitlements).toBe(false);
+    expect(options.preEmbedProvisioningProfile).toBe(false);
+    expect(options.optionsForFile(bundle.appPath)).toEqual({
+      hardenedRuntime: true,
+      entitlements: "/work/mac/entitlements.mac.plist",
+      timestamp: "none",
+    });
+  });
+
+  it("notarizes distribution builds and refuses a failed signature verification", async () => {
+    const calls = [];
+    const dependencies = {
+      sign: async () => calls.push("sign"),
+      notarize: async () => calls.push("notarize"),
+      run: () => ({ status: 1 }),
+    };
+    await expect(
+      afterPackage(bundle, { ...identity, ...apiKey }, "darwin", dependencies),
+    ).rejects.toThrow("does not verify");
+    expect(calls).toEqual(["sign", "notarize"]);
   });
 });

@@ -1,6 +1,7 @@
 /* global AbortSignal */
 import {
   app,
+  autoUpdater,
   BrowserWindow,
   dialog,
   ipcMain,
@@ -12,11 +13,13 @@ import {
   shell,
   Tray,
 } from "electron";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { setTimeout } from "node:timers";
 import { pathToFileURL } from "node:url";
+import { createDesktopUpdater } from "./updates.mjs";
 import { autostartPath, setAutostart } from "./autostart.mjs";
 import {
   channels,
@@ -71,9 +74,9 @@ import {
  * documentation and unit-tested as data; they have not run on a Mac (see
  * docs/operations/desktop.md for the checklist).
  *
- * Auto-update, code signing and the Windows package are not here. They are
- * owner decisions; `start()` is the place a later update check would be
- * scheduled.
+ * Desktop updates use the fixed publisher release host, independently of
+ * the configured task server. Only native menus can request an update; the
+ * remote page has no update or installation IPC endpoint.
  */
 
 const sourceDirectory = import.meta.dirname;
@@ -120,6 +123,7 @@ export const createShell = ({
   let trayKey = "";
   let quitting = false;
   let ready = false;
+  let updater;
   const deepLinks = createDeepLinkInbox();
   let pageStatus;
   let pageFocus;
@@ -169,7 +173,14 @@ export const createShell = ({
     const visible = hasPage() && mainWindow.isVisible();
     const status = statusLine(pageStatus);
     const focus = focusLine(pageFocus);
-    const key = JSON.stringify([visible, hasPage(), status, focus]);
+    const updateState = updater?.state();
+    const key = JSON.stringify([
+      visible,
+      hasPage(),
+      status,
+      focus,
+      updateState,
+    ]);
     if (key === trayKey) return;
     trayKey = key;
     tray.setToolTip(`${app.getName()}: ${status}`);
@@ -192,6 +203,12 @@ export const createShell = ({
           label: "Sync now",
           enabled: hasPage(),
           click: () => sendCommand("sync-now"),
+        },
+        { type: "separator" },
+        {
+          label: updateState?.label ?? "Check for updates…",
+          enabled: updateState?.enabled === true,
+          click: () => void updater?.check(),
         },
         { type: "separator" },
         { label: "Quit", click: quit },
@@ -266,6 +283,7 @@ export const createShell = ({
       startAtLogin: settings.startAtLogin,
       startAtLoginAvailable: startAtLoginAvailable(),
       serverFromEnvironment: originFromEnvironment,
+      updateState: updater?.state(),
     });
     Menu.setApplicationMenu(
       Menu.buildFromTemplate(
@@ -278,6 +296,7 @@ export const createShell = ({
           "sync-now": () => {
             if (!sendCommand("sync-now")) showMainWindow();
           },
+          "check-for-updates": () => void updater?.check(),
           "change-server": openSetup,
           "set-close-to-tray": (checked) =>
             void saveSettings({ closeToTray: checked }),
@@ -579,6 +598,40 @@ export const createShell = ({
     await app.whenReady();
     settingsPath = join(app.getPath("userData"), settingsFileName);
     settings = await readSettings(settingsPath);
+    let release;
+    try {
+      release = JSON.parse(
+        await readFile(
+          join(process.resourcesPath, "tadooer-release.json"),
+          "utf8",
+        ),
+      );
+    } catch {
+      /* A development checkout has no packaged release metadata. */
+    }
+    updater = createDesktopUpdater({
+      enabled:
+        app.isPackaged &&
+        !headless &&
+        release?.schemaVersion === 1 &&
+        release.releaseBuild === true,
+      current: release,
+      platform: process.platform,
+      arch: process.arch,
+      native: autoUpdater,
+      dialog,
+      downloadsDirectory: app.getPath("downloads"),
+      revealDownload: (path) => shell.showItemInFolder(path),
+      openReleasePage: (url) => shell.openExternal(url),
+      beforeInstall: () => {
+        quitting = true;
+      },
+      onChange: () => {
+        buildMenu();
+        refreshTray();
+      },
+    });
+    app.once("will-quit", () => updater.dispose());
 
     const configured = environment.SUITE_SERVER_URL;
     if (typeof configured === "string" && configured !== "") {
@@ -605,6 +658,7 @@ export const createShell = ({
     buildMenu();
     createTray();
     ready = true;
+    updater.start();
 
     const link = deepLinks.start(process.argv);
     if (origin === undefined) openSetup();
