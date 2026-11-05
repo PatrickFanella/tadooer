@@ -2,7 +2,14 @@
 import { spawnSync } from "node:child_process";
 import console from "node:console";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { lutimes, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  lutimes,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { pipeline } from "node:stream/promises";
@@ -17,6 +24,9 @@ import {
   readPackage,
   sha256File,
 } from "./artifact.mjs";
+
+import { makeUpdateMetadata } from "./release-build.mjs";
+import { updateMetadataName } from "../src/updates-policy.mjs";
 
 /**
  * Turns the directory electron-packager wrote into the release artifact and
@@ -41,6 +51,23 @@ const packaged = packagedDirectoryName(manifest.productName, platform, arch);
 const packagedPath = join(outputDirectory, packaged);
 if (!existsSync(packagedPath))
   throw new Error(`Packaged directory is missing: ${packaged}`);
+
+const resources =
+  platform === "darwin"
+    ? join(packagedPath, `${manifest.productName}.app`, "Contents", "Resources")
+    : join(packagedPath, "resources");
+const stamp = JSON.parse(
+  await readFile(join(resources, "tadooer-release.json"), "utf8"),
+);
+for (const [key, expected] of Object.entries({
+  version: manifest.version,
+  buildVersion: manifest.buildVersion,
+  platform,
+  arch,
+  releaseBuild: manifest.releaseBuild,
+}))
+  if (stamp[key] !== expected)
+    throw new Error(`The packaged release stamp has an unexpected ${key}`);
 
 const base = artifactBaseName(manifest.version, platform, arch);
 const archiveName = artifactFileName(manifest.version, platform, arch);
@@ -99,6 +126,26 @@ const zipBundle = async () => {
   const bundle = `${manifest.productName}.app`;
   if (!existsSync(join(packagedPath, bundle)))
     throw new Error(`Application bundle is missing: ${packaged}/${bundle}`);
+  if (stamp.installMode === "native") {
+    if (process.platform !== "darwin")
+      throw new Error("Signed update archives must be made on macOS");
+    await rm(archivePath, { force: true });
+    const zip = spawnSync(
+      "ditto",
+      [
+        "-c",
+        "-k",
+        "--sequesterRsrc",
+        "--keepParent",
+        join(packagedPath, bundle),
+        archivePath,
+      ],
+      { stdio: "inherit" },
+    );
+    if (zip.error) throw zip.error;
+    if (zip.status !== 0) throw new Error("ditto failed");
+    return;
+  }
   const entries = (await listTree(packagedPath, bundle)).sort();
   if (entries.some((entry) => /[\r\n]/.test(entry)))
     throw new Error("A bundle path contains a line break");
@@ -139,6 +186,17 @@ await writeFile(
   `${archivePath}.sha256`,
   `${checksumLine(sha256, archiveName)}\n`,
 );
+if (stamp.releaseBuild) {
+  const metadata = makeUpdateMetadata(
+    stamp,
+    { name: archiveName, size: (await stat(archivePath)).size, sha256 },
+    new Date(),
+  );
+  await writeFile(
+    join(outputDirectory, updateMetadataName(platform, arch)),
+    `${JSON.stringify(metadata, null, 2)}\n`,
+  );
+}
 console.log(
   JSON.stringify({
     artifact: archiveName,

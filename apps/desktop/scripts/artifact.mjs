@@ -3,6 +3,8 @@ import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import process from "node:process";
+import { desktopBuild } from "./release-build.mjs";
 
 /**
  * Names and checksums of the desktop release artifacts. Shared by the
@@ -16,8 +18,12 @@ export const desktopDirectory = join(
 );
 export const outputDirectory = join(desktopDirectory, "dist-packages");
 
-export const readPackage = async () =>
-  JSON.parse(await readFile(join(desktopDirectory, "package.json"), "utf8"));
+export const readPackage = async (environment = process.env) => {
+  const manifest = JSON.parse(
+    await readFile(join(desktopDirectory, "package.json"), "utf8"),
+  );
+  return { ...manifest, ...desktopBuild(manifest, environment) };
+};
 
 /** The directory electron-packager writes for a platform and architecture. */
 export const packagedDirectoryName = (productName, platform, arch) =>

@@ -5,10 +5,10 @@ The desktop app is an Electron window around one Tadooer server (ADR 0015). ADR
 instance, start at login, `tadooer://` links and native notifications. It keeps
 no tasks and no credentials of its own.
 
-It is packaged for Linux (x64) and macOS (Apple silicon and Intel from the
-Linux build host; a universal bundle, signed ad hoc, and a `.dmg` from a Mac).
-The macOS package carries no Developer ID signature; see "Build on a Mac" and
-"macOS smoke run" for what has been run.
+It is packaged for Linux (x64) and macOS (Apple silicon, Intel and universal).
+Release builds check the publisher for desktop updates. Signed Mac builds can
+download and install updates after the user agrees; portable Linux builds
+verify and reveal the new archive for manual replacement.
 
 Renamed 2026-10-02: the product name is Tadooer. The packaged directory,
 executable and macOS bundle are `Tadooer`, the archives are
@@ -301,12 +301,10 @@ macOS asks once per copy. A copy fetched with `scp` or `curl` has no
 quarantine mark and normally opens without the prompt. Only bypass the prompt
 for a zip whose checksum you have compared with the release.
 
-**The app cannot update itself.** It has no update code, and unsigned it could
-not have any: Electron's updater on macOS replaces the app only when the
-update's code signature satisfies the running app's own, and an unsigned app
-has none. To update, quit, replace the app in `/Applications` with the new one
-and go through Gatekeeper again. The settings and the signed-in session are
-outside the app and stay.
+**Ad hoc builds require manual replacement.** They can check for updates and
+open the release page. Automatic Mac installation requires an identity-signed
+build installed once first. Settings and the signed-in session are outside
+the application bundle.
 
 **Notifications may not arrive.** Electron's documentation says the macOS
 notification APIs need a code-signed app and that unsigned builds do not
@@ -379,81 +377,69 @@ listed, and note any step whose result differed, with the dialog text. A step
 that fails because the app is unsigned (2, 7, 9) is a finding for the signing
 decision, not a defect to work around in the shell.
 
-## Signing and notarising later
+## Desktop updates
 
-Not decided and not implemented. `apps/desktop/scripts/mac-sign.mjs` is the
-hook: it runs for each bundle before the zip is made. Today, with
-`SUITE_MAC_SIGN=1`, it stops the build with the names of the missing variables,
-or with the statement that the step is not written.
+Use **Tadooer → Check for updates…** on macOS or **App → Check for updates…**
+on Linux; the tray has the same action. Packaged release builds also check
+30 seconds after launch and every six hours. A check offers a download and
+asks before restarting. **Later** leaves a downloaded Mac update ready for
+the next launch. Development checkouts and smoke checks make no update requests.
 
-### What Apple requires first
+Updates come only from the public `subculture-collective/tadooer` release
+repository at `git.subcult.tv`, independently of the chosen task server.
+The shell sends no task-server cookie or automation token. Stable installs
+ignore prereleases; prerelease installs accept newer prereleases and stable
+releases. Equal versions and downgrades are skipped. Only releases with both
+the matching archive and the final metadata asset are offered.
 
-1. Membership in the Apple Developer Program (individual or organisation, a
-   yearly fee). The free account cannot create a Developer ID certificate.
-2. A **Developer ID Application** certificate. On an organisation account the
-   Account Holder creates it, or an Admin the holder has allowed to: make a certificate signing request in Keychain Access on the
-   Mac, upload it under Certificates, IDs & Profiles on developer.apple.com,
-   and install the result so that the private key is in the login keychain.
-   `security find-identity -v -p codesigning` then lists
-   `Developer ID Application: <name> (<team id>)`.
-3. The ten-character Team ID.
-4. A credential for the notary service, one of:
-   - an App Store Connect API key (Users and Access → Integrations): the `.p8`
-     file, which can be downloaded once, its Key ID and the Issuer ID;
-   - the Apple ID with an app-specific password from account.apple.com.
-5. A Mac with the Xcode command line tools (`xcode-select --install`).
-   `codesign`, `notarytool` and `stapler` do not exist on Linux, so the signed
-   build runs on the Mac, not on the Linux build host.
-6. The final bundle identifier.
+macOS uses Electron's native Squirrel updater and retains its signature
+verification. Both the installed and downloaded app must be identity-signed
+with the same designated requirement. The **Restart and update** action sets
+the quit flag before closing windows, including when close-to-menu-bar is on.
+Old desktop copies without this feature need one manual replacement first.
+Changing the signing identity or re-signing an installed copy ad hoc can
+require another manual replacement.
 
-Keep all of it out of the repository. The hook reads names only:
-`SUITE_MAC_SIGN_IDENTITY`, `APPLE_TEAM_ID`, and either `APPLE_API_KEY` (the
-path of the `.p8` file), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, or
-`APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`. Prefer
-`xcrun notarytool store-credentials`, which puts the notary credential in the
-keychain, over variables in a shell profile.
+Linux downloads the portable archive into a private temporary directory under
+Downloads, checks its declared size and SHA-256, then reveals it. Quit Tadooer,
+extract the archive and replace the portable app. It never extracts or runs
+a downloaded archive. Settings and sign-in stay in the existing profile.
 
-### Steps
+### Release metadata and signing
 
-1. On the Mac: `pnpm install`, then `pnpm package:desktop:mac`. The packager
-   builds the same bundles there.
-2. Implement `afterPackage` in `mac-sign.mjs`: sign every helper, framework
-   and the app with the hardened runtime and the prepared entitlements, then
-   notarise and staple. `@electron/osx-sign` and `@electron/notarize` do this
-   and are already installed as dependencies of the packager; add them as
-   direct development dependencies to import them. `macSignOptionsForFile` in
-   `scripts/mac.mjs` is the per-file option set: `hardenedRuntime: true`,
-   `mac/entitlements.mac.plist` for the app and
-   `mac/entitlements.mac.helper.plist` for everything inside it.
-3. Check the signature before notarising:
+Tag builds set `SUITE_DESKTOP_VERSION` from the tag and
+`SUITE_DESKTOP_BUILD` from the CI run number. Packaging stamps the copied
+application and `resources/tadooer-release.json` before signing. The source
+package version is not rewritten. On macOS the short bundle version contains
+only the numeric SemVer core; the build number is numeric and the stamp keeps
+the complete prerelease version.
 
-   ```sh
-   codesign --verify --deep --strict --verbose=2 "Tadooer.app"
-   codesign --display --entitlements - "Tadooer.app"
-   ```
+The archive step writes `tadooer-desktop-update-<platform>-<arch>.json`,
+including version, size, SHA-256 and the fixed publisher download URL. On Mac
+this is also the default-format Squirrel response. Publish it **after** the
+archive and checksum; partial releases without the marker are ignored. Signed
+Mac archives use `ditto` and no bundle resources are changed after signing.
 
-4. Zip with `ditto -c -k --keepParent "Tadooer.app" <name>.zip`,
-   submit with `xcrun notarytool submit <name>.zip --keychain-profile <profile> --wait`,
-   then `xcrun stapler staple "Tadooer.app"` and make the zip again
-   with `ditto`, so the released zip holds the stapled app. `package-artifact.mjs`
-   uses `zip`, which is right for an unsigned bundle only; give it a `ditto`
-   branch for macOS hosts.
-5. Check the result as Gatekeeper will:
-   `spctl --assess --type execute --verbose=4 "Tadooer.app"` should
-   answer `accepted` with `source=Notarized Developer ID`.
-6. Write the `.sha256` file for the new zip, run `pnpm desktop:artifact`, and
-   repeat the smoke run. Steps 2, 7 and 9 are the ones signing should change.
+Without `SUITE_MAC_SIGN`, Mac builds retain the ad hoc signature and manual
+installation. `SUITE_MAC_SIGN=development` requires
+`SUITE_MAC_SIGN_IDENTITY` in the build Mac's keychain. It uses Apple Development
+signing for the owner's machines and does not notarize or claim Gatekeeper
+acceptance on other Macs. Keep the same identity across updates.
 
-Two decisions belong with this one: hardening Electron's fuses (ADR 0047,
-Consequences), and whether to add an update check now that a signature would
-let the app replace itself.
+A distribution build (`SUITE_MAC_SIGN=1`) requires the identity, `APPLE_TEAM_ID`
+and either `APPLE_API_KEY` (a private key file path), `APPLE_API_KEY_ID` and
+`APPLE_API_ISSUER`, or `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`. It signs
+with the hardened runtime and the committed restricted entitlements, notarizes,
+staples, and verifies the finished bundle. Missing prerequisites fail the build
+before packaging. The identity and team are CI variables; notary credentials
+are CI secrets. Private keys never belong in the repository.
 
 ## Not done yet
 
 - **The rest of the run on a Mac.** The universal image was built, installed
   and self-checked on a Mac on 2026-10-11 (steps 1, 3 and 12). The steps that
   need a signed-in session and a second device, 4 to 11, are open.
-- **Signing and notarisation.** Owner decision, for macOS and Windows.
+- **Public macOS distribution signing.** Developer ID and notarisation require the owner's distribution credentials. Windows packaging is not implemented.
 - **A universal macOS build and a `.dmg` from Linux.** Both exist, but only
   `package:desktop:mac:universal` on a Mac makes them; the Linux host still
   produces the two thin zips.
@@ -461,7 +447,6 @@ let the app replace itself.
   a packager target and an `.ico` icon, checking the second-instance path for
   links and `setLoginItemSettings`, a tray icon in the platform's format and a
   self-check run.
-- **Updates.** The app does not check for or download updates.
 - **AppImage or deb.** Would also register the `tadooer://` scheme and an
   application menu entry at install time.
 - **Reminder and focus notifications.** The shell can show a notification the

@@ -12,7 +12,12 @@ import {
   readPackage,
 } from "./artifact.mjs";
 import { icnsImageTypes, readIcns } from "./icns.mjs";
-import { adHocSign, afterPackage, signingRequested } from "./mac-sign.mjs";
+import {
+  adHocSign,
+  afterPackage,
+  signingPreflight,
+  signingRequested,
+} from "./mac-sign.mjs";
 import {
   applicationFileProblems,
   asarFilePaths,
@@ -55,9 +60,8 @@ for (const arch of architectures)
 const manifest = await readPackage();
 const { productName, version } = manifest;
 
-// A build that asks for a signature stops here, before anything is
-// downloaded or written.
-afterPackage({ appPath: `${productName}.app` }, process.env, process.platform);
+// Missing signing prerequisites stop the build before packaging.
+signingPreflight(process.env, process.platform);
 
 const inspect = async (arch) => {
   const directory = join(
@@ -69,7 +73,13 @@ const inspect = async (arch) => {
   const plist = parsePlist(
     await readFile(join(contents, "Info.plist"), "utf8"),
   );
-  problems.push(...macInfoPlistProblems(plist, { productName, version }));
+  problems.push(
+    ...macInfoPlistProblems(plist, {
+      productName,
+      version,
+      buildVersion: manifest.buildVersion,
+    }),
+  );
 
   const executablePath = join(
     outputDirectory,
@@ -104,6 +114,21 @@ const inspect = async (arch) => {
   // Electron drops it, the bundle would need `codesign --sign -` on a Mac.
   if ("arm64" in codeSignatures && (codeSignatures.arm64 ?? "none") === "none")
     problems.push("The arm64 executable carries no code signature");
+  if (
+    signingRequested(process.env) &&
+    Object.values(codeSignatures).some((value) => value !== "identity")
+  )
+    problems.push("The requested identity signature is missing");
+  const stamp = JSON.parse(
+    await readFile(join(contents, "Resources", "tadooer-release.json"), "utf8"),
+  );
+  if (
+    stamp.version !== version ||
+    stamp.buildVersion !== manifest.buildVersion ||
+    stamp.arch !== arch ||
+    stamp.platform !== "darwin"
+  )
+    problems.push("The release stamp does not match this package");
   const codeSignature =
     codeSignatures.arm64 ?? codeSignatures[String(executableArch)];
 
@@ -163,6 +188,8 @@ for (const arch of architectures) {
         productName,
         arch,
         hostPlatform,
+        build: manifest,
+        environment: process.env,
       }),
     );
     // The licence texts of Electron and Chromium travel inside the bundle,
@@ -176,11 +203,18 @@ for (const arch of architectures) {
         join(directory, file),
         join(directory, `${productName}.app`, "Contents", "Resources", file),
       );
-    // A Mac signs the finished bundle ad hoc, so that codesign and
-    // Gatekeeper see one consistent signature instead of the linker's
-    // per-binary ones. A build that asked for a real signature stopped
-    // above, in `afterPackage`.
-    if (hostPlatform === "darwin" && !signingRequested(process.env))
+    // Sign only after all resources are final. Never fall back after a signing failure.
+    if (signingRequested(process.env))
+      await afterPackage(
+        {
+          appPath: join(directory, `${productName}.app`),
+          directory: desktopDirectory,
+          productName,
+        },
+        process.env,
+        hostPlatform,
+      );
+    else if (hostPlatform === "darwin")
       adHocSign(join(directory, `${productName}.app`));
   }
   const report = await inspect(arch);

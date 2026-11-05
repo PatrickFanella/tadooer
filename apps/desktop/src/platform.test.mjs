@@ -168,6 +168,7 @@ describe("application menu", () => {
     ]);
     expect(names(menu[0].submenu)).toEqual([
       "about",
+      "Check for updates…",
       "separator",
       "Change server…",
       "Close to menu bar",
@@ -205,6 +206,7 @@ describe("application menu", () => {
     expect(names(menu[0].submenu)).toEqual([
       "Quick capture",
       "Sync now",
+      "Check for updates…",
       "separator",
       "Change server…",
       "separator",
@@ -234,6 +236,7 @@ describe("application menu", () => {
       ).toEqual(
         [
           "change-server",
+          "check-for-updates",
           "quick-capture",
           "set-close-to-tray",
           "set-start-at-login",
@@ -291,6 +294,7 @@ describe("menu binding", () => {
     "quick-capture": vi.fn(),
     "sync-now": vi.fn(),
     "change-server": vi.fn(),
+    "check-for-updates": vi.fn(),
     "set-close-to-tray": vi.fn(),
     "set-start-at-login": vi.fn(),
     quit: vi.fn(),
@@ -304,7 +308,7 @@ describe("menu binding", () => {
       );
       expect(bound.some((item) => "command" in item)).toBe(false);
       const clickable = bound.filter((item) => item.click !== undefined);
-      expect(clickable).toHaveLength(platform === "linux" ? 6 : 5);
+      expect(clickable).toHaveLength(platform === "linux" ? 7 : 6);
       expect(clickable.every((item) => item.role === undefined)).toBe(true);
     },
   );
@@ -340,4 +344,33 @@ describe("menu binding", () => {
       bindMenu([{ label: "Inherited", command: "toString" }], handlers()),
     ).toThrow("toString");
   });
+});
+
+it("shows the native update action on both packaged platforms", () => {
+  for (const platform of ["darwin", "linux"]) {
+    const menu = applicationMenu(
+      menuState({
+        platform,
+        updateState: { label: "Restart to update…", enabled: true },
+      }),
+    );
+    const update = flatten(menu).find(
+      (item) => item.command === "check-for-updates",
+    );
+    expect(update).toMatchObject({
+      label: "Restart to update…",
+      enabled: true,
+    });
+    const development = applicationMenu(
+      menuState({
+        platform,
+        packaged: false,
+        updateState: { label: "Check for updates…", enabled: true },
+      }),
+    );
+    expect(
+      flatten(development).find((item) => item.command === "check-for-updates")
+        .enabled,
+    ).toBe(false);
+  }
 });

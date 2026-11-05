@@ -142,6 +142,8 @@ jobs:
         shell: bash
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SUITE_DESKTOP_VERSION="${TAG#v}"
+          export SUITE_DESKTOP_BUILD="${{ github.run_number }}"
           pnpm package:desktop
 
       - name: Publish
@@ -152,7 +154,7 @@ jobs:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
           # Cloudflare refuses uploads over 100 MB; go to Almaz on the LAN.
           GITEA_ORIGIN_ADDRESS: 10.0.0.200
-        run: node deploy/release-assets.mjs "$TAG" apps/desktop/dist-packages/*.tar.gz apps/desktop/dist-packages/*.tar.gz.sha256
+        run: node deploy/release-assets.mjs "$TAG" apps/desktop/dist-packages/*.tar.gz apps/desktop/dist-packages/*.tar.gz.sha256 apps/desktop/dist-packages/tadooer-desktop-update-linux-x64.json
 
   desktop-mac:
     needs: verify
@@ -176,8 +178,19 @@ jobs:
 
       - name: Package
         shell: bash
+        env:
+          SUITE_MAC_SIGN: ${{ vars.SUITE_MAC_SIGN }}
+          SUITE_MAC_SIGN_IDENTITY: ${{ vars.SUITE_MAC_SIGN_IDENTITY }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SUITE_DESKTOP_VERSION="${TAG#v}"
+          export SUITE_DESKTOP_BUILD="${{ github.run_number }}"
           pnpm package:desktop:mac:universal
 
       - name: Publish
@@ -190,7 +203,7 @@ jobs:
           GITEA_ORIGIN_ADDRESS: 10.0.0.200
         run: |
           cd apps/desktop/dist-packages
-          node ../../../deploy/release-assets.mjs "$TAG" *.zip *.zip.sha256 *.dmg *.dmg.sha256
+          node ../../../deploy/release-assets.mjs "$TAG" *.zip *.zip.sha256 *.dmg *.dmg.sha256 tadooer-desktop-update-darwin-universal.json
 
   android:
     needs: verify

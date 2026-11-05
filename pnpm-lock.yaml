@@ -41,6 +41,12 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@electron/notarize':
+        specifier: 3.1.1
+        version: 3.1.1
+      '@electron/osx-sign':
+        specifier: 2.6.0
+        version: 2.6.0
       '@electron/packager':
         specifier: 20.2.0
         version: 20.2.0
