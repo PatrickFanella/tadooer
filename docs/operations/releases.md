@@ -22,8 +22,8 @@ channel refuses a version it has already recorded.
 | --------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `verify`        | `ubuntu-24.04`        | `pnpm verify` on the tagged commit. Every other job waits for it.                                                                                                                                               |
 | `server`        | `ubuntu-24.04`        | Builds the image with `SUITE_VERSION` and `SUITE_REVISION`, sends it to nuc over SSH, and runs the deploy there.                                                                                                |
-| `desktop-linux` | `ubuntu-24.04`        | `pnpm package:desktop`; uploads the tar.gz and its checksum to the Gitea release.                                                                                                                               |
-| `desktop-mac`   | `macos-arm64` (Soyuz) | `pnpm package:desktop:mac:universal`; uploads the zip, the disk image and their checksums. The app is signed ad hoc, not with a Developer ID; see [desktop.md](desktop.md#what-an-unsigned-app-means).          |
+| `desktop-linux` | `ubuntu-24.04`        | `pnpm package:desktop`; uploads the tar.gz, checksum and final update metadata to the Gitea release.                                                                                                            |
+| `desktop-mac`   | `macos-arm64` (Soyuz) | `pnpm package:desktop:mac:universal`; uploads the zip, the disk image and their checksums. Signing follows the repository's Mac signing variables; see [desktop updates](desktop.md#desktop-updates).           |
 | `android`       | `ubuntu-24.04`        | Installs JDK 21 and the Android SDK (pinned checksum), builds the release APK with the run number as `versionCode`, signs it with the release key and checks the certificate; uploads the APK and its checksum. |
 | `ios`           | `macos-arm64` (Soyuz) | Checks the Swift policy against the shared policy, builds an unsigned iPhone app and uploads it as `tadooer-ios-<version>-unsigned.ipa` with its checksum. See [mobile.md](mobile.md#iphone).                   |
 
@@ -37,8 +37,16 @@ jobs for that tag. A tag that is already live is reported and left as it is,
 so this rebuilds the desktop packages without a second deployment. It checks
 out the tag, so it uses the tools as they were when the tag was made.
 
-The desktop packages keep their own version (`apps/desktop/package.json`);
-the release tag names the server version.
+Desktop release builds stamp the tag version and CI run number into the copied
+application before signing. The source `apps/desktop/package.json` is not
+rewritten. Each desktop job publishes its platform's update metadata after
+all archives and checksums, so incomplete releases are not offered by the app.
+
+For owner Mac builds, set repository variables `SUITE_MAC_SIGN=development`
+and `SUITE_MAC_SIGN_IDENTITY` to an identity in the Soyuz runner's keychain.
+The runner must be able to sign without an interactive prompt. Keep the same
+signing requirement across updates. Developer ID distribution additionally
+needs notarization credentials; see [signing](desktop.md#release-metadata-and-signing).
 
 ## The deploy on nuc
 
@@ -105,7 +113,7 @@ It prints the installed files' checksums.
 Soyuz runs `act_runner` 0.6.1 as the LaunchAgent `tv.subcult.act-runner`
 (`~/Library/LaunchAgents/tv.subcult.act-runner.plist`), from
 `~/.local/opt/act_runner` with its registration and configuration in
-`~/.local/share/act_runner`. It is registered to this repository only, with
+`~/.local/share/act_runner`. It is registered to the `subculture-collective` organization, with
 the labels `macos` and `macos-arm64` and capacity 1, and runs jobs on the host
 in your login session. Logs are in `~/Library/Logs/act-runner.log`. To stop
 it: `launchctl bootout gui/$(id -u)/tv.subcult.act-runner`.
