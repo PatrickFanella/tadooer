@@ -201,6 +201,63 @@ describe("Phase 2 API transport", () => {
     ).rejects.toBeInstanceOf(SyncCursorResetRequired);
   });
 
+  it("turns a missing content-reset generation into snapshot recovery", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          response(
+            {
+              code: "CONTENT_RESET_CLIENT_UPDATE_REQUIRED",
+              message:
+                "Content was reset. Reload Tadooer and replace this device's cache before sending queued work.",
+              requestId: "d1054acd-c04d-4bd8-a814-254b007154ba",
+            },
+            426,
+          ),
+        ),
+      ),
+    );
+    await expect(
+      syncRound(client, "csrf-token", {
+        cursor: client.cursor,
+        operations: [],
+        pullLimit: 100,
+      }),
+    ).rejects.toBeInstanceOf(SyncCursorResetRequired);
+  });
+
+  it.each([
+    [426, "SYNC_PROTOCOL_UPGRADE_REQUIRED"],
+    [401, "CLIENT_REVOKED"],
+  ])(
+    "keeps other sync failures out of snapshot recovery (%s, %s)",
+    async (status, code) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            response(
+              {
+                code,
+                message: "Update or sign in",
+                requestId: "d1054acd-c04d-4bd8-a814-254b007154ba",
+              },
+              status,
+            ),
+          ),
+        ),
+      );
+      await expect(
+        syncRound(client, "csrf-token", {
+          cursor: client.cursor,
+          operations: [],
+          pullLimit: 100,
+        }),
+      ).rejects.toMatchObject({ status, code });
+    },
+  );
+
   it("collects every bounded snapshot page before returning the reset cursor", async () => {
     const calls: string[] = [];
     vi.stubGlobal(

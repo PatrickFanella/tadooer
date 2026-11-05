@@ -5,6 +5,7 @@ import type {
   SyncRoundResponse,
   SyncRoundRequest,
 } from "@suite/contracts";
+import { createSyncTransport } from "./api.ts";
 import { LocalStore } from "./local-store.ts";
 import {
   installOnlineSync,
@@ -27,6 +28,7 @@ const registration: ClientRegistrationResponse = {
 let store: LocalStore | undefined;
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await store?.close();
   store = undefined;
   await new Promise<void>((resolveDelete, rejectDelete) => {
@@ -238,4 +240,112 @@ it("preserves new offline work when later snapshots have the same reset generati
   await store.replaceFromSnapshot(snapshot);
   expect(await store.loadOutbox()).toHaveLength(1);
   expect(await store.loadCachedTasks()).toHaveLength(1);
+});
+
+it("recovers an upgraded post-reset cache through the real HTTP transport", async () => {
+  store = new LocalStore({ indexedDb: indexedDB });
+  await store.ensureClient(() => Promise.resolve(registration));
+  const timestamp = "2026-11-04T23:05:10.000Z";
+  await store.replaceFromSnapshot({
+    snapshots: [],
+    nextCursor: "current-epoch.0",
+    hasMore: false,
+    protocolVersion: 2,
+    serverTimestamp: timestamp,
+  });
+  await store.queueTaskCreate({ title: "Stale work from before the reset" });
+  const requests: SyncRoundRequest[] = [];
+  const paths: string[] = [];
+  const generation = "6519c805-e478-486b-a918-616fc6d9ea98";
+  const taskId = "afcab502-2199-43fd-b9d3-c8b556c6f25b";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((path: string, init?: RequestInit) => {
+      paths.push(path);
+      const respond = (body: unknown, status = 200) =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      if (path === "/api/sync/round") {
+        const request = JSON.parse(init?.body as string) as SyncRoundRequest;
+        requests.push(request);
+        if (request.contentGeneration !== generation)
+          return respond(
+            {
+              code: "CONTENT_RESET_CLIENT_UPDATE_REQUIRED",
+              message: "Content was reset",
+              requestId: clientId,
+            },
+            426,
+          );
+        return respond({
+          protocolVersion: 2,
+          outcomes: [],
+          changes: [],
+          nextCursor: "current-epoch.1944",
+          hasMore: false,
+          serverTimestamp: timestamp,
+        });
+      }
+      if (path === "/api/sync/snapshot?offset=0")
+        return respond({
+          protocolVersion: 2,
+          contentGeneration: generation,
+          nextCursor: "current-epoch.1944",
+          hasMore: false,
+          serverTimestamp: timestamp,
+          snapshots: [
+            {
+              entityKind: "task",
+              value: {
+                task: {
+                  id: taskId,
+                  title: "Rebuilt task",
+                  notes: "",
+                  status: "open",
+                  revision: 1,
+                  createdAt: timestamp,
+                  updatedAt: timestamp,
+                  completedAt: null,
+                  deletedAt: null,
+                },
+                fieldVersions: {
+                  title: 1,
+                  notes: 1,
+                  status: 1,
+                  estimateMinutes: 1,
+                  projectId: 1,
+                  tagIds: 1,
+                  deadline: 1,
+                  parent: 1,
+                  plannedStart: 1,
+                },
+                changeSequence: 1,
+              },
+            },
+          ],
+        });
+      throw new Error("Unexpected sync request");
+    }),
+  );
+  await new SyncEngine(store, createSyncTransport("csrf-token")).sync();
+  expect(paths).toEqual([
+    "/api/sync/round",
+    "/api/sync/snapshot?offset=0",
+    "/api/sync/round",
+  ]);
+  expect(requests[0]?.contentGeneration).toBeUndefined();
+  expect(requests[1]).toMatchObject({
+    contentGeneration: generation,
+    cursor: "current-epoch.1944",
+    operations: [],
+  });
+  expect((await store.loadCachedTasks()).map(({ task }) => task.id)).toEqual([
+    taskId,
+  ]);
+  expect(await store.loadOutbox()).toEqual([]);
+  expect((await store.clientIdentity())?.clientId).toBe(clientId);
 });
