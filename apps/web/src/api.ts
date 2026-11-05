@@ -874,9 +874,12 @@ export const syncRound = async (
   } catch (error: unknown) {
     if (
       error instanceof ApiRequestError &&
-      error.status === 409 &&
-      error.code === "SYNC_CURSOR_EXPIRED"
+      ((error.status === 409 && error.code === "SYNC_CURSOR_EXPIRED") ||
+        (error.status === 426 &&
+          error.code === "CONTENT_RESET_CLIENT_UPDATE_REQUIRED"))
     ) {
+      // An older tab can snapshot the new epoch without retaining its reset
+      // generation. Upgraded clients must replace that cache before retrying.
       throw new SyncCursorResetRequired();
     }
     throw error;
