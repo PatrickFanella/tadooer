@@ -1,7 +1,9 @@
 # Workspace styling
 
 `apps/web/src/tokens.css` owns the palette, semantic colors, typography,
-radii, motion and workspace dimensions. `styles.css` imports those tokens
+radii, motion and workspace dimensions. The shared patterns in
+`workspace-patterns.css` cover configuration, records and route transitions.
+`styles.css` imports those tokens
 and exposes them through Tailwind v4. `docs/design/tokens.css` imports the
 same file for the design specimen; it no longer repeats the values.
 
@@ -40,6 +42,42 @@ lists more compact and give the task column more room:
 Smaller button variants remain explicit exceptions, such as row overflow
 menus. Phone rules maintain safe-area padding and touch targets.
 
+## Configuration and motion
+
+`SettingsLayout` provides the searchable category tabs on Settings and
+Connections. Search reads field captions from the mounted panels, opens the
+matching disclosure and focuses its control after the opening animation.
+Tab changes keep forms mounted, so drafts and existing save boundaries survive.
+Each form still saves explicitly. Changing a category does not apply settings.
+
+`SettingsDisclosure` is a native details element. It keeps controls mounted and
+animates its content height where `interpolate-size` is supported. Other browsers
+retain the native open/close behavior. Forms that save several collapsed groups
+open an invalid group before browser validation focuses the field.
+
+Shared tabs have an underline and contained horizontal scrolling. Settings and
+Connections use labelled icon tabs on phones so every category stays reachable
+without scrolling; their accessible names remain the full category labels.
+`page-stack` provides consistent route width and section spacing. `record-surface`
+provides the flat treatment for habits, templates and saved offline records.
+Boards use `--board-panel-min-width` and contained horizontal scrolling, preserving
+the configured number of columns without squeezing their controls.
+
+Motion is controlled by `--motion-fast`, `--motion-base`, `--motion-panel`,
+`--motion-distance`, `--ease-out` and `--ease-enter`. Route entry and category
+changes have a short fade and vertical movement. Dialogs, popovers, sheets,
+disclosures and sidebar width changes use the same durations. The global
+reduced-motion rule suppresses animations and transitions.
+
+Native Enter, Space and arrow-key behavior on buttons, links, disclosures and
+ARIA controls takes precedence over task-list shortcuts. Unmodified task-row
+keys continue to select and edit tasks.
+
+Card surfaces inherit `--panel-background`, `--panel-border`, `--panel-radius`
+and `--panel-padding`. Configuration panels override those tokens to produce flat
+forms while ordinary cards retain a surface. No component-specific color override
+is needed to change that treatment.
+
 ## Compose components
 
 Use Tailwind utilities for layout and semantic color roles:
@@ -60,6 +98,10 @@ The navigation drawer starts at 64rem, where the task detail panel also becomes
 a sheet. The smaller toolbar layout starts at 40rem. Change those media queries
 together if changing the responsive structure. CSS custom properties cannot
 be used directly as media-query breakpoints.
+
+The stylesheet layer order is `theme`, `base`, `components`, `patterns`,
+`utilities`. The `patterns` layer gives shared route patterns precedence over
+older component rules. Explicit utility classes still take precedence.
 
 ## Coverage and limits
 

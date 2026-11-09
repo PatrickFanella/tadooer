@@ -1,3 +1,4 @@
+import { SettingsDisclosure } from "../components/settings/SettingsDisclosure.tsx";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import type {
   Counter,
@@ -531,10 +532,7 @@ export const CountersPage = ({
   };
 
   return (
-    <div
-      className="mx-auto flex w-full max-w-5xl flex-col gap-6"
-      aria-labelledby="counters-heading"
-    >
+    <div className="page-stack" aria-labelledby="counters-heading">
       <ViewIntro
         id="counters-heading"
         description="Daily counts, stopwatch time and a short evaluation of each day. Days follow your planning time zone; streaks are worked out from the recorded days."
@@ -940,101 +938,107 @@ export const CountersPage = ({
               ))}
             </ul>
           )}
-          <form
-            className="counter-create"
-            aria-label="Add a counter"
-            onSubmit={create}
-          >
-            <label className="field">
-              Title
-              <Input name="title" maxLength={200} disabled={disabled} />
-            </label>
-            <label className="field">
-              Kind
-              <NativeSelect
-                name="kind"
-                value={kind}
-                disabled={disabled}
-                onChange={(event) =>
-                  setKind(
-                    event.target.value === "stopwatch"
-                      ? "stopwatch"
-                      : event.target.value === "repeated_countdown"
-                        ? "repeated_countdown"
-                        : "click",
-                  )
-                }
-              >
-                <NativeSelectOption value="click">
-                  {kindLabel.click}
-                </NativeSelectOption>
-                <NativeSelectOption value="stopwatch">
-                  {kindLabel.stopwatch}
-                </NativeSelectOption>
-                <NativeSelectOption value="repeated_countdown">
-                  {kindLabel.repeated_countdown}
-                </NativeSelectOption>
-              </NativeSelect>
-            </label>
-            {kind === "repeated_countdown" && (
+          <SettingsDisclosure title="New counter">
+            <form
+              className="counter-create"
+              aria-label="Add a counter"
+              onSubmit={create}
+            >
               <label className="field">
-                Countdown length (minutes)
-                <Input
-                  name="countdown"
-                  inputMode="numeric"
-                  defaultValue="30"
+                Title
+                <Input name="title" maxLength={200} disabled={disabled} />
+              </label>
+              <label className="field">
+                Kind
+                <NativeSelect
+                  name="kind"
+                  value={kind}
                   disabled={disabled}
-                />
-              </label>
-            )}
-            <fieldset disabled={disabled}>
-              <legend>Streak</legend>
-              <label className="counter-choice">
-                <input type="checkbox" name="streak" />
-                Track a streak
-              </label>
-              <label className="field">
-                Minimum per day ({unit(kind)})
-                <Input name="streakMin" inputMode="numeric" defaultValue="1" />
-              </label>
-              <label className="field">
-                Rule
-                <NativeSelect name="mode" defaultValue="weekdays">
-                  <NativeSelectOption value="weekdays">
-                    Every selected weekday
+                  onChange={(event) =>
+                    setKind(
+                      event.target.value === "stopwatch"
+                        ? "stopwatch"
+                        : event.target.value === "repeated_countdown"
+                          ? "repeated_countdown"
+                          : "click",
+                    )
+                  }
+                >
+                  <NativeSelectOption value="click">
+                    {kindLabel.click}
                   </NativeSelectOption>
-                  <NativeSelectOption value="weekly_frequency">
-                    A number of days each week
+                  <NativeSelectOption value="stopwatch">
+                    {kindLabel.stopwatch}
+                  </NativeSelectOption>
+                  <NativeSelectOption value="repeated_countdown">
+                    {kindLabel.repeated_countdown}
                   </NativeSelectOption>
                 </NativeSelect>
               </label>
-              <div role="group" aria-label="Weekdays">
-                {weekdayNames.map((name, weekday) => (
-                  <label key={name} className="counter-choice">
-                    <input
-                      type="checkbox"
-                      name={`weekday-${String(weekday)}`}
-                      defaultChecked={weekday >= 1 && weekday <= 5}
-                    />
-                    {name.slice(0, 3)}
-                  </label>
-                ))}
-              </div>
-              <label className="field">
-                Days each week
-                <Input
-                  name="frequency"
-                  type="number"
-                  min={1}
-                  max={7}
-                  defaultValue="3"
-                />
-              </label>
-            </fieldset>
-            <Button type="submit" disabled={disabled}>
-              Add counter
-            </Button>
-          </form>
+              {kind === "repeated_countdown" && (
+                <label className="field">
+                  Countdown length (minutes)
+                  <Input
+                    name="countdown"
+                    inputMode="numeric"
+                    defaultValue="30"
+                    disabled={disabled}
+                  />
+                </label>
+              )}
+              <fieldset disabled={disabled}>
+                <legend>Streak</legend>
+                <label className="counter-choice">
+                  <input type="checkbox" name="streak" />
+                  Track a streak
+                </label>
+                <label className="field">
+                  Minimum per day ({unit(kind)})
+                  <Input
+                    name="streakMin"
+                    inputMode="numeric"
+                    defaultValue="1"
+                  />
+                </label>
+                <label className="field">
+                  Rule
+                  <NativeSelect name="mode" defaultValue="weekdays">
+                    <NativeSelectOption value="weekdays">
+                      Every selected weekday
+                    </NativeSelectOption>
+                    <NativeSelectOption value="weekly_frequency">
+                      A number of days each week
+                    </NativeSelectOption>
+                  </NativeSelect>
+                </label>
+                <div role="group" aria-label="Weekdays">
+                  {weekdayNames.map((name, weekday) => (
+                    <label key={name} className="counter-choice">
+                      <input
+                        type="checkbox"
+                        name={`weekday-${String(weekday)}`}
+                        defaultChecked={weekday >= 1 && weekday <= 5}
+                      />
+                      {name.slice(0, 3)}
+                    </label>
+                  ))}
+                </div>
+                <label className="field">
+                  Days each week
+                  <Input
+                    name="frequency"
+                    type="number"
+                    min={1}
+                    max={7}
+                    defaultValue="3"
+                  />
+                </label>
+              </fieldset>
+              <Button type="submit" disabled={disabled}>
+                Add counter
+              </Button>
+            </form>
+          </SettingsDisclosure>
         </ViewSectionBody>
       </ViewSection>
     </div>

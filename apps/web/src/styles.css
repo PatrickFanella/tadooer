@@ -1,6 +1,9 @@
+@layer theme, base, components, patterns, utilities;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./tokens.css";
+@import "./workspace-patterns.css";
 
 /*
   Suite design system — "hybrid" direction.
@@ -52,6 +55,8 @@
 }
 
 @theme inline {
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: var(--ease-out);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --text-2xs: var(--text-2xs);
@@ -86,6 +91,7 @@
     minmax(0, 1fr) auto;
   grid-template-rows: auto 1fr;
   min-height: 100dvh;
+  transition: grid-template-columns var(--motion-panel) var(--ease-enter);
   &[data-collapsed="true"] {
     grid-template-columns:
       calc(var(--sidebar-rail-width) + env(safe-area-inset-left, 0px))
@@ -363,11 +369,9 @@
   }
   .field > span,
   .field:not(:has(> span)) {
-    font-size: var(--text-2xs);
-    color: var(--subtext-2);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--subtext);
+    font-weight: 500;
   }
   .field:not(:has(> span)) > input,
   .field:not(:has(> span)) > select {
@@ -399,11 +403,9 @@
     opacity: 0.6;
   }
   legend {
-    font-size: var(--text-2xs);
-    color: var(--subtext-2);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--subtext);
+    font-weight: 500;
     padding: 0 0.35rem;
   }
   label:has(> input[type="checkbox"]),
@@ -785,8 +787,8 @@
     width: 100%;
     text-align: left;
     transition:
-      background-color 0.1s ease,
-      color 0.1s ease;
+      background-color var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out);
   }
   .sidebar-nav a:hover,
   .sidebar-nav button:hover {
@@ -1098,11 +1100,9 @@
   .task-filter-bar label {
     display: grid;
     gap: 0.25rem;
-    font-size: var(--text-2xs);
-    color: var(--subtext-2);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--subtext);
+    font-weight: 500;
     flex: 1 1 9rem;
     min-width: 0;
   }
@@ -1470,11 +1470,9 @@
     min-width: 0;
   }
   .settings-health dt {
-    font-size: var(--text-2xs);
-    color: var(--subtext-2);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
+    font-size: var(--text-sm);
+    color: var(--subtext);
+    font-weight: 500;
   }
   .settings-health dd {
     font-family: var(--font-mono);
@@ -2230,7 +2228,7 @@
     background: color-mix(in srgb, var(--purple) 18%, var(--surface-0));
   }
   /* Issue #196: a task title outside the task lists that opens the panel. */
-  .task-title-button {
+  button.task-title-button {
     all: unset;
     cursor: pointer;
     border-radius: var(--radius-sm);
@@ -2686,8 +2684,8 @@
 
   @media (max-width: 40rem) {
     .workspace {
-      --spacing-page: 1rem;
-      --header-height: 3.5rem;
+      --spacing-page: var(--spacing-page-mobile);
+      --header-height: var(--header-height-mobile);
     }
     .header__row {
       gap: 0.5rem;
@@ -2773,7 +2771,7 @@
     }
     /* Nested cards leave little room at 360px; give the page edge back. */
     .workspace {
-      --spacing-page: 0.75rem;
+      --spacing-page: var(--spacing-page-mobile);
     }
   }
 

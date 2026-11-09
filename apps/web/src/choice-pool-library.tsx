@@ -1,3 +1,4 @@
+import { SettingsDisclosure } from "./components/settings/SettingsDisclosure.tsx";
 import { useState, type SyntheticEvent } from "react";
 import type {
   ChoicePool,
@@ -171,57 +172,59 @@ export const ChoicePoolLibrary = ({
         confirm it. Each candidate shows why it is eligible or not, based on
         what was picked before.
       </p>
-      <form
-        className="choice-pool-create"
-        onSubmit={(event) => void createPool(event)}
-      >
-        <label className="field">
-          <span>Pool name</span>
-          <Input name="title" required maxLength={240} />
-        </label>
-        <label className="field">
-          <span>Policy</span>
-          <NativeSelect name="policy" defaultValue="cycle">
-            <option value="none">Always eligible</option>
-            <option value="cooldown">Cooldown after selection</option>
-            <option value="cycle">Cycle without replacement</option>
-            <option value="one_shot">One shot</option>
-          </NativeSelect>
-        </label>
-        <label className="field">
-          <span>Pick count</span>
-          <Input
-            name="pickCount"
-            type="number"
-            min="1"
-            max="25"
-            defaultValue="1"
-            required
-          />
-        </label>
-        <label className="field">
-          <span>Cooldown days (used only for cooldown)</span>
-          <Input
-            name="cooldownDays"
-            type="number"
-            min="1"
-            max="365"
-            defaultValue="5"
-            required
-          />
-        </label>
-        <label className="field choice-pool-items">
-          <span>Candidates, one per line</span>
-          <Textarea name="items" rows={5} required />
-        </label>
-        <Button disabled={busy}>Create pool</Button>
-      </form>
+      <SettingsDisclosure title="New choice pool" defaultOpen>
+        <form
+          className="choice-pool-create"
+          onSubmit={(event) => void createPool(event)}
+        >
+          <label className="field">
+            <span>Pool name</span>
+            <Input name="title" required maxLength={240} />
+          </label>
+          <label className="field">
+            <span>Policy</span>
+            <NativeSelect name="policy" defaultValue="cycle">
+              <option value="none">Always eligible</option>
+              <option value="cooldown">Cooldown after selection</option>
+              <option value="cycle">Cycle without replacement</option>
+              <option value="one_shot">One shot</option>
+            </NativeSelect>
+          </label>
+          <label className="field">
+            <span>Pick count</span>
+            <Input
+              name="pickCount"
+              type="number"
+              min="1"
+              max="25"
+              defaultValue="1"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Cooldown days (used only for cooldown)</span>
+            <Input
+              name="cooldownDays"
+              type="number"
+              min="1"
+              max="365"
+              defaultValue="5"
+              required
+            />
+          </label>
+          <label className="field choice-pool-items">
+            <span>Candidates, one per line</span>
+            <Textarea name="items" rows={5} required />
+          </label>
+          <Button disabled={busy}>Create pool</Button>
+        </form>
+      </SettingsDisclosure>
       {pools.length === 0 ? (
         <EmptyState title="No Choice Pools yet." />
       ) : (
         <ul className="choice-pools">
           {pools.map((pool) => (
-            <Card key={pool.id}>
+            <Card key={pool.id} className="record-surface">
               <CardContent>
                 <strong>{pool.title}</strong>
                 <span>
@@ -340,108 +343,114 @@ export const ChoicePoolLibrary = ({
           ))}
         </ul>
       )}
-      <form
-        className="placeholder-create"
-        onSubmit={(event) => void createPlaceholder(event)}
-      >
-        <h4>Create a Planning Placeholder</h4>
-        <label className="field">
-          <span>Parent task</span>
-          <NativeSelect name="taskId" required defaultValue="">
-            <option value="" disabled>
-              Select a task
-            </option>
-            {tasks
-              .filter(({ status }) => status === "open")
-              .map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.title}
-                </option>
-              ))}
-          </NativeSelect>
-        </label>
-        <label className="field">
-          <span>Choice Pool</span>
-          <NativeSelect name="poolId" required defaultValue="">
-            <option value="" disabled>
-              Select a pool
-            </option>
-            {pools
-              .filter(({ archivedAt }) => archivedAt === null)
-              .map((pool) => (
-                <option key={pool.id} value={pool.id}>
-                  {pool.title}
-                </option>
-              ))}
-          </NativeSelect>
-        </label>
-        <Button disabled={busy || pools.length === 0 || tasks.length === 0}>
-          Reserve placeholder
-        </Button>
-      </form>
-      <form
-        className="placeholder-create"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          const templateId = value(data, "templateId");
-          const existingSlots = poolSlots.filter(
-            (slot) => slot.templateId === templateId,
-          );
-          void onCreateTemplateSlot(
-            templateId,
-            value(data, "poolId"),
-            Number(value(data, "pickCount")),
-            existingSlots.length,
-          );
-        }}
-      >
-        <h4>Add a Choice Pool slot to a Task Template</h4>
-        <label className="field">
-          <span>Template</span>
-          <NativeSelect name="templateId" required defaultValue="">
-            <option value="" disabled>
-              Select a template
-            </option>
-            {templates
-              .filter(({ archivedAt }) => archivedAt === null)
-              .map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.title}
-                </option>
-              ))}
-          </NativeSelect>
-        </label>
-        <label className="field">
-          <span>Choice Pool</span>
-          <NativeSelect name="poolId" required defaultValue="">
-            <option value="" disabled>
-              Select a pool
-            </option>
-            {pools
-              .filter(({ archivedAt }) => archivedAt === null)
-              .map((pool) => (
-                <option key={pool.id} value={pool.id}>
-                  {pool.title}
-                </option>
-              ))}
-          </NativeSelect>
-        </label>
-        <label className="field">
-          <span>Pick count</span>
-          <Input
-            name="pickCount"
-            type="number"
-            min="1"
-            max="25"
-            defaultValue="1"
-            required
-          />
-        </label>
-        <Button disabled={busy || templates.length === 0 || pools.length === 0}>
-          Add template slot
-        </Button>
-      </form>
+      <SettingsDisclosure title="Plan from a pool">
+        <form
+          className="placeholder-create"
+          onSubmit={(event) => void createPlaceholder(event)}
+        >
+          <h4>Create a Planning Placeholder</h4>
+          <label className="field">
+            <span>Parent task</span>
+            <NativeSelect name="taskId" required defaultValue="">
+              <option value="" disabled>
+                Select a task
+              </option>
+              {tasks
+                .filter(({ status }) => status === "open")
+                .map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title}
+                  </option>
+                ))}
+            </NativeSelect>
+          </label>
+          <label className="field">
+            <span>Choice Pool</span>
+            <NativeSelect name="poolId" required defaultValue="">
+              <option value="" disabled>
+                Select a pool
+              </option>
+              {pools
+                .filter(({ archivedAt }) => archivedAt === null)
+                .map((pool) => (
+                  <option key={pool.id} value={pool.id}>
+                    {pool.title}
+                  </option>
+                ))}
+            </NativeSelect>
+          </label>
+          <Button disabled={busy || pools.length === 0 || tasks.length === 0}>
+            Reserve placeholder
+          </Button>
+        </form>
+      </SettingsDisclosure>
+      <SettingsDisclosure title="Plan from a pool">
+        <form
+          className="placeholder-create"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            const templateId = value(data, "templateId");
+            const existingSlots = poolSlots.filter(
+              (slot) => slot.templateId === templateId,
+            );
+            void onCreateTemplateSlot(
+              templateId,
+              value(data, "poolId"),
+              Number(value(data, "pickCount")),
+              existingSlots.length,
+            );
+          }}
+        >
+          <h4>Add a Choice Pool slot to a Task Template</h4>
+          <label className="field">
+            <span>Template</span>
+            <NativeSelect name="templateId" required defaultValue="">
+              <option value="" disabled>
+                Select a template
+              </option>
+              {templates
+                .filter(({ archivedAt }) => archivedAt === null)
+                .map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.title}
+                  </option>
+                ))}
+            </NativeSelect>
+          </label>
+          <label className="field">
+            <span>Choice Pool</span>
+            <NativeSelect name="poolId" required defaultValue="">
+              <option value="" disabled>
+                Select a pool
+              </option>
+              {pools
+                .filter(({ archivedAt }) => archivedAt === null)
+                .map((pool) => (
+                  <option key={pool.id} value={pool.id}>
+                    {pool.title}
+                  </option>
+                ))}
+            </NativeSelect>
+          </label>
+          <label className="field">
+            <span>Pick count</span>
+            <Input
+              name="pickCount"
+              type="number"
+              min="1"
+              max="25"
+              defaultValue="1"
+              required
+            />
+          </label>
+          <Button
+            disabled={busy || templates.length === 0 || pools.length === 0}
+          >
+            Add template slot
+          </Button>
+        </form>
+      </SettingsDisclosure>
       <div className="placeholders">
         {placeholders.map((placeholder) => {
           const suggestion = suggestions[placeholder.id];

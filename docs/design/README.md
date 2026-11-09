@@ -165,8 +165,10 @@ touch block at the end of the stylesheet, issue #117).
 ## Motion
 
 Motion is restrained: it confirms that something happened and nothing more.
-Two durations, `--motion-fast` (120ms) for disclosures and hover, and
-`--motion-base` (180ms) for rows and dialogs, with one easing `--ease-out`.
+Three durations: `--motion-fast` (120ms) for hover, `--motion-base` (180ms)
+for rows and dialogs, and `--motion-panel` (240ms) for disclosures, sheets and
+route transitions. `--ease-out` handles state changes; `--ease-enter` handles
+entries and panel movement.
 Task rows, board items, history entries and opened `details` content use the
 `enter-fade` keyframe (opacity and a 2px rise). Dialogs use the shadcn
 fade and zoom. The `prefers-reduced-motion: reduce` rule in section 4 of the

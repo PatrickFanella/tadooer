@@ -1,3 +1,6 @@
+import { Ellipsis } from "lucide-react";
+import type { CSSProperties } from "react";
+import { SettingsDisclosure } from "../components/settings/SettingsDisclosure.tsx";
 import {
   useCallback,
   useEffect,
@@ -750,45 +753,55 @@ export const BoardsPage = ({
               ))}
             </ul>
           )}
-          <div className="task-actions">
-            <Button
-              type="button"
-              disabled={busy || !online}
-              onClick={() => void create({ template: "eisenhower" })}
-            >
-              Add Eisenhower matrix
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || !online}
-              onClick={() => void create({ template: "kanban" })}
-            >
-              Add Kanban board
-            </Button>
-          </div>
-          <form onSubmit={submitNewBoard} className="task-actions">
-            <label className="field">
-              <span>New blank board</span>
-              <Input name="title" autoComplete="off" required maxLength={240} />
-            </label>
-            <label className="field">
-              <span>Project</span>
-              <NativeSelect
-                name="projectId"
-                defaultValue={requestedProjectId() ?? ""}
+          <SettingsDisclosure
+            title="New board"
+            defaultOpen={boards.length === 0}
+          >
+            <div className="task-actions">
+              <Button
+                type="button"
+                disabled={busy || !online}
+                onClick={() => void create({ template: "eisenhower" })}
               >
-                <option value="">No project</option>
-                {projects
-                  .filter((project) => project.archivedAt === null)
-                  .map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-              </NativeSelect>
-            </label>
-            <Button disabled={busy || !online}>Add board</Button>
-          </form>
+                Add Eisenhower matrix
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || !online}
+                onClick={() => void create({ template: "kanban" })}
+              >
+                Add Kanban board
+              </Button>
+            </div>
+            <form onSubmit={submitNewBoard} className="task-actions">
+              <label className="field">
+                <span>New blank board</span>
+                <Input
+                  name="title"
+                  autoComplete="off"
+                  required
+                  maxLength={240}
+                />
+              </label>
+              <label className="field">
+                <span>Project</span>
+                <NativeSelect
+                  name="projectId"
+                  defaultValue={requestedProjectId() ?? ""}
+                >
+                  <option value="">No project</option>
+                  {projects
+                    .filter((project) => project.archivedAt === null)
+                    .map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                </NativeSelect>
+              </label>
+              <Button disabled={busy || !online}>Add board</Button>
+            </form>
+          </SettingsDisclosure>
         </ViewSectionBody>
       </ViewSection>
       {selected !== null && draft === null && (
@@ -842,11 +855,7 @@ export const BoardsPage = ({
                 role="status"
                 aria-live="polite"
                 className="board-grid"
-                style={{
-                  display: "grid",
-                  gap: "1rem",
-                  gridTemplateColumns: `repeat(${String(selected.columns)}, minmax(0, 1fr))`,
-                }}
+                style={{ "--board-columns": selected.columns } as CSSProperties}
               >
                 <span className="sr-only">Loading the board</span>
                 {Array.from({ length: selected.columns }, (_, index) => (
@@ -856,11 +865,7 @@ export const BoardsPage = ({
             ) : (
               <div
                 className="board-grid"
-                style={{
-                  display: "grid",
-                  gap: "1rem",
-                  gridTemplateColumns: `repeat(${String(selected.columns)}, minmax(0, 1fr))`,
-                }}
+                style={{ "--board-columns": selected.columns } as CSSProperties}
               >
                 {view.board.panels.map((panel) => {
                   const members =
@@ -922,79 +927,87 @@ export const BoardsPage = ({
                                     · {markers.map(markerLabel).join(", ")}
                                   </small>
                                 )}
-                                <div className="task-actions">
-                                  {manual && (
-                                    <>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={
-                                          busy || !online || index === 0
-                                        }
-                                        aria-label={`Move ${title} up in ${panel.title}`}
-                                        onClick={() =>
-                                          shift(panel.id, taskId, -1)
-                                        }
-                                      >
-                                        Up
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={
-                                          busy ||
-                                          !online ||
-                                          index === members.length - 1
-                                        }
-                                        aria-label={`Move ${title} down in ${panel.title}`}
-                                        onClick={() =>
-                                          shift(panel.id, taskId, 1)
-                                        }
-                                      >
-                                        Down
-                                      </Button>
-                                    </>
-                                  )}
-                                  {view.board.panels.length > 1 && (
-                                    <>
-                                      <NativeSelect
-                                        aria-label={`Target panel for ${title}`}
-                                        value={targetId}
-                                        onChange={(event) =>
-                                          setMoveTargets({
-                                            ...moveTargets,
-                                            [`${panel.id}:${taskId}`]:
-                                              event.currentTarget.value,
-                                          })
-                                        }
-                                      >
-                                        {view.board.panels
-                                          .filter(({ id }) => id !== panel.id)
-                                          .map((other) => (
-                                            <option
-                                              key={other.id}
-                                              value={other.id}
-                                            >
-                                              {other.title}
-                                            </option>
-                                          ))}
-                                      </NativeSelect>
-                                      <Button
-                                        type="button"
-                                        disabled={
-                                          busy ||
-                                          !online ||
-                                          targetId === "" ||
-                                          task === undefined
-                                        }
-                                        aria-label={`Move ${title} to another panel`}
-                                        onClick={() => move(taskId, targetId)}
-                                      >
-                                        Move
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
+                                <details className="board-task-controls">
+                                  <summary aria-label={`Actions for ${title}`}>
+                                    <Ellipsis
+                                      className="size-4"
+                                      aria-hidden="true"
+                                    />
+                                  </summary>
+                                  <div className="task-actions">
+                                    {manual && (
+                                      <>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          disabled={
+                                            busy || !online || index === 0
+                                          }
+                                          aria-label={`Move ${title} up in ${panel.title}`}
+                                          onClick={() =>
+                                            shift(panel.id, taskId, -1)
+                                          }
+                                        >
+                                          Up
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          disabled={
+                                            busy ||
+                                            !online ||
+                                            index === members.length - 1
+                                          }
+                                          aria-label={`Move ${title} down in ${panel.title}`}
+                                          onClick={() =>
+                                            shift(panel.id, taskId, 1)
+                                          }
+                                        >
+                                          Down
+                                        </Button>
+                                      </>
+                                    )}
+                                    {view.board.panels.length > 1 && (
+                                      <>
+                                        <NativeSelect
+                                          aria-label={`Target panel for ${title}`}
+                                          value={targetId}
+                                          onChange={(event) =>
+                                            setMoveTargets({
+                                              ...moveTargets,
+                                              [`${panel.id}:${taskId}`]:
+                                                event.currentTarget.value,
+                                            })
+                                          }
+                                        >
+                                          {view.board.panels
+                                            .filter(({ id }) => id !== panel.id)
+                                            .map((other) => (
+                                              <option
+                                                key={other.id}
+                                                value={other.id}
+                                              >
+                                                {other.title}
+                                              </option>
+                                            ))}
+                                        </NativeSelect>
+                                        <Button
+                                          type="button"
+                                          disabled={
+                                            busy ||
+                                            !online ||
+                                            targetId === "" ||
+                                            task === undefined
+                                          }
+                                          aria-label={`Move ${title} to another panel`}
+                                          onClick={() => move(taskId, targetId)}
+                                        >
+                                          Move
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </details>
                               </li>
                             );
                           })}

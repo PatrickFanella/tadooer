@@ -20,10 +20,7 @@ function FieldLabel({
   return (
     <Label
       data-slot="field-label"
-      className={cn(
-        "text-2xs font-semibold tracking-[0.07em] text-subtext-2 uppercase",
-        className,
-      )}
+      className={cn("text-sm font-medium text-subtext", className)}
       {...props}
     />
   );

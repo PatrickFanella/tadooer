@@ -1,3 +1,4 @@
+import { SettingsDisclosure } from "../components/settings/SettingsDisclosure.tsx";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import {
   syncTimeEntryWindowDays,
@@ -556,10 +557,7 @@ export const WorklogPage = ({
     );
   };
   return (
-    <div
-      className="mx-auto flex w-full max-w-5xl flex-col gap-6"
-      aria-labelledby="worklog-heading"
-    >
+    <div className="page-stack" aria-labelledby="worklog-heading">
       <ViewIntro
         id="worklog-heading"
         description="Tracked time by day, task and project: focus sessions, imported Super Productivity history and manual entries. Days follow your planning time zone."
@@ -639,67 +637,71 @@ export const WorklogPage = ({
           </div>
         </ViewSectionHeader>
         <ViewSectionBody>
-          <form className="worklog-add" aria-label="Add time" onSubmit={add}>
-            <label className="field">
-              Task
-              <NativeSelect
-                value={draft.taskId}
-                disabled={!writable}
-                onChange={(event) =>
-                  setDraft({ ...draft, taskId: event.target.value })
-                }
-              >
-                <NativeSelectOption value="">Choose a task</NativeSelectOption>
-                {tasks.map((task) => (
-                  <NativeSelectOption key={task.id} value={task.id}>
-                    {task.title}
+          <SettingsDisclosure title="Add time">
+            <form className="worklog-add" aria-label="Add time" onSubmit={add}>
+              <label className="field">
+                Task
+                <NativeSelect
+                  value={draft.taskId}
+                  disabled={!writable}
+                  onChange={(event) =>
+                    setDraft({ ...draft, taskId: event.target.value })
+                  }
+                >
+                  <NativeSelectOption value="">
+                    Choose a task
                   </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-            <label className="field">
-              Date
-              <Input
-                type="date"
-                value={draft.workDate}
-                disabled={!writable}
-                onChange={(event) =>
-                  setDraft({ ...draft, workDate: event.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              Minutes
-              <Input
-                type="number"
-                step="1"
-                value={draft.minutes}
-                disabled={!writable}
-                onChange={(event) =>
-                  setDraft({ ...draft, minutes: event.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              Note
-              <Input
-                maxLength={500}
-                value={draft.note}
-                disabled={!writable}
-                onChange={(event) =>
-                  setDraft({ ...draft, note: event.target.value })
-                }
-              />
-            </label>
-            <Button type="submit" disabled={busy || !writable}>
-              Add time
-            </Button>
-          </form>
-          <p className="hint">
-            Negative minutes record a correction, for example to remove focus
-            time that kept running. A day&apos;s time on a task stays between 0
-            and 24 hours.
-          </p>
+                  {tasks.map((task) => (
+                    <NativeSelectOption key={task.id} value={task.id}>
+                      {task.title}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </label>
+              <label className="field">
+                Date
+                <Input
+                  type="date"
+                  value={draft.workDate}
+                  disabled={!writable}
+                  onChange={(event) =>
+                    setDraft({ ...draft, workDate: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                Minutes
+                <Input
+                  type="number"
+                  step="1"
+                  value={draft.minutes}
+                  disabled={!writable}
+                  onChange={(event) =>
+                    setDraft({ ...draft, minutes: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                Note
+                <Input
+                  maxLength={500}
+                  value={draft.note}
+                  disabled={!writable}
+                  onChange={(event) =>
+                    setDraft({ ...draft, note: event.target.value })
+                  }
+                />
+              </label>
+              <Button type="submit" disabled={busy || !writable}>
+                Add time
+              </Button>
+            </form>
+            <p className="hint">
+              Negative minutes record a correction, for example to remove focus
+              time that kept running. A day&apos;s time on a task stays between
+              0 and 24 hours.
+            </p>
+          </SettingsDisclosure>
         </ViewSectionBody>
       </ViewSection>
       {report !== null && (

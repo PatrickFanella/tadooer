@@ -59,8 +59,9 @@ export const WorkspaceShell = ({
       <Sidebar {...sidebar} />
       <Header {...header} onAddTask={capture} />
       <main
+        key={pathForLocation(sidebar.location)}
         id="workspace-main"
-        className="main workspace-content flex min-w-0 flex-col gap-section"
+        className="main route-view workspace-content flex min-w-0 flex-col gap-section"
         data-bulk={bulk ? "true" : "false"}
       >
         {children}

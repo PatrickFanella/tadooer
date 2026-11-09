@@ -82,4 +82,25 @@ describe("shortcuts (ADR 0030)", () => {
       "Workspace",
     ]);
   });
+
+  it("leaves native activation and navigation to focused controls", () => {
+    for (const tagName of ["BUTTON", "A", "SUMMARY"]) {
+      const target = { tagName } as unknown as EventTarget;
+      for (const name of ["Enter", " ", "ArrowDown", "ArrowUp"])
+        expect(shortcutActionFor(key(name, {}, target), {})).toBeUndefined();
+      expect(shortcutActionFor(key("k", { ctrlKey: true }, target), {})).toBe(
+        "command_bar.open",
+      );
+    }
+  });
+
+  it("keeps selection and activation shortcuts on task rows", () => {
+    const row = { tagName: "LI" } as unknown as EventTarget;
+    expect(shortcutActionFor(key("ArrowDown", {}, row), {})).toBe(
+      "task.select_next",
+    );
+    expect(shortcutActionFor(key("Enter", {}, row), {})).toBe(
+      "task.edit_title",
+    );
+  });
 });

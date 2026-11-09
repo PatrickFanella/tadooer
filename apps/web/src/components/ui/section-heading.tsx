@@ -45,8 +45,8 @@ function SectionHeading({
           className={cn(
             "m-0 text-foreground",
             Heading === "h2"
-              ? "text-lg font-semibold tracking-[-0.005em]"
-              : "text-base font-semibold",
+              ? "text-lg font-medium tracking-[-0.005em]"
+              : "text-base font-medium",
           )}
         >
           {title}

@@ -34,6 +34,9 @@
      section 4 disables every animation and transition. */
   --motion-fast: 120ms;
   --motion-base: 180ms;
+  --motion-panel: 240ms;
+  --motion-distance: 6px;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
 
   /* ── 2. Semantic roles (shadcn names) ── */
@@ -94,6 +97,15 @@
   --header-height: 4rem;
   --mobile-nav-height: 4rem;
   --content-width: 65rem;
+  --settings-width: 58rem;
+  --field-width: 24rem;
+  --board-panel-min-width: 17rem;
+  --panel-background: var(--surface-0);
+  --panel-border: var(--line);
+  --panel-radius: var(--radius-md);
+  --panel-padding: 1rem;
+  --spacing-page-mobile: 0.75rem;
+  --header-height-mobile: 3.5rem;
   --detail-width: 23rem;
   --detail-sheet-height: 90dvh;
   --task-height: 3.25rem;

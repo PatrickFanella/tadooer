@@ -2852,13 +2852,20 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   if (shouldRenderOffline()) {
     const renderedOfflineState = offlineForRender();
     return (
-      <main className="main">
+      <main className="main offline-main route-view workspace-content page-stack">
+        <header className="flex items-center justify-between gap-3 border-b border-line pb-4">
+          <div className="flex items-center gap-2">
+            <img src="/suite-icon.svg" alt="" className="size-7" />
+            <span className="text-lg font-medium">Tadooer</span>
+          </div>
+          <span className="text-sm text-warning">Offline</span>
+        </header>
         <SyncConflictReview
           reviews={renderedOfflineState.conflictReviews ?? []}
           busy={busy}
           onResolve={resolveConflict}
         />
-        <nav aria-label="Offline views">
+        <nav aria-label="Offline views" className="offline-nav">
           {["today", "boards", "counters", "history", "settings"].map(
             (item) => (
               <a
@@ -2926,7 +2933,10 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             pinnedNotes={pinnedNotes}
           />
         )}
-        <section aria-label="Offline sync status">
+        <section
+          aria-label="Offline sync status"
+          className="record-surface grid gap-3"
+        >
           <p>Visible sync conflicts: {renderedOfflineState.conflictCount}</p>
           {formError !== null ? (
             <p className="message message-error">{formError}</p>

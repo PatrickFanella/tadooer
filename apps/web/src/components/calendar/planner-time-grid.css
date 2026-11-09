@@ -23,7 +23,7 @@
     grid-template-rows: auto auto minmax(76rem, auto);
     overflow-x: auto;
     border: 1px solid var(--line);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     background: var(--base);
   }
   .planner-time-grid__day {
@@ -42,7 +42,7 @@
     z-index: 2;
     padding: 0.5rem 0.6rem;
     border-bottom: 1px solid var(--line);
-    background: var(--surface-0);
+    background: var(--base);
   }
   .planner-time-grid__day-header h3 {
     margin: 0;
@@ -54,7 +54,7 @@
     grid-template-columns: 3.6rem minmax(0, 1fr);
     min-height: 2.1rem;
     border-bottom: 1px solid var(--line);
-    background: var(--surface-0);
+    background: var(--base);
   }
   .planner-time-grid__all-day-label {
     padding: 0.45rem 0.35rem;

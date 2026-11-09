@@ -26,7 +26,7 @@ function EmptyState({
     <div
       data-slot="empty-state"
       className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-line px-4 py-8 text-center text-sm text-subtext",
+        "flex flex-col items-center justify-center gap-3 px-4 py-12 text-center text-sm text-subtext",
         className,
       )}
       {...props}
@@ -43,7 +43,7 @@ function EmptyState({
       {title !== undefined && (
         <div
           data-slot="empty-state-title"
-          className="text-base font-semibold text-foreground"
+          className="text-base font-medium text-foreground"
         >
           {title}
         </div>

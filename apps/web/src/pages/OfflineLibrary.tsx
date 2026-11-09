@@ -6,6 +6,7 @@ import {
   type ReadonlyFeedSnapshot,
 } from "@suite/contracts";
 import { LocalStore } from "../local-store.ts";
+import { SettingsDisclosure } from "../components/settings/SettingsDisclosure.tsx";
 
 const labels: Partial<Record<ReadonlyFeedKind, string>> = {
   section: "Sections",
@@ -134,21 +135,28 @@ export const OfflineLibrary = () => {
     };
   }, []);
   return (
-    <section aria-label="Saved workspace">
-      <h1>Saved workspace</h1>
-      <p>These records are read-only offline. Connect to change them.</p>
+    <section
+      aria-label="Saved workspace"
+      className="offline-library page-stack record-surface"
+    >
+      <h1 className="text-xl font-medium">Saved workspace</h1>
+      <p className="text-sm text-muted-foreground">
+        These records are read-only offline. Connect to change them.
+      </p>
       {error && <p role="alert">{error}</p>}
       {Object.entries(labels).map(([kind, title]) => (
-        <section key={kind}>
-          <h2>{title}</h2>
+        <SettingsDisclosure key={kind} title={title}>
           {records
             .filter((r) => r.entityKind === kind)
             .map((record) => (
-              <article key={record.value.id}>
+              <article key={record.value.id} className="record-surface">
                 {display(record.value, names)}
               </article>
             ))}
-        </section>
+          {!records.some((record) => record.entityKind === kind) && (
+            <p className="text-sm text-muted-foreground">No saved records.</p>
+          )}
+        </SettingsDisclosure>
       ))}
     </section>
   );
