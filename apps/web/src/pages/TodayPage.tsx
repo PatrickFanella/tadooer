@@ -1,4 +1,5 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
+import { Hourglass, ListChecks } from "lucide-react";
 import type {
   ActiveSession,
   BaikalStatusResponse,
@@ -17,12 +18,23 @@ import type { TaskActions } from "../components/tasks/task-actions.ts";
 import type { TaskListContext } from "../components/tasks/TaskList.tsx";
 import type { ListSelectionProps } from "../components/tasks/TaskRow.tsx";
 import { Badge } from "../components/ui/badge.tsx";
-import { Card, CardContent, CardHeader } from "../components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "../components/shell/ViewSection.tsx";
 import { Checkbox } from "../components/ui/checkbox.tsx";
 import { EmptyState } from "../components/ui/empty-state.tsx";
 import { LoadingList } from "../components/ui/loading-list.tsx";
 import { SectionHeading } from "../components/ui/section-heading.tsx";
-import { addCalendarDays, planningDate } from "@suite/domain";
+import {
+  addCalendarDays,
+  buildTodayQueue,
+  groupTaskHierarchy,
+  planningDate,
+  summarizeChildren,
+} from "@suite/domain";
+import { formatEstimate } from "../components/tasks/task-row-state.ts";
 import { useDayOrders, type DayOrderActions } from "../day-order.tsx";
 import { PlanTomorrowPanel } from "../plan-tomorrow.tsx";
 import { NoteMarkdown } from "../components/notes/NoteMarkdown.tsx";
@@ -133,6 +145,36 @@ export const TodayPage = (props: TodayPageProps) => {
     preferences?.dayStartsAt,
   );
   const tomorrow = addCalendarDays(today, 1);
+  const queue =
+    preferences === undefined
+      ? null
+      : buildTodayQueue({
+          at: logicalAt,
+          timeZone: preferences.timeZone,
+          dayStartsAt: preferences.dayStartsAt,
+          tasks,
+        });
+  const todayIds = new Set([
+    ...(queue?.overdueTaskIds ?? []),
+    ...(queue?.scheduledTodayTaskIds ?? []),
+    ...(queue?.plannedTodayTaskIds ?? []),
+  ]);
+  const plannedTasks = tasks.filter((task) => todayIds.has(task.id));
+  const { childrenByParent } = groupTaskHierarchy(
+    tasks.filter((task) => task.deletedAt == null),
+  );
+  // Match the domain's parent rollup and count each child estimate once.
+  const estimatedMinutes = plannedTasks
+    .filter((task) => task.parentId == null || !todayIds.has(task.parentId))
+    .reduce((total, task) => {
+      const children = childrenByParent.get(task.id);
+      return (
+        total +
+        (children === undefined
+          ? (task.estimateMinutes ?? 0)
+          : summarizeChildren(children).openEstimateMinutes)
+      );
+    }, 0);
   const dayOrders = useDayOrders({
     tasks,
     saved: savedDayOrders,
@@ -154,6 +196,37 @@ export const TodayPage = (props: TodayPageProps) => {
   };
   return (
     <div className="today-page list-page">
+      <div
+        className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 py-3 text-sm text-muted-foreground"
+        aria-label="Today's plan"
+      >
+        <time dateTime={today}>
+          {new Intl.DateTimeFormat("en-US", {
+            weekday: "long",
+            month: "short",
+            day: "numeric",
+            timeZone: "UTC",
+          }).format(new Date(`${today}T12:00:00Z`))}
+        </time>
+        {queue !== null && (
+          <>
+            <span className="inline-flex items-center gap-2">
+              Estimated{" "}
+              <strong className="font-mono font-medium text-foreground">
+                {formatEstimate(estimatedMinutes)}
+              </strong>
+              <Hourglass className="size-4" aria-hidden="true" />
+            </span>
+            <span className="inline-flex items-center gap-2">
+              Planned{" "}
+              <strong className="font-mono font-medium text-foreground">
+                {todayIds.size}
+              </strong>
+              <ListChecks className="size-4" aria-hidden="true" />
+            </span>
+          </>
+        )}
+      </div>
       <AddTaskBar
         busy={busy}
         online={syncStatus !== "offline"}
@@ -182,36 +255,36 @@ export const TodayPage = (props: TodayPageProps) => {
         </p>
       )}
       {dailySummaryNote.trim() !== "" && (
-        <Card aria-labelledby="daily-summary-note-title">
-          <CardHeader>
+        <ViewSection aria-labelledby="daily-summary-note-title">
+          <ViewSectionHeader>
             <SectionHeading
               as="h3"
               id="daily-summary-note-title"
               title="Daily note"
             />
-          </CardHeader>
-          <CardContent>
+          </ViewSectionHeader>
+          <ViewSectionBody>
             <NoteMarkdown content={dailySummaryNote} />
-          </CardContent>
-        </Card>
+          </ViewSectionBody>
+        </ViewSection>
       )}
       {pinnedNotes.length > 0 && (
-        <Card aria-labelledby="pinned-notes-title">
-          <CardHeader>
+        <ViewSection aria-labelledby="pinned-notes-title">
+          <ViewSectionHeader>
             <SectionHeading
               as="h3"
               id="pinned-notes-title"
               title="Pinned notes"
             />
-          </CardHeader>
-          <CardContent className="grid gap-3">
+          </ViewSectionHeader>
+          <ViewSectionBody className="grid gap-3">
             {pinnedNotes.map((note) => (
               <article key={note.id} aria-label="Pinned note">
                 <NoteMarkdown content={note.content} />
               </article>
             ))}
-          </CardContent>
-        </Card>
+          </ViewSectionBody>
+        </ViewSection>
       )}
       <TodayQueue
         at={logicalAt}
@@ -246,8 +319,8 @@ export const TodayPage = (props: TodayPageProps) => {
           }
         />
       )}
-      <Card className="week-plan" aria-labelledby="week-plan-title">
-        <CardHeader>
+      <ViewSection className="week-plan" aria-labelledby="week-plan-title">
+        <ViewSectionHeader>
           <SectionHeading
             id="week-plan-title"
             eyebrow="From your calendars"
@@ -264,8 +337,8 @@ export const TodayPage = (props: TodayPageProps) => {
               ) : undefined
             }
           />
-        </CardHeader>
-        <CardContent className="grid gap-3">
+        </ViewSectionHeader>
+        <ViewSectionBody className="grid gap-3">
           {planner === null && syncStatus !== "offline" ? (
             <LoadingList label="Loading the week plan" />
           ) : planner === null || planner.events.length === 0 ? (
@@ -326,8 +399,8 @@ export const TodayPage = (props: TodayPageProps) => {
               </ol>
             </>
           )}
-        </CardContent>
-      </Card>
+        </ViewSectionBody>
+      </ViewSection>
     </div>
   );
 };

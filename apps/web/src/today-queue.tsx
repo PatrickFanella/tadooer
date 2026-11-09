@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import type { PlanningPreferences, Task } from "@suite/contracts";
 import { buildTodayQueue, groupTaskHierarchy } from "@suite/domain";
 import type { TaskListItemState } from "./components/tasks/TaskRow.tsx";
@@ -83,6 +84,9 @@ export const TodayQueue = ({
   const [expandedSections, setExpandedSections] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [collapsedSections, setCollapsedSections] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const unnestedOverdue =
     queue === undefined ? [] : lookup(queue.overdueTaskIds);
   const unnestedScheduled =
@@ -155,7 +159,11 @@ export const TodayQueue = ({
   // hundreds of overdue or unplanned tasks otherwise renders them all.
   const sectionLimit = 12;
   const shownOf = (className: string, listed: readonly Task[]) =>
-    expandedSections.has(className) ? listed : listed.slice(0, sectionLimit);
+    collapsedSections.has(className)
+      ? []
+      : expandedSections.has(className)
+        ? listed
+        : listed.slice(0, sectionLimit);
   const sections: readonly {
     readonly title: string;
     readonly className: string;
@@ -208,6 +216,7 @@ export const TodayQueue = ({
     // to the "Today is clear" state when nothing is listed at all.
     if (listed.length === 0) return null;
     const expanded = expandedSections.has(className);
+    const collapsed = collapsedSections.has(className);
     const shown = shownOf(className, listed);
     const hidden = listed.length - shown.length;
     return (
@@ -217,39 +226,59 @@ export const TodayQueue = ({
         aria-labelledby={`${className}-title`}
       >
         <h2 id={`${className}-title`} className="list-heading">
-          {title}
-          {listed.length > sectionLimit && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-start px-0 py-1 text-base font-medium"
+            aria-expanded={!collapsed}
+            aria-controls={`${className}-rows`}
+            onClick={() =>
+              setCollapsedSections((current) => {
+                const next = new Set(current);
+                if (next.has(className)) next.delete(className);
+                else next.add(className);
+                return next;
+              })
+            }
+          >
+            <ChevronRight
+              className={collapsed ? "" : "rotate-90"}
+              aria-hidden="true"
+            />
+            {title}
             <span className="list-heading__count">{listed.length}</span>
-          )}
+          </Button>
         </h2>
-        <TaskRows
-          tasks={shown}
-          childrenByParent={childrenByParent}
-          stateOf={() => state}
-          context={rowContext}
-          moveControlsFor={
-            state === "planned-day" ? moveControlsFor : undefined
-          }
-          label={title}
-        />
-        {hidden > 0 || expanded ? (
-          <p className="today-section__more">
-            <Button
-              variant="link"
-              type="button"
-              onClick={() =>
-                setExpandedSections((current) => {
-                  const next = new Set(current);
-                  if (next.has(className)) next.delete(className);
-                  else next.add(className);
-                  return next;
-                })
-              }
-            >
-              {expanded ? "Show fewer" : `Show ${String(hidden)} more`}
-            </Button>
-          </p>
-        ) : null}
+        <div id={`${className}-rows`} hidden={collapsed}>
+          <TaskRows
+            tasks={shown}
+            childrenByParent={childrenByParent}
+            stateOf={() => state}
+            context={rowContext}
+            moveControlsFor={
+              state === "planned-day" ? moveControlsFor : undefined
+            }
+            label={title}
+          />
+          {hidden > 0 || expanded ? (
+            <p className="today-section__more">
+              <Button
+                variant="link"
+                type="button"
+                onClick={() =>
+                  setExpandedSections((current) => {
+                    const next = new Set(current);
+                    if (next.has(className)) next.delete(className);
+                    else next.add(className);
+                    return next;
+                  })
+                }
+              >
+                {expanded ? "Show fewer" : `Show ${String(hidden)} more`}
+              </Button>
+            </p>
+          ) : null}
+        </div>
       </section>
     );
   };

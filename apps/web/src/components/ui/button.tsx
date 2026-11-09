@@ -5,12 +5,12 @@ import { Slot } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm border border-transparent text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-sm border border-transparent text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon",
   {
     variants: {
       variant: {
         default:
-          "border-primary bg-primary font-semibold text-primary-foreground hover:bg-[#cba8fb]",
+          "border-primary bg-primary font-semibold text-primary-foreground hover:bg-primary-hover",
         destructive:
           "border-destructive/40 bg-transparent text-destructive hover:border-destructive hover:bg-destructive/15",
         outline:
@@ -22,11 +22,11 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-[1.875rem] px-3 has-[>svg]:px-2.5",
+        default: "h-control px-3 has-[>svg]:px-2.5",
         xs: "h-6 gap-1 px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1.5 px-2.5 text-xs has-[>svg]:px-2",
         lg: "h-9 rounded-md px-5 has-[>svg]:px-4",
-        icon: "size-[1.875rem]",
+        icon: "size-control",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-7",
         "icon-lg": "size-9",

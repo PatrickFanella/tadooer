@@ -81,15 +81,16 @@ export const AddTaskBar = ({
           });
         }}
       >
-        <div className="add-task-bar__row">
+        <div className="add-task-bar__row flex min-h-capture items-center gap-2 rounded-md border border-input bg-card px-2">
           <Plus className="add-task-bar__icon" aria-hidden="true" />
           <Input
             ref={inputRef}
-            className="add-task-bar__input"
+            className="add-task-bar__input h-full border-0 bg-transparent shadow-none focus-visible:ring-0"
             name="title"
             autoComplete="off"
             required
-            placeholder="Add a task. Try +Project #tag 30m @tomorrow 09:00"
+            placeholder="Add new task…"
+            title="Try +Project #tag 30m @tomorrow 09:00"
             aria-label="New task"
           />
           {markersState === "on" && (
@@ -107,8 +108,15 @@ export const AddTaskBar = ({
           >
             <SlidersHorizontal />
           </Button>
-          <Button type="submit" size="sm" disabled={busy}>
-            {busy ? "Adding…" : "Add"}
+          <Button
+            type="submit"
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-primary"
+            disabled={busy}
+            aria-label={busy ? "Adding…" : "Add"}
+          >
+            <Plus aria-hidden="true" />
           </Button>
         </div>
         {markersState === "offline" && (

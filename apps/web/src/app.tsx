@@ -3309,6 +3309,15 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     />
   );
 
+  const focusCandidate = [
+    ...selectedTasks,
+    ...state.tasks.filter((task) => task.id === state.dayPlan?.nextTask?.id),
+    ...visibleTaskOrder.flatMap((id) => {
+      const task = state.tasks.find((candidate) => candidate.id === id);
+      return task === undefined ? [] : [task];
+    }),
+  ].find((task) => task.status === "open" && task.deletedAt == null);
+
   return (
     <ApplicationPreferencesProvider value={appPreferences}>
       <WorkspaceShell
@@ -3367,6 +3376,16 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             liveStatus,
             baikalConnected: state.baikal.connected,
           },
+          onStartFocus:
+            state.client !== undefined &&
+            networkOnline &&
+            !busy &&
+            !focus.busy &&
+            (state.activeSession == null ||
+              ["completed", "expired"].includes(state.activeSession.state)) &&
+            focusCandidate !== undefined
+              ? () => taskActions.startFocus(focusCandidate)
+              : undefined,
           conflictCount: state.conflictCount ?? 0,
           commandTrigger: (
             <CommandBar
@@ -3400,7 +3419,11 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 if (!open) clearSelection();
               }}
             >
-              <SheetContent side="bottom" className="task-detail-sheet">
+              <SheetContent
+                side="bottom"
+                className="task-detail-sheet h-detail-sheet max-h-detail-sheet overflow-hidden p-0"
+                showCloseButton={false}
+              >
                 <SheetTitle className="sr-only">Task details</SheetTitle>
                 {detailPanel(selectedTasks[0])}
               </SheetContent>

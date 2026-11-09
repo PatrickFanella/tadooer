@@ -5,7 +5,11 @@ import {
   type Task,
 } from "@suite/contracts";
 import { Button } from "./components/ui/button.tsx";
-import { Card, CardContent, CardHeader } from "./components/ui/card.tsx";
+import {
+  ViewSection,
+  ViewSectionBody,
+  ViewSectionHeader,
+} from "./components/shell/ViewSection.tsx";
 import { Checkbox } from "./components/ui/checkbox.tsx";
 import { SectionHeading } from "./components/ui/section-heading.tsx";
 import { DayOrderList, orderedDayTasks } from "./day-order.tsx";
@@ -71,15 +75,18 @@ export const PlanTomorrowPanel = ({
     return task === undefined ? [] : [task];
   });
   return (
-    <Card className="plan-tomorrow" aria-labelledby="plan-tomorrow-title">
-      <CardHeader>
+    <ViewSection
+      className="plan-tomorrow"
+      aria-labelledby="plan-tomorrow-title"
+    >
+      <ViewSectionHeader>
         <SectionHeading
           id="plan-tomorrow-title"
           eyebrow={date}
           title="Plan tomorrow"
         />
-      </CardHeader>
-      <CardContent className="grid gap-3">
+      </ViewSectionHeader>
+      <ViewSectionBody className="grid gap-3">
         {!available ? (
           <p className="hint">
             Tomorrow can be planned once this device has synced.
@@ -146,7 +153,7 @@ export const PlanTomorrowPanel = ({
             </Button>
           </form>
         ) : null}
-      </CardContent>
-    </Card>
+      </ViewSectionBody>
+    </ViewSection>
   );
 };

@@ -148,10 +148,10 @@ describe("Sidebar (issue #194)", () => {
 
   it("keeps Records closed and opens it while one of its views is current", () => {
     expect(render()).toMatch(
-      /aria-expanded="false"[^>]*aria-controls="sidebar-group-records"/,
+      /aria-expanded="false"[^>]*aria-controls="[^"]*sidebar-group-records"/,
     );
     expect(render({ location: { route: "worklog" } })).toMatch(
-      /aria-expanded="true"[^>]*aria-controls="sidebar-group-records"/,
+      /aria-expanded="true"[^>]*aria-controls="[^"]*sidebar-group-records"/,
     );
   });
 

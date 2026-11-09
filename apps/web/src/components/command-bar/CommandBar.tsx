@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CommandIcon } from "lucide-react";
+import { Search } from "lucide-react";
 import type { Project, Tag } from "@suite/contracts";
 import {
   workspaceRoutes,
@@ -14,7 +14,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { useApplicationPreferences } from "@/application-preferences";
@@ -76,8 +75,9 @@ export const CommandBar = ({
   return (
     <>
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="icon"
+        className="rounded-full"
         type="button"
         ref={triggerRef}
         onClick={() => {
@@ -85,12 +85,13 @@ export const CommandBar = ({
           setOpen(true);
         }}
         aria-label="Open command bar"
+        title={
+          binding === null
+            ? "Search commands"
+            : `Search commands (${formatBinding(binding)})`
+        }
       >
-        <CommandIcon aria-hidden="true" />
-        Command
-        {binding !== null && (
-          <CommandShortcut>{formatBinding(binding)}</CommandShortcut>
-        )}
+        <Search aria-hidden="true" />
       </Button>
       <CommandDialog
         open={open}
