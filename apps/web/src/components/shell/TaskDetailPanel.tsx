@@ -159,7 +159,7 @@ export const TaskDetailPanel = ({
         ) : (
           <button
             type="button"
-            className="task-detail__title"
+            className="task-detail__title flex-1 border-0 bg-transparent text-left font-medium"
             disabled={completed}
             title={completed ? undefined : "Edit title"}
             onClick={() => setTitle(beginEdit(task.title))}

@@ -1,3 +1,9 @@
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../components/ui/tabs.tsx";
 import type {
   ChoicePool,
   ChoicePoolHistoryEvent,
@@ -134,40 +140,60 @@ export const ReusePage = ({
   onResolvePlaceholder,
 }: ReusePageProps) => {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+    <div className="page-stack">
       <ViewIntro description="Templates for tasks you repeat. Pools for choosing from a list you wrote." />
-      <TemplateLibrary
-        templates={templates}
-        blueprints={templateBlueprints}
-        sets={templateSets}
-        projects={projects}
-        tags={tags}
-        busy={busy}
-        onCreate={onCreateTemplate}
-        onSearch={(query) => onSearchTemplates(query)}
-        onArchive={onArchiveTemplate}
-        onEdit={onEditTemplate}
-        onCreateSet={onCreateTemplateSet}
-        onInstantiate={onInstantiateTemplate}
-        onInstantiateSet={onInstantiateTemplateSet}
-      />
-      <ChoicePoolLibrary
-        pools={choicePools}
-        items={choicePoolItems}
-        history={choicePoolHistory}
-        placeholders={planningPlaceholders}
-        tasks={tasks}
-        templates={templates}
-        poolSlots={templatePoolSlots}
-        busy={busy}
-        onCreatePool={onCreateChoicePool}
-        onCreatePlaceholder={onCreatePlanningPlaceholder}
-        onEditPool={onEditChoicePool}
-        onCreateTemplateSlot={onAddTemplatePoolSlot}
-        onRecordCompletion={onRecordChoicePoolCompletion}
-        onSuggest={onSuggestPlaceholder}
-        onResolve={onResolvePlaceholder}
-      />
+      <Tabs defaultValue="templates">
+        <TabsList aria-label="Library section">
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="pools">Choice pools</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="templates"
+          forceMount
+          className="page-stack data-[state=inactive]:hidden"
+        >
+          {" "}
+          <TemplateLibrary
+            templates={templates}
+            blueprints={templateBlueprints}
+            sets={templateSets}
+            projects={projects}
+            tags={tags}
+            busy={busy}
+            onCreate={onCreateTemplate}
+            onSearch={(query) => onSearchTemplates(query)}
+            onArchive={onArchiveTemplate}
+            onEdit={onEditTemplate}
+            onCreateSet={onCreateTemplateSet}
+            onInstantiate={onInstantiateTemplate}
+            onInstantiateSet={onInstantiateTemplateSet}
+          />
+        </TabsContent>
+        <TabsContent
+          value="pools"
+          forceMount
+          className="page-stack data-[state=inactive]:hidden"
+        >
+          {" "}
+          <ChoicePoolLibrary
+            pools={choicePools}
+            items={choicePoolItems}
+            history={choicePoolHistory}
+            placeholders={planningPlaceholders}
+            tasks={tasks}
+            templates={templates}
+            poolSlots={templatePoolSlots}
+            busy={busy}
+            onCreatePool={onCreateChoicePool}
+            onCreatePlaceholder={onCreatePlanningPlaceholder}
+            onEditPool={onEditChoicePool}
+            onCreateTemplateSlot={onAddTemplatePoolSlot}
+            onRecordCompletion={onRecordChoicePoolCompletion}
+            onSuggest={onSuggestPlaceholder}
+            onResolve={onResolvePlaceholder}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

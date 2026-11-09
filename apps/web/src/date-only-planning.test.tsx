@@ -58,7 +58,7 @@ describe("date-only planning in the browser", () => {
 
   it("shows a planned day in Today until local midnight on a DST change", () => {
     const beforeMidnight = queue("2026-03-09T04:59:00.000Z", tasks);
-    expect(beforeMidnight).toContain(">Planned for today</h2>");
+    expect(beforeMidnight).toContain('id="today-planned-day-title"');
     expect(beforeMidnight).toContain("Pack bags");
     expect(beforeMidnight).toContain('data-kind="today">Today<');
     expect(beforeMidnight).not.toContain("Call the landlord");

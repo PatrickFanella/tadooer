@@ -212,7 +212,7 @@ export const TaskRow = ({
       tabIndex={selected ? 0 : -1}
     >
       <div
-        className="task-row__main"
+        className="task-row__main flex min-h-task items-center gap-2 px-3 py-2"
         onClick={onBodyClick}
         onDoubleClick={onBodyDoubleClick}
       >

@@ -1,3 +1,4 @@
+import { SettingsDisclosure } from "../components/settings/SettingsDisclosure.tsx";
 import { useState, type SyntheticEvent } from "react";
 import {
   habitCommandSchema,
@@ -88,10 +89,7 @@ export const HabitsPage = ({
     if (saved) form.reset();
   };
   return (
-    <div
-      className="mx-auto flex w-full max-w-5xl flex-col gap-6"
-      aria-labelledby="habits-heading"
-    >
+    <div className="page-stack" aria-labelledby="habits-heading">
       <ViewIntro
         id="habits-heading"
         description="Things you repeat. Each habit keeps its history in its own time zone."
@@ -115,10 +113,10 @@ export const HabitsPage = ({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <ViewSection>
-        <ViewSectionHeader>
-          <SectionHeading title="Create a habit" />
-        </ViewSectionHeader>
+      <SettingsDisclosure
+        title="Create a habit"
+        defaultOpen={library.habits.length === 0}
+      >
         <ViewSectionBody>
           <form onSubmit={(event) => void create(event)}>
             <fieldset disabled={disabled} className="habit-create">
@@ -184,7 +182,7 @@ export const HabitsPage = ({
             </fieldset>
           </form>
         </ViewSectionBody>
-      </ViewSection>
+      </SettingsDisclosure>
       {library.habits.length === 0 && (
         <EmptyState
           title="No habits yet."
@@ -204,7 +202,7 @@ export const HabitsPage = ({
           const metrics = deriveHabitMetrics(habit, occurrences, today);
           return (
             <ViewSection
-              className="habit-card"
+              className="habit-card record-surface"
               key={habit.id}
               aria-label={habit.title}
             >

@@ -1,0 +1,452 @@
+/* Shared patterns for routes, records and configuration. Values live in tokens.css. */
+@utility page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-section);
+  width: 100%;
+  max-width: var(--content-width);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+@utility offline-main {
+  @media (max-width: 48rem) {
+    --spacing-page: var(--spacing-page-mobile);
+  }
+}
+
+@utility settings-page {
+  --content-width: var(--settings-width);
+}
+
+@utility record-surface {
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--task-radius);
+  padding: var(--spacing-element);
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-distance));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes disclosure-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@layer patterns {
+  .route-view {
+    animation: route-enter var(--motion-panel) var(--ease-enter);
+  }
+  .settings-layout {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--spacing-section);
+  }
+  .settings-search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: min(100%, 30rem);
+    margin-inline: auto;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--input);
+    border-radius: var(--radius-md);
+    background: var(--mantle);
+    transition: border-color var(--motion-fast) var(--ease-out);
+  }
+  .settings-search:focus-within {
+    border-color: var(--ring);
+  }
+  .settings-search-results {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--popover);
+    overflow: hidden;
+  }
+  .settings-search-results ul {
+    list-style: none;
+  }
+  .settings-search-results button:not([data-slot]) {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    white-space: normal;
+    text-align: left;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0.75rem 1rem;
+  }
+  .settings-search-results li + li {
+    border-top: 1px solid var(--line);
+  }
+  .settings-search-results button:hover {
+    background: var(--accent);
+  }
+  .settings-panel {
+    min-width: 0;
+    --panel-background: transparent;
+    --panel-border: transparent;
+    --panel-padding: 0rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-section);
+    padding-block: var(--spacing-section);
+    animation: route-enter var(--motion-base) var(--ease-enter);
+  }
+  .settings-panel > section {
+    display: grid;
+    gap: var(--spacing-element);
+    padding-bottom: var(--spacing-section);
+    border-bottom: 1px solid var(--line);
+  }
+  .settings-panel [data-slot="section-heading-eyebrow"] {
+    display: none;
+  }
+  .settings-panel form > button[type="submit"],
+  .application-preferences > button {
+    justify-self: start;
+  }
+  .settings-panel .notification-preferences,
+  .settings-panel .application-preferences {
+    gap: var(--spacing-element);
+  }
+  .settings-panel [data-slot="field"]:has([role="checkbox"]) {
+    min-height: var(--control-height);
+    padding-block: 0.25rem;
+  }
+  .settings-disclosure {
+    border-bottom: 1px solid var(--line);
+    min-width: 0;
+  }
+  .settings-disclosure > summary {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 3.25rem;
+    padding: 0.75rem 0.25rem;
+    color: var(--foreground);
+    font-size: var(--text-base);
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    transition:
+      color var(--motion-fast) var(--ease-out),
+      background var(--motion-fast) var(--ease-out);
+  }
+  .settings-disclosure > summary:hover {
+    color: var(--primary);
+    background: var(--task-hover);
+  }
+  .settings-disclosure > summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .settings-disclosure[open] > summary {
+    margin: 0;
+  }
+  .settings-disclosure__body {
+    padding: 0.5rem 1.25rem 1.5rem;
+  }
+  .settings-disclosure__body > fieldset {
+    padding: 0;
+    border: 0;
+  }
+  .settings-disclosure__body > fieldset > legend {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .settings-disclosure__body > fieldset > label.field {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: var(--spacing-element);
+    padding-block: 0.375rem;
+  }
+  .settings-disclosure__body
+    > fieldset
+    > label.field
+    > :is(input, select, textarea) {
+    max-width: var(--field-width);
+  }
+  .settings-disclosure__body .shortcut-field {
+    max-width: none;
+  }
+  .settings-disclosure__body > form {
+    min-width: 0;
+  }
+  .settings-health {
+    grid-template-columns: 1fr;
+  }
+  .settings-health > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr);
+    align-items: baseline;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    padding: 0.75rem 0;
+  }
+  .settings-health dt {
+    color: var(--subtext);
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: var(--text-sm);
+  }
+  .settings-health dd {
+    overflow-wrap: anywhere;
+    font-size: var(--text-xs);
+  }
+  .board-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+  }
+  .board-grid {
+    display: grid;
+    grid-template-columns: repeat(
+      var(--board-columns),
+      minmax(var(--board-panel-min-width), 1fr)
+    );
+    align-items: start;
+    gap: var(--spacing-section);
+    overflow-x: auto;
+    padding-block: 0.25rem 1rem;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-inline: contain;
+  }
+  .board-panel {
+    display: grid;
+    align-content: start;
+    min-width: 0;
+    min-height: 12rem;
+    gap: var(--spacing-element);
+    padding: var(--spacing-element);
+    background: var(--mantle);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    scroll-snap-align: start;
+  }
+  .board-panel > h3 {
+    font-size: var(--text-base);
+    font-weight: 500;
+  }
+  .board-panel > h3 small {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--subtext);
+  }
+  .board-panel-tasks {
+    display: grid;
+    gap: 0.5rem;
+    list-style: none;
+  }
+  .board-panel-tasks > li {
+    position: relative;
+    min-width: 0;
+    padding: 0.75rem;
+    background: var(--surface-0);
+    border-radius: var(--task-radius);
+    border: 1px solid var(--line);
+  }
+  .board-panel-tasks .task-title-button {
+    display: block;
+    padding-inline-end: 2rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+  .board-panel-tasks .task-actions {
+    margin-top: 0.5rem;
+  }
+  .board-panel-tasks .task-actions select {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+  .offline-library dl > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr);
+    gap: var(--spacing-element);
+    padding-block: 0.5rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .offline-library dt {
+    color: var(--subtext);
+    font-size: var(--text-sm);
+  }
+  .offline-library dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .board-task-controls > summary {
+    position: absolute;
+    inset: 0.375rem 0.375rem auto auto;
+    display: inline-flex;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    margin: 0;
+    border-radius: var(--radius-sm);
+    color: var(--subtext);
+  }
+  .board-task-controls > summary::before {
+    display: none;
+  }
+  .board-task-controls > summary:hover {
+    background: var(--surface-1);
+    color: var(--foreground);
+  }
+  .board-task-controls > summary:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .history-list,
+  .history-children,
+  .worklog-days,
+  .worklog-entries,
+  .worklog-weeks {
+    list-style: none;
+  }
+  .history-list {
+    display: grid;
+    gap: var(--spacing-element);
+  }
+  .history-children {
+    border-left: 1px solid var(--line-strong);
+    padding-left: 1rem;
+  }
+  .history-task-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .history-task {
+    display: grid;
+    gap: 0.375rem;
+  }
+  .worklog-days > li {
+    padding-block: var(--spacing-element);
+  }
+  .worklog-entries {
+    border-top: 1px solid var(--line);
+  }
+  .worklog-entry {
+    padding-block: var(--spacing-element);
+    border-bottom: 1px solid var(--line);
+  }
+  .worklog-table th,
+  .counter-week th {
+    font-weight: 500;
+    color: var(--subtext);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .worklog-table td,
+  .counter-week td {
+    padding-block: 0.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .worklog-controls > span {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+  .worklog-add > label {
+    flex: 1 1 10rem;
+    min-width: 0;
+  }
+  .habit-list {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-section);
+  }
+  .habit-create {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  }
+  .habit-create > p,
+  .habit-create > button {
+    grid-column: 1 / -1;
+  }
+  .counter-create {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  }
+  .counter-create > button {
+    grid-column: 1 / -1;
+  }
+  .counter-evaluation > fieldset {
+    grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  }
+  .counter-choice {
+    min-height: var(--control-height);
+  }
+  .task-row__children {
+    animation: disclosure-enter var(--motion-base) var(--ease-out);
+  }
+  [data-slot="collapsible-content"][data-state="open"] {
+    animation: disclosure-enter var(--motion-base) var(--ease-out);
+  }
+  @supports (interpolate-size: allow-keywords) {
+    .settings-disclosure {
+      interpolate-size: allow-keywords;
+    }
+    .settings-disclosure::details-content {
+      block-size: 0;
+      overflow: clip;
+      transition:
+        block-size var(--motion-panel) var(--ease-enter),
+        content-visibility var(--motion-panel) allow-discrete;
+    }
+    .settings-disclosure[open]::details-content {
+      block-size: auto;
+    }
+  }
+  @media (max-width: 48rem) {
+    .settings-disclosure__body {
+      padding-inline: 0.25rem;
+    }
+    .settings-disclosure__body > fieldset > label.field {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.375rem;
+    }
+    .offline-library dl > div {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.25rem;
+    }
+    .settings-health > div {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.375rem;
+    }
+    .board-grid {
+      --board-panel-min-width: min(80vw, 20rem);
+    }
+    .worklog-controls {
+      gap: 0.5rem;
+    }
+    .worklog-add,
+    .worklog-edit {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .worklog-add > label {
+      flex-basis: auto;
+    }
+  }
+}

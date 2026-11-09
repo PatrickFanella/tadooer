@@ -59,6 +59,37 @@ export const shortcutActionFor = (
 ): ShortcutActionId | undefined => {
   const binding = bindingFromEvent(event);
   if (binding === undefined) return undefined;
+  // Native activation and control navigation take precedence over task-list
+  // shortcuts. In particular Enter must activate a focused search result.
+  if (
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    [
+      "Enter",
+      " ",
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "Home",
+      "End",
+    ].includes(event.key)
+  ) {
+    const target = event.target as
+      | { tagName?: string; closest?: (selector: string) => unknown }
+      | null
+      | undefined;
+    if (
+      ["BUTTON", "A", "SUMMARY"].includes(target?.tagName ?? "") ||
+      Boolean(
+        target?.closest?.(
+          "button, a, summary, [role=button], [role=tab], [role=menuitem], [role=checkbox], [role=switch]",
+        ),
+      )
+    )
+      return undefined;
+  }
   if (!binding.includes("+") && isEditableTarget(event.target))
     return undefined;
   if (

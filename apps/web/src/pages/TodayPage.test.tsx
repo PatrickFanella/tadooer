@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { noteSchema } from "@suite/contracts";
+import { describe, expect, it, vi } from "vitest";
+import { noteSchema, type Task } from "@suite/contracts";
 import {
   TodayPage,
   updateHiddenCalendarIds,
@@ -41,7 +41,7 @@ describe("updateHiddenCalendarIds", () => {
   });
 });
 
-describe("pinned notes (ADR 0046)", () => {
+describe("TodayPage", () => {
   const props: TodayPageProps = {
     dayPlan: undefined,
     planningPreferences: undefined,
@@ -71,6 +71,59 @@ describe("pinned notes (ADR 0046)", () => {
     revision: 1,
     createdAt: "2026-10-02T12:00:00.000Z",
     updatedAt: "2026-10-02T12:00:00.000Z",
+  });
+
+  it("uses child estimates once in the daily overview, rather than the stored parent estimate", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-09T12:00:00Z"));
+    try {
+      const parent: Task = {
+        id: "parent",
+        title: "A parent",
+        notes: "",
+        status: "open",
+        revision: 1,
+        createdAt: "2026-11-09T12:00:00Z",
+        updatedAt: "2026-11-09T12:00:00Z",
+        completedAt: null,
+        deletedAt: null,
+        plannedStart: null,
+        plannedDay: "2026-11-09",
+        estimateMinutes: 120,
+      };
+      const html = renderToStaticMarkup(
+        <TodayPage
+          {...props}
+          planningPreferences={{
+            timeZone: "UTC",
+            workingDays: [1, 2, 3, 4, 5],
+            workdayStart: "09:00",
+            workdayEnd: "17:00",
+            breakStart: "12:00",
+            breakEnd: "12:30",
+          }}
+          tasks={[
+            parent,
+            {
+              ...parent,
+              id: "child-a",
+              parentId: parent.id,
+              estimateMinutes: 30,
+            },
+            {
+              ...parent,
+              id: "child-b",
+              parentId: parent.id,
+              estimateMinutes: 15,
+            },
+          ]}
+        />,
+      );
+      expect(html).toMatch(/Estimated.*?>45m<\/strong>/);
+      expect(html).not.toMatch(/Estimated.*?>2h<\/strong>/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders cached pinned notes with no connection and no session", () => {

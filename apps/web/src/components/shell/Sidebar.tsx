@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   Cable,
   CalendarDays,
@@ -183,6 +183,7 @@ export const Sidebar = ({
   offline,
   onNavigate,
 }: SidebarProps) => {
+  const idPrefix = useId();
   const currentGroup = groupOf(location);
   const [open, setOpen] = useState<Record<GroupId, boolean>>(() => ({
     projects: currentGroup === "projects" || readOpen("projects", true),
@@ -229,7 +230,7 @@ export const Sidebar = ({
 
   const group = (id: GroupId, label: string, items: ReactNode) => {
     const expanded = open[id];
-    const listId = `sidebar-group-${id}`;
+    const listId = `${idPrefix}-sidebar-group-${id}`;
     return (
       <div
         key={id}
@@ -268,7 +269,7 @@ export const Sidebar = ({
   return (
     <aside className="sidebar" data-collapsed={collapsed ? "true" : "false"}>
       <div className="sidebar-brand">
-        <span className="brand-dot" aria-hidden="true" />
+        <img src="/suite-icon.svg" className="size-7 shrink-0" alt="" />
         <span className="sidebar-label">Tadooer</span>
         <button
           type="button"

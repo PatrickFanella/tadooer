@@ -20,6 +20,7 @@ export const TaskTitleButton = ({
   ) : (
     <button
       type="button"
+      data-slot="task-title"
       className="task-title-button"
       aria-label={`Open details for “${task.title}”`}
       onClick={() => onSelect(task)}

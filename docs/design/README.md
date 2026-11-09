@@ -2,8 +2,8 @@
 
 Status: adopted 2026-09-23 for the web app; identity section added 2026-10-02;
 workspace shell, task row and add bar rules added 2026-11-03 (issue #194).
-The stylesheet `apps/web/src/styles.css` is the source of truth for values;
-`tokens.css` beside this file restates them as plain custom properties, and
+`apps/web/src/tokens.css` is the source of truth for values;
+`tokens.css` beside this file imports those custom properties, and
 `examples/01-specimen.html` shows them without the app. The Studio brand pack
 in `subcult-tv/studio/brands/tadooer/` copies this directory
 with hashes and holds the promotional artwork; promotional layouts are edited
@@ -83,9 +83,14 @@ Sample copy, as the app ships it:
 Promotional copy lives in the Studio pack and is sample text until the owner
 reviews it; keep that label there.
 
+The [workspace styling guide](workspace-styling.md) documents the shared layout,
+utility classes and sizing tokens. It supersedes the older density and shell
+measurements below for the v20-style workspace.
+
 ## Direction
 
-Dark only. Surfaces and text come from Catppuccin Mocha. Accents come from
+The default dark theme uses surfaces and text from Catppuccin Mocha.
+The light option uses Latte surfaces. Accents come from
 Dracula. The two palettes share a purple-leaning base, so the mix reads as one
 system rather than a theme swap.
 
@@ -142,26 +147,28 @@ Fontsource and imported in `main.tsx`. Mono always uses tabular numerals.
 
 | Step          | Size | Use                                        |
 | ------------- | ---- | ------------------------------------------ |
-| `--text-2xs`  | 10px | Eyebrows, chips, uppercase field labels    |
-| `--text-xs`   | 11px | Hints, metadata                            |
-| `--text-sm`   | 12px | Controls, secondary copy, buttons          |
-| `--text-base` | 13px | Body, task titles                          |
-| `--text-lg`   | 15px | Section headings                           |
-| `--text-xl`   | 18px | Auth headings                              |
-| `--text-2xl`  | 22px | Page titles, weight 650, tracking -0.015em |
+| `--text-2xs`  | 11px | Eyebrows, chips, uppercase field labels    |
+| `--text-xs`   | 12px | Hints, metadata                            |
+| `--text-sm`   | 13px | Controls, secondary copy, buttons          |
+| `--text-base` | 14px | Body, task titles                          |
+| `--text-lg`   | 16px | Section headings                           |
+| `--text-xl`   | 20px | Auth headings                              |
+| `--text-2xl`  | 24px | Page titles, weight 650, tracking -0.015em |
 
 ## Shape and density
 
-Density is tight. Controls are 30px tall. Task rows have 9px vertical padding.
-Radius is 5px on controls, 8px on rows and nested panels, 12px on cards. Under
+Default controls are 36px tall. Task rows have a 52px minimum height.
+Radius is 4px on controls and task rows, 8px on nested panels, 12px on cards. Under
 a coarse pointer, controls grow to a 44px minimum and form text to 16px (the
 touch block at the end of the stylesheet, issue #117).
 
 ## Motion
 
 Motion is restrained: it confirms that something happened and nothing more.
-Two durations, `--motion-fast` (120ms) for disclosures and hover, and
-`--motion-base` (180ms) for rows and dialogs, with one easing `--ease-out`.
+Three durations: `--motion-fast` (120ms) for hover, `--motion-base` (180ms)
+for rows and dialogs, and `--motion-panel` (240ms) for disclosures, sheets and
+route transitions. `--ease-out` handles state changes; `--ease-enter` handles
+entries and panel movement.
 Task rows, board items, history entries and opened `details` content use the
 `enter-fade` keyframe (opacity and a 2px rise). Dialogs use the shadcn
 fade and zoom. The `prefers-reduced-motion: reduce` rule in section 4 of the
@@ -176,12 +183,13 @@ cached or empty state rather than a placeholder that never resolves.
 
 ## Component rules
 
-- The frame (issue #194) is a desktop layout: a 15rem sidebar on `--mantle`
-  that collapses to a 3rem icon rail (remembered per browser under
-  `tadooer.sidebar:collapsed`), a 2.75rem header spanning the main and
-  detail columns, the main column at 56rem, and a 22rem detail column on
+- The frame (issue #194) is a desktop layout: a 16.25rem sidebar on `--mantle`
+  that collapses to a 3.5rem icon rail (remembered per browser under
+  `tadooer.sidebar:collapsed`), a 4rem header spanning the main and
+  detail columns, the main column at 65rem, and a 23rem detail column on
   `--surface-0` that exists only while one task is selected. Below 64rem the
-  sidebar is the scrolling row and the detail panel is a bottom `Sheet`. The
+  sidebar moves into a modal drawer above bottom navigation, and the detail
+  panel is a bottom `Sheet`. The
   components are `WorkspaceShell`, `Sidebar`, `Header`, `FocusStrip`,
   `SyncIndicator` and `TaskDetailPanel` under `components/shell`.
 - The sidebar lists Today, Inbox, Planner, Tasks, Boards and Habits, then
@@ -197,7 +205,7 @@ cached or empty state rather than a placeholder that never resolves.
   by the worst of task sync, live updates and Baikal with the three states
   as text in a status region and in a popover, a conflict badge only when
   conflicts need action, the command bar trigger and the account menu.
-- Task rows (`TaskRow`) are one line at 2.25rem: a round complete toggle,
+- Task rows (`TaskRow`) have a 3.25rem minimum height: a square complete toggle,
   the title, metadata in mono (`Overdue` or planned time, estimate as
   `45m`, `due Fri` within a week), the project chip with its swatch, up to
   three tag chips with `+n`, and actions that appear on hover, focus or
@@ -297,10 +305,13 @@ accent table above.
 
 ## Out of scope for now
 
-A light variant. Both source palettes are dark-first, and a Latte-style light
-theme would be a separate piece of work with its own contrast pass. The
-Studio pack's light and monochrome logo variants exist for print and foreign
-backgrounds, not for the app.
+Additional theme packs and wallpaper controls are outside this change.
+The app already supports dark, light and system preferences. The Studio pack's
+light and monochrome logo variants serve print and foreign backgrounds.
+
+The [workspace styling guide](workspace-styling.md) documents the shared layout,
+utility classes and sizing tokens. It supersedes the older density and shell
+measurements below for the v20-style workspace.
 
 ## Directions considered
 

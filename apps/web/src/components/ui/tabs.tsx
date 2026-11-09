@@ -10,7 +10,7 @@ function Tabs({
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("flex w-full min-w-0 flex-col gap-2", className)}
       {...props}
     />
   );
@@ -24,7 +24,7 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "inline-flex h-[1.875rem] w-fit items-center justify-center gap-0.5 rounded-sm border border-line bg-mantle p-0.5 text-subtext",
+        "flex min-h-control w-full min-w-0 max-w-full items-stretch justify-start gap-1 overflow-x-auto border-b border-line text-subtext [scrollbar-width:none]",
         className,
       )}
       {...props}
@@ -40,9 +40,9 @@ function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "inline-flex h-full flex-1 items-center justify-center gap-1.5 rounded-[3px] border border-transparent bg-transparent px-2.5 text-sm font-medium whitespace-nowrap text-subtext transition-colors outline-none hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
-        "data-[state=active]:bg-surface-1 data-[state=active]:text-foreground",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-mantle",
+        "relative inline-flex min-h-control shrink-0 items-center justify-center gap-2 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-sm font-medium whitespace-nowrap text-subtext transition-colors outline-none hover:bg-accent/40 hover:text-foreground disabled:pointer-events-none disabled:opacity-50",
+        "data-[state=active]:border-primary data-[state=active]:text-primary",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className,
       )}
@@ -58,7 +58,7 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
+      className={cn("min-w-0 flex-1 outline-none", className)}
       {...props}
     />
   );

@@ -1,3 +1,5 @@
+import { revealInvalidSetting } from "./settings-focus.ts";
+import { SettingsDisclosure } from "./SettingsDisclosure.tsx";
 import { useEffect, useState, type SyntheticEvent } from "react";
 import {
   applicationStartPages,
@@ -97,12 +99,14 @@ export const ApplicationPreferencesSettings = ({
   const [overrides, setOverrides] = useState<ShortcutOverrides>(
     preferences.shortcuts,
   );
+  const [formError, setFormError] = useState<string | null>(null);
   const [bindingErrors, setBindingErrors] = useState<
     Partial<Record<ShortcutActionId, string>>
   >({});
   useEffect(() => {
     setOverrides(preferences.shortcuts);
     setBindingErrors({});
+    setFormError(null);
   }, [preferences.shortcuts, revision]);
   const conflicts = shortcutConflicts(overrides);
   const effective = resolveShortcutBindings(overrides);
@@ -200,228 +204,250 @@ export const ApplicationPreferencesSettings = ({
           key={revision}
           className="application-preferences grid gap-4"
           onSubmit={submit}
+          onInvalidCapture={(event) =>
+            setFormError(revealInvalidSetting(event))
+          }
+          onInputCapture={() => setFormError(null)}
         >
+          {formError !== null && (
+            <p className="message message-error" role="alert">
+              {formError}
+            </p>
+          )}
           {error !== null && (
             <p className="message message-error" role="alert">
               {error}
             </p>
           )}
-          <fieldset className="grid gap-3">
-            <legend>Appearance and locale</legend>
-            <label className="field">
-              <span>Theme</span>
-              <NativeSelect name="theme" defaultValue={preferences.theme}>
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="system">Follow the device</option>
-              </NativeSelect>
-            </label>
-            <label className="field">
-              <span>Language</span>
-              <NativeSelect name="language" defaultValue="en" disabled>
-                <option value="en">
-                  English
-                  {preferences.language === "en"
-                    ? ""
-                    : ` (imported preference: ${preferences.language}; only English is available)`}
-                </option>
-              </NativeSelect>
-            </label>
-            <label className="field">
-              <span>Date and time locale</span>
-              <Input
-                name="dateTimeLocale"
-                defaultValue={preferences.dateTimeLocale}
-                placeholder="en-US"
-                pattern="[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*"
-              />
-            </label>
-            <label className="field">
-              <span>First day of the week</span>
-              <NativeSelect
-                name="firstDayOfWeek"
-                defaultValue={String(preferences.firstDayOfWeek)}
-              >
-                {weekdays.map((day, index) => (
-                  <option key={day} value={String(index)}>
-                    {day}
+          <SettingsDisclosure title="Appearance and locale" defaultOpen>
+            <fieldset className="grid gap-3">
+              <legend>Appearance and locale</legend>
+              <label className="field">
+                <span>Theme</span>
+                <NativeSelect name="theme" defaultValue={preferences.theme}>
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="system">Follow the device</option>
+                </NativeSelect>
+              </label>
+              <label className="field">
+                <span>Language</span>
+                <NativeSelect name="language" defaultValue="en" disabled>
+                  <option value="en">
+                    English
+                    {preferences.language === "en"
+                      ? ""
+                      : ` (imported preference: ${preferences.language}; only English is available)`}
                   </option>
-                ))}
-              </NativeSelect>
-            </label>
-            <label className="field">
-              <span>Open first</span>
-              <NativeSelect
-                name="defaultStartPage"
-                defaultValue={preferences.defaultStartPage}
-              >
-                {applicationStartPages.map((page) => (
-                  <option key={page} value={page}>
-                    {startPageLabel[page]}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
-          </fieldset>
-          <fieldset className="grid gap-3">
-            <legend>Tasks</legend>
-            <label className="field">
-              <span>Default project for new tasks</span>
-              <NativeSelect
-                name="defaultProjectId"
-                defaultValue={preferences.defaultProjectId ?? ""}
-              >
-                <option value="">No project</option>
-                {projects
-                  .filter((project) => project.archivedAt === null)
-                  .map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
+                </NativeSelect>
+              </label>
+              <label className="field">
+                <span>Date and time locale</span>
+                <Input
+                  name="dateTimeLocale"
+                  defaultValue={preferences.dateTimeLocale}
+                  placeholder="en-US"
+                  pattern="[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*"
+                />
+              </label>
+              <label className="field">
+                <span>First day of the week</span>
+                <NativeSelect
+                  name="firstDayOfWeek"
+                  defaultValue={String(preferences.firstDayOfWeek)}
+                >
+                  {weekdays.map((day, index) => (
+                    <option key={day} value={String(index)}>
+                      {day}
                     </option>
                   ))}
-              </NativeSelect>
-            </label>
-            <label className="field">
-              <span>Default estimate (minutes)</span>
-              <Input
-                name="defaultEstimateMinutes"
-                type="number"
-                min="1"
-                max="720"
-                defaultValue={preferences.defaultEstimateMinutes ?? ""}
-              />
-            </label>
-            <label className="field">
-              <span>Default estimate for child tasks (minutes)</span>
-              <Input
-                name="defaultChildEstimateMinutes"
-                type="number"
-                min="1"
-                max="720"
-                defaultValue={preferences.defaultChildEstimateMinutes ?? ""}
-              />
-            </label>
-            {(
-              [
-                ["confirmBeforeDelete", "Ask before deleting a task"],
-                ["markdownInNotes", "Render task notes as Markdown"],
-                [
-                  "autoMarkParentDone",
-                  "Complete a parent when its last open child is completed",
-                ],
-                [
-                  "autoAddWorkedOnToToday",
-                  "Plan a task for today when focus starts on it",
-                ],
-                [
-                  "notifyWhenEstimateExceeded",
-                  "Show a notice when focus time exceeds the estimate",
-                ],
-              ] as const
-            ).map(([name, label]) => (
-              <Field key={name} className="flex-row items-center gap-2">
-                <Checkbox
-                  id={`application-${name}`}
-                  name={name}
-                  defaultChecked={preferences[name]}
+                </NativeSelect>
+              </label>
+              <label className="field">
+                <span>Open first</span>
+                <NativeSelect
+                  name="defaultStartPage"
+                  defaultValue={preferences.defaultStartPage}
+                >
+                  {applicationStartPages.map((page) => (
+                    <option key={page} value={page}>
+                      {startPageLabel[page]}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+            </fieldset>
+          </SettingsDisclosure>
+          <SettingsDisclosure title="Tasks">
+            <fieldset className="grid gap-3">
+              <legend>Tasks</legend>
+              <label className="field">
+                <span>Default project for new tasks</span>
+                <NativeSelect
+                  name="defaultProjectId"
+                  defaultValue={preferences.defaultProjectId ?? ""}
+                >
+                  <option value="">No project</option>
+                  {projects
+                    .filter((project) => project.archivedAt === null)
+                    .map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                </NativeSelect>
+              </label>
+              <label className="field">
+                <span>Default estimate (minutes)</span>
+                <Input
+                  name="defaultEstimateMinutes"
+                  type="number"
+                  min="1"
+                  max="720"
+                  defaultValue={preferences.defaultEstimateMinutes ?? ""}
                 />
-                <FieldLabel htmlFor={`application-${name}`}>{label}</FieldLabel>
+              </label>
+              <label className="field">
+                <span>Default estimate for child tasks (minutes)</span>
+                <Input
+                  name="defaultChildEstimateMinutes"
+                  type="number"
+                  min="1"
+                  max="720"
+                  defaultValue={preferences.defaultChildEstimateMinutes ?? ""}
+                />
+              </label>
+              {(
+                [
+                  ["confirmBeforeDelete", "Ask before deleting a task"],
+                  ["markdownInNotes", "Render task notes as Markdown"],
+                  [
+                    "autoMarkParentDone",
+                    "Complete a parent when its last open child is completed",
+                  ],
+                  [
+                    "autoAddWorkedOnToToday",
+                    "Plan a task for today when focus starts on it",
+                  ],
+                  [
+                    "notifyWhenEstimateExceeded",
+                    "Show a notice when focus time exceeds the estimate",
+                  ],
+                ] as const
+              ).map(([name, label]) => (
+                <Field key={name} className="flex-row items-center gap-2">
+                  <Checkbox
+                    id={`application-${name}`}
+                    name={name}
+                    defaultChecked={preferences[name]}
+                  />
+                  <FieldLabel htmlFor={`application-${name}`}>
+                    {label}
+                  </FieldLabel>
+                </Field>
+              ))}
+            </fieldset>
+          </SettingsDisclosure>
+          <SettingsDisclosure title="Reminders">
+            <fieldset className="grid gap-3">
+              <legend>Reminders</legend>
+              <label className="field">
+                <span>Default reminder for tasks with a start time</span>
+                <NativeSelect
+                  name="defaultTaskReminder"
+                  defaultValue={reminderValue(preferences.defaultTaskReminder)}
+                >
+                  <option value="default">Follow notification settings</option>
+                  <option value="none">No reminder</option>
+                  {taskReminderOffsetMinutes.map((minutes) => (
+                    <option key={minutes} value={String(minutes)}>
+                      {minutes === 0
+                        ? "At start"
+                        : `${String(minutes)} minutes before`}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+              <Field className="flex-row items-center gap-2">
+                <Checkbox
+                  id="application-notifyOnDueDate"
+                  name="notifyOnDueDate"
+                  defaultChecked={preferences.notifyOnDueDate}
+                />
+                <FieldLabel htmlFor="application-notifyOnDueDate">
+                  Remind about date-only tasks (stored; delivery is not built
+                  yet)
+                </FieldLabel>
               </Field>
-            ))}
-          </fieldset>
-          <fieldset className="grid gap-3">
-            <legend>Reminders</legend>
-            <label className="field">
-              <span>Default reminder for tasks with a start time</span>
-              <NativeSelect
-                name="defaultTaskReminder"
-                defaultValue={reminderValue(preferences.defaultTaskReminder)}
-              >
-                <option value="default">Follow notification settings</option>
-                <option value="none">No reminder</option>
-                {taskReminderOffsetMinutes.map((minutes) => (
-                  <option key={minutes} value={String(minutes)}>
-                    {minutes === 0
-                      ? "At start"
-                      : `${String(minutes)} minutes before`}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
-            <Field className="flex-row items-center gap-2">
-              <Checkbox
-                id="application-notifyOnDueDate"
-                name="notifyOnDueDate"
-                defaultChecked={preferences.notifyOnDueDate}
-              />
-              <FieldLabel htmlFor="application-notifyOnDueDate">
-                Remind about date-only tasks (stored; delivery is not built yet)
-              </FieldLabel>
-            </Field>
-            <label className="field">
-              <span>Hour for date-only reminders (0–23)</span>
-              <Input
-                name="dueDateNotificationHour"
-                type="number"
-                min="0"
-                max="23"
-                defaultValue={preferences.dueDateNotificationHour}
-              />
-            </label>
-          </fieldset>
-          <fieldset className="grid gap-3">
-            <legend>Daily summary note</legend>
-            <label className="field">
-              <span>Shown on Today</span>
-              <Textarea
-                name="dailySummaryNote"
-                rows={3}
-                maxLength={10_000}
-                defaultValue={preferences.dailySummaryNote}
-              />
-            </label>
-          </fieldset>
-          <fieldset className="grid gap-3">
-            <legend>Keyboard shortcuts</legend>
-            <p className="hint">
-              Type a binding such as Ctrl+K, Shift+A or ?. Clear a field to
-              unbind the action. Ctrl also matches Command on Apple devices.
-            </p>
-            {conflicts.length > 0 && (
-              <p className="message message-error" role="alert">
-                {conflicts
-                  .map(
-                    (conflict) =>
-                      `${formatBinding(conflict.binding)} is bound to ${conflict.actionIds.join(" and ")}`,
-                  )
-                  .join(". ")}
+              <label className="field">
+                <span>Hour for date-only reminders (0–23)</span>
+                <Input
+                  name="dueDateNotificationHour"
+                  type="number"
+                  min="0"
+                  max="23"
+                  defaultValue={preferences.dueDateNotificationHour}
+                />
+              </label>
+            </fieldset>
+          </SettingsDisclosure>
+          <SettingsDisclosure title="Daily summary note">
+            <fieldset className="grid gap-3">
+              <legend>Daily summary note</legend>
+              <label className="field">
+                <span>Shown on Today</span>
+                <Textarea
+                  name="dailySummaryNote"
+                  rows={3}
+                  maxLength={10_000}
+                  defaultValue={preferences.dailySummaryNote}
+                />
+              </label>
+            </fieldset>
+          </SettingsDisclosure>
+          <SettingsDisclosure title="Keyboard shortcuts">
+            <fieldset className="grid gap-3">
+              <legend>Keyboard shortcuts</legend>
+              <p className="hint">
+                Type a binding such as Ctrl+K, Shift+A or ?. Clear a field to
+                unbind the action. Ctrl also matches Command on Apple devices.
               </p>
-            )}
-            {shortcutGroups().map(({ group, actions }) => (
-              <div key={group} className="grid gap-2">
-                <h4>{group}</h4>
-                {actions.map((action) => (
-                  <label key={action.id} className="field shortcut-field">
-                    <span>{action.label}</span>
-                    <Input
-                      name={`shortcut:${action.id}`}
-                      aria-invalid={bindingErrors[action.id] !== undefined}
-                      defaultValue={effective.get(action.id) ?? ""}
-                      placeholder={action.defaultBinding ?? "Not bound"}
-                      onBlur={(event) =>
-                        editBinding(action.id, event.currentTarget.value)
-                      }
-                    />
-                    {bindingErrors[action.id] !== undefined && (
-                      <small className="message message-error">
-                        {bindingErrors[action.id]}
-                      </small>
-                    )}
-                  </label>
-                ))}
-              </div>
-            ))}
-          </fieldset>
+              {conflicts.length > 0 && (
+                <p className="message message-error" role="alert">
+                  {conflicts
+                    .map(
+                      (conflict) =>
+                        `${formatBinding(conflict.binding)} is bound to ${conflict.actionIds.join(" and ")}`,
+                    )
+                    .join(". ")}
+                </p>
+              )}
+              {shortcutGroups().map(({ group, actions }) => (
+                <div key={group} className="grid gap-2">
+                  <h4>{group}</h4>
+                  {actions.map((action) => (
+                    <label key={action.id} className="field shortcut-field">
+                      <span>{action.label}</span>
+                      <Input
+                        name={`shortcut:${action.id}`}
+                        aria-invalid={bindingErrors[action.id] !== undefined}
+                        defaultValue={effective.get(action.id) ?? ""}
+                        placeholder={action.defaultBinding ?? "Not bound"}
+                        onBlur={(event) =>
+                          editBinding(action.id, event.currentTarget.value)
+                        }
+                      />
+                      {bindingErrors[action.id] !== undefined && (
+                        <small className="message message-error">
+                          {bindingErrors[action.id]}
+                        </small>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </fieldset>
+          </SettingsDisclosure>
           <Button disabled={busy || !online || invalid}>
             Save application preferences
           </Button>

@@ -1,3 +1,4 @@
+import { SettingsDisclosure } from "./components/settings/SettingsDisclosure.tsx";
 import { useMemo, useState, type SyntheticEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -244,51 +245,53 @@ export const TemplateLibrary = ({
         A template does nothing until you create a task from it. It never
         appears in tasks, reminders or focus tracking.
       </p>
-      <form
-        className="template-create"
-        onSubmit={(event) => void submitCreate(event)}
-        aria-describedby="template-library-note"
-      >
-        <h4>New template</h4>
-        <label className="field">
-          <span>Template title</span>
-          <Input name="title" required autoComplete="off" />
-        </label>
-        <label className="field">
-          <span>Notes</span>
-          <Input name="notes" autoComplete="off" />
-        </label>
-        <label className="field">
-          <span>Estimate minutes</span>
-          <Input name="estimateMinutes" type="number" min="1" max="720" />
-        </label>
-        <label className="field">
-          <span>Suggested project</span>
-          <NativeSelect name="suggestedProjectId">
-            <option value="">No suggestion</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.title}
-              </option>
-            ))}
-          </NativeSelect>
-        </label>
-        {tags.length > 0 && (
-          <fieldset className="tag-options span-all">
-            <legend>Tags</legend>
-            {tags.map((tag) => (
-              <label key={tag.id}>
-                <Checkbox name="tagIds" value={tag.id} /> {tag.displayName}
-              </label>
-            ))}
-          </fieldset>
-        )}
-        <label className="field span-all">
-          <span>Checklist blueprints (one per line)</span>
-          <Textarea name="subtasks" rows={3} />
-        </label>
-        <Button disabled={busy}>{busy ? "Saving…" : "Save template"}</Button>
-      </form>
+      <SettingsDisclosure title="New template" defaultOpen>
+        <form
+          className="template-create"
+          onSubmit={(event) => void submitCreate(event)}
+          aria-describedby="template-library-note"
+        >
+          <h4>New template</h4>
+          <label className="field">
+            <span>Template title</span>
+            <Input name="title" required autoComplete="off" />
+          </label>
+          <label className="field">
+            <span>Notes</span>
+            <Input name="notes" autoComplete="off" />
+          </label>
+          <label className="field">
+            <span>Estimate minutes</span>
+            <Input name="estimateMinutes" type="number" min="1" max="720" />
+          </label>
+          <label className="field">
+            <span>Suggested project</span>
+            <NativeSelect name="suggestedProjectId">
+              <option value="">No suggestion</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+          {tags.length > 0 && (
+            <fieldset className="tag-options span-all">
+              <legend>Tags</legend>
+              {tags.map((tag) => (
+                <label key={tag.id}>
+                  <Checkbox name="tagIds" value={tag.id} /> {tag.displayName}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <label className="field span-all">
+            <span>Checklist blueprints (one per line)</span>
+            <Textarea name="subtasks" rows={3} />
+          </label>
+          <Button disabled={busy}>{busy ? "Saving…" : "Save template"}</Button>
+        </form>
+      </SettingsDisclosure>
       {templates.length === 0 ? (
         <EmptyState title="No templates here." />
       ) : (
@@ -298,7 +301,7 @@ export const TemplateLibrary = ({
             const selected =
               destination[template.id] ?? template.suggestedProjectId ?? "";
             return (
-              <Card key={template.id} className="template-card">
+              <Card key={template.id} className="template-card record-surface">
                 <CardContent>
                   <div className="task-heading">
                     <strong>{template.title}</strong>
@@ -428,27 +431,29 @@ export const TemplateLibrary = ({
           A set creates one task from each of its templates, in a project you
           choose.
         </p>
-        <form
-          className="template-set-create"
-          onSubmit={(event) => void submitSet(event)}
-        >
-          <label className="field">
-            <span>Set name</span>
-            <Input name="title" required autoComplete="off" />
-          </label>
-          <fieldset>
-            <legend>Templates in this set</legend>
-            {templates
-              .filter((template) => template.archivedAt === null)
-              .map((template) => (
-                <label key={template.id}>
-                  <Checkbox name="templateIds" value={template.id} />{" "}
-                  {template.title}
-                </label>
-              ))}
-          </fieldset>
-          <Button disabled={busy || templates.length === 0}>Save set</Button>
-        </form>
+        <SettingsDisclosure title="New template set">
+          <form
+            className="template-set-create"
+            onSubmit={(event) => void submitSet(event)}
+          >
+            <label className="field">
+              <span>Set name</span>
+              <Input name="title" required autoComplete="off" />
+            </label>
+            <fieldset>
+              <legend>Templates in this set</legend>
+              {templates
+                .filter((template) => template.archivedAt === null)
+                .map((template) => (
+                  <label key={template.id}>
+                    <Checkbox name="templateIds" value={template.id} />{" "}
+                    {template.title}
+                  </label>
+                ))}
+            </fieldset>
+            <Button disabled={busy || templates.length === 0}>Save set</Button>
+          </form>
+        </SettingsDisclosure>
         {sets.length === 0 ? (
           <EmptyState title="No sets yet." />
         ) : (
@@ -458,7 +463,7 @@ export const TemplateLibrary = ({
               .map((set) => {
                 const selected = destination[set.id] ?? "";
                 return (
-                  <Card key={set.id} className="template-card">
+                  <Card key={set.id} className="template-card record-surface">
                     <CardContent>
                       <strong>{set.title}</strong>
                       <ol className="template-blueprints">

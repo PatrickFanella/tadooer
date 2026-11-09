@@ -79,7 +79,7 @@ describe("workspace frame on the remaining routes (issue #196)", () => {
       </TaskTitleButton>,
     );
     expect(open).toContain(
-      '<button type="button" class="task-title-button" aria-label="Open details for “Write the brief”">',
+      '<button type="button" data-slot="task-title" class="task-title-button" aria-label="Open details for “Write the brief”">',
     );
     const plain = renderToStaticMarkup(
       <TaskTitleButton task={brief} onSelect={undefined}>

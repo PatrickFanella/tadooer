@@ -298,10 +298,7 @@ export const HistoryPage = ({
       return result.state;
     });
   return (
-    <div
-      className="mx-auto flex w-full max-w-5xl flex-col gap-6"
-      aria-labelledby="history-heading"
-    >
+    <div className="page-stack" aria-labelledby="history-heading">
       <ViewIntro
         id="history-heading"
         description="Archived tasks keep their original dates and stay out of Today, the Planner and reminders. Restore returns a task and its children to Tasks."

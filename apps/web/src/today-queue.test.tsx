@@ -50,9 +50,9 @@ const render = (withPreferences = true) =>
 describe("TodayQueue", () => {
   it("renders accessible queue hierarchy while hiding future work", () => {
     const markup = render();
-    expect(markup).toContain(">Overdue</h2>");
-    expect(markup).toContain(">Scheduled today</h2>");
-    expect(markup).toContain(">Planning</h2>");
+    expect(markup).toContain('id="today-overdue-title"');
+    expect(markup).toContain('id="today-scheduled-title"');
+    expect(markup).toContain('id="today-planning-title"');
     expect(markup).toContain("1 future task hidden");
     expect(markup).not.toContain("Future task title");
     expect(markup).toContain('aria-label="Complete “Quarterly report”"');
@@ -80,9 +80,9 @@ describe("TodayQueue", () => {
         onViewTasks={() => undefined}
       />,
     );
-    expect(markup).toContain(">Planning</h2>");
-    expect(markup).not.toContain(">Overdue</h2>");
-    expect(markup).not.toContain(">Scheduled today</h2>");
+    expect(markup).toContain('id="today-planning-title"');
+    expect(markup).not.toContain('id="today-overdue-title"');
+    expect(markup).not.toContain('id="today-scheduled-title"');
     expect(markup).not.toContain("Today is clear.");
   });
 

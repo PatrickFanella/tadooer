@@ -2852,13 +2852,20 @@ export const App = ({ initialState, initialPath }: AppProps) => {
   if (shouldRenderOffline()) {
     const renderedOfflineState = offlineForRender();
     return (
-      <main className="main">
+      <main className="main offline-main route-view workspace-content page-stack">
+        <header className="flex items-center justify-between gap-3 border-b border-line pb-4">
+          <div className="flex items-center gap-2">
+            <img src="/suite-icon.svg" alt="" className="size-7" />
+            <span className="text-lg font-medium">Tadooer</span>
+          </div>
+          <span className="text-sm text-warning">Offline</span>
+        </header>
         <SyncConflictReview
           reviews={renderedOfflineState.conflictReviews ?? []}
           busy={busy}
           onResolve={resolveConflict}
         />
-        <nav aria-label="Offline views">
+        <nav aria-label="Offline views" className="offline-nav">
           {["today", "boards", "counters", "history", "settings"].map(
             (item) => (
               <a
@@ -2926,7 +2933,10 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             pinnedNotes={pinnedNotes}
           />
         )}
-        <section aria-label="Offline sync status">
+        <section
+          aria-label="Offline sync status"
+          className="record-surface grid gap-3"
+        >
           <p>Visible sync conflicts: {renderedOfflineState.conflictCount}</p>
           {formError !== null ? (
             <p className="message message-error">{formError}</p>
@@ -3309,6 +3319,15 @@ export const App = ({ initialState, initialPath }: AppProps) => {
     />
   );
 
+  const focusCandidate = [
+    ...selectedTasks,
+    ...state.tasks.filter((task) => task.id === state.dayPlan?.nextTask?.id),
+    ...visibleTaskOrder.flatMap((id) => {
+      const task = state.tasks.find((candidate) => candidate.id === id);
+      return task === undefined ? [] : [task];
+    }),
+  ].find((task) => task.status === "open" && task.deletedAt == null);
+
   return (
     <ApplicationPreferencesProvider value={appPreferences}>
       <WorkspaceShell
@@ -3367,6 +3386,16 @@ export const App = ({ initialState, initialPath }: AppProps) => {
             liveStatus,
             baikalConnected: state.baikal.connected,
           },
+          onStartFocus:
+            state.client !== undefined &&
+            networkOnline &&
+            !busy &&
+            !focus.busy &&
+            (state.activeSession == null ||
+              ["completed", "expired"].includes(state.activeSession.state)) &&
+            focusCandidate !== undefined
+              ? () => taskActions.startFocus(focusCandidate)
+              : undefined,
           conflictCount: state.conflictCount ?? 0,
           commandTrigger: (
             <CommandBar
@@ -3400,7 +3429,11 @@ export const App = ({ initialState, initialPath }: AppProps) => {
                 if (!open) clearSelection();
               }}
             >
-              <SheetContent side="bottom" className="task-detail-sheet">
+              <SheetContent
+                side="bottom"
+                className="task-detail-sheet h-detail-sheet max-h-detail-sheet overflow-hidden p-0"
+                showCloseButton={false}
+              >
                 <SheetTitle className="sr-only">Task details</SheetTitle>
                 {detailPanel(selectedTasks[0])}
               </SheetContent>

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Plus, Play, UserRound } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ export interface HeaderProps {
   readonly ownerName: string;
   readonly onSignOut: () => void;
   readonly formError: string | null;
+  readonly onAddTask?: () => void;
+  readonly onStartFocus?: (() => void) | undefined;
 }
 
 /** The workspace header (issue #194): view title, focus strip, status. */
@@ -33,12 +35,40 @@ export const Header = ({
   ownerName,
   onSignOut,
   formError,
+  onAddTask,
+  onStartFocus,
 }: HeaderProps) => (
   <header className="header">
     <div className="header__row">
       <h1 className="header__title">{title}</h1>
       <FocusStrip {...focus} />
       <div className="header__status">
+        {onStartFocus !== undefined && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="rounded-full text-primary"
+            onClick={onStartFocus}
+            aria-label="Start focus"
+            title="Start focus"
+          >
+            <Play aria-hidden="true" />
+          </Button>
+        )}
+        {onAddTask !== undefined && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="header__add hidden rounded-full text-primary min-[64.001rem]:inline-flex"
+            onClick={onAddTask}
+            aria-label="Add a task"
+            title="Add a task"
+          >
+            <Plus aria-hidden="true" />
+          </Button>
+        )}
         {conflictCount > 0 && (
           <Badge variant="destructive" className="header__conflicts">
             {conflictCount} {conflictCount === 1 ? "conflict" : "conflicts"}
@@ -55,8 +85,9 @@ export const Header = ({
               className="header__account"
               aria-label={`Account menu for ${ownerName}`}
             >
-              {ownerName}
-              <ChevronDown aria-hidden="true" />
+              <UserRound className="sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">{ownerName}</span>
+              <ChevronDown className="hidden sm:block" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
