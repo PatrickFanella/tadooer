@@ -1,0 +1,112 @@
+name: Mirror CI
+run-name: Mirror CI ${{ github.sha }}
+
+# Pull request verification for the Gitea source. The GitHub copy receives
+# every pushed branch through the Gitea push mirror; a bridge reports the
+# "Mirror CI gate" result back to Gitea as "GitHub CI / Mirror CI gate".
+# main is verified and released by .gitea/workflows after merge.
+'on':
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    if: github.repository == 'subculture-collective/tadooer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+
+      - name: Activate the repository toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/suite-pnpm" --no-package-lock --ignore-scripts pnpm@11.15.1
+          export PATH="$RUNNER_TEMP/suite-pnpm/node_modules/.bin:$PATH"
+          echo "$RUNNER_TEMP/suite-pnpm/node_modules/.bin" >> "$GITHUB_PATH"
+          test "$(node -p 'process.versions.node.split(".")[0]')" -ge 24
+          test "$(pnpm --version)" = "11.15.1"
+          echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      # apps/mobile/src/native-policy.test.mjs runs the Android shell policy
+      # wherever a JDK is installed and the Swift policy wherever swiftc is.
+      # Use JDK 21, the release workflow's Android toolchain. The hosted image
+      # also ships a Linux swiftc, whose Foundation is not the one the iOS app
+      # runs on; the release workflow's iOS job checks the Swift policy on macOS.
+      - name: Select JDK 21 and leave the Swift policy to macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${JAVA_HOME_21_X64:?the hosted image has no JDK 21}"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/no-swift"
+          printf '#!/bin/sh\nexit 127\n' > "$RUNNER_TEMP/no-swift/swiftc"
+          chmod +x "$RUNNER_TEMP/no-swift/swiftc"
+          echo "$RUNNER_TEMP/no-swift" >> "$GITHUB_PATH"
+
+      - name: Check the selected native toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          javac -version 2>&1 | grep -q '^javac 21\.'
+          java -version 2>&1 | grep -q 'version "21\.'
+          if swiftc --version >/dev/null 2>&1; then echo "swiftc is still on PATH"; exit 1; fi
+
+      - name: Restore the pnpm store
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        env:
+          # SQLite fixtures are disposable. Keep fsync off the runner disk.
+          TMPDIR: /dev/shm
+          # Match the hosted VM's four vCPUs.
+          VITEST_MAX_WORKERS: "4"
+        run: pnpm verify
+
+  mirror-gate:
+    name: Mirror CI gate
+    if: always() && github.repository == 'subculture-collective/tadooer'
+    needs:
+      - verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every verification job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          expected = {'verify'}
+          assert set(results) == expected, results
+          for name, result in results.items():
+              assert result["result"] == "success", name + " did not pass"
+          PY
