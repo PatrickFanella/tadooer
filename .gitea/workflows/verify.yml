@@ -1,7 +1,9 @@
 name: verify
 
+# Pull requests are verified on the GitHub copy by .github/workflows/mirror-ci.yml
+# and reported here as "GitHub CI / Mirror CI gate". This workflow verifies
+# each commit that lands on main.
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -11,7 +13,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Every merged commit keeps its own result.
+  cancel-in-progress: false
 
 jobs:
   verify:
